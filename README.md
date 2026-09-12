@@ -285,9 +285,9 @@ result.candidates.map(candidateLabel);
 //   'English - The.Matrix.1999.WEB-DL.TUBI' ]
 ```
 
-`tier` names the rung that won: `explicit-imdb`, `explicit-tmdb`, `series-episode`,
-`title-year`, or `manual` when nothing automatic worked. `unrenderable` counts rows
-dropped for format alone, `wrongEpisode` rows filed under a different episode.
+`tier` names the rung that won: `explicit-imdb`, `explicit-tmdb`, `title`, or
+`manual` when nothing automatic worked. `unrenderable` counts rows dropped for
+format alone, `wrongEpisode` rows filed under a different episode.
 
 ## Helpers
 
