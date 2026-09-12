@@ -10,6 +10,7 @@ a page can load a player.
 - [Configuration](#configuration)
 - [The handle](#the-handle)
 - [What a resolve gives you](#what-a-resolve-gives-you)
+- [Query the API directly](#query-the-api-directly)
 - [Load patterns](#load-patterns)
 - [Identification](#identification)
 - [What it costs](#what-it-costs)
@@ -338,6 +339,323 @@ The converter is exported too, for a page that fetches subtitle text itself:
 import { toVtt } from '@subtitledb/core';
 const vtt = toVtt(srtText, 'srt'); // also 'ass' and 'ssa'
 ```
+
+## Query the API directly
+
+`attachSubtitleDb` is a player binding wrapped around a client. The client is
+exported on its own, for a page that wants the rows and not the captions menu.
+
+```js
+import { createClient } from '@subtitledb/core';
+
+const sdb = createClient({ client: 'my-app/1.0' });
+
+const bundle = await sdb.byImdb('tt0133093', { lang: 'en', limit: 1 });
+```
+
+Real response, `subtitle_languages` cut after its first rows:
+
+```json
+{
+  "title": {
+    "imdb": "tt0133093",
+    "tmdb_id": 603,
+    "media_type": "movie",
+    "name": "The Matrix",
+    "year": 1999,
+    "subtitle_count": 1092,
+    "subtitle_languages": { "en": 139, "es": 66, "tr": 58, "ar": 55, "pl": 52 }
+  },
+  "subtitles": {
+    "total": 139,
+    "limit": 1,
+    "offset": 0,
+    "items": [
+      {
+        "id": 1775434752,
+        "language": "en",
+        "format": "srt",
+        "cues": 1834,
+        "duration_s": 8094,
+        "bytes": 110564,
+        "encoding": "utf-8",
+        "release_name": "The.Matrix.1999.WEB-DL.TUBI",
+        "hearing_impaired": false,
+        "fps": null,
+        "added_at": "2023-03-02T03:07:00Z",
+        "download_url": "https://api.thesubtitledb.org/get/1775434752"
+      }
+    ]
+  }
+}
+```
+
+### Six lookups
+
+Every one returns the same `{ title, subtitles }` bundle.
+
+```js
+await sdb.byImdb('tt0133093');   // 133093, "133093" or "tt0133093"
+await sdb.byTmdb(603);
+await sdb.byTitle('the matrix'); // free text, server picks the top title
+await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE');
+await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
+await sdb.bySubid(1775434752);   // which title does this one file belong to
+```
+
+Four add a block saying how they resolved:
+
+```js
+(await sdb.byTitle('the matrix')).match;
+// { name: 'The Matrix', imdb: 'tt0133093', score: 1 }
+
+(await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE')).match;
+// { sub_id: 7497274,
+//   release_name: 'The.Matrix.1999.REMASTERED.1080p.BluRay.X264-AMIABLE',
+//   score: 0.61, shared_tokens: 7 }
+
+(await sdb.bySubid(1775434752)).subtitle;
+// the subtitle row itself, alongside title: { imdb, name }
+
+(await sdb.byInfohash(hash)).torrent;
+// the torrent the hash belongs to
+```
+
+`byTitle` returns one title, not a ranked list. The server runs the matcher, so no
+candidate list crosses the wire.
+
+`byReleasename` puts the release in a query parameter rather than the path, because
+release names carry dots and slashes.
+
+### Narrowing to one episode
+
+```js
+await sdb.byImdb('tt0903747', { season: 1, episode: 1, lang: 'en', limit: 1 });
+```
+
+```json
+{
+  "title": {
+    "imdb": "tt0903747",
+    "tmdb_id": 1396,
+    "media_type": "tv",
+    "name": "Breaking Bad",
+    "year": 2008,
+    "subtitle_count": 362,
+    "subtitle_languages": { "id": 125, "ar": 43, "fa": 41, "en": 36, "pt": 25 }
+  },
+  "subtitles": {
+    "total": 36,
+    "limit": 1,
+    "offset": 0,
+    "items": [
+      {
+        "id": 8900892,
+        "language": "en",
+        "format": "srt",
+        "cues": 813,
+        "duration_s": 3533,
+        "bytes": 52009,
+        "encoding": "utf-8-sig",
+        "release_name": "Breaking Bad S01E01 Pilot.DVDRip.HI.cc.en.SNY",
+        "hearing_impaired": false,
+        "fps": 29.97,
+        "added_at": "2021-12-06T17:43:31Z",
+        "download_url": "https://api.thesubtitledb.org/get/8900892"
+      }
+    ]
+  }
+}
+```
+
+Two things to read carefully. The response does not echo `season` or `episode` back,
+so a caller that forgets which one it asked for cannot recover it from the bundle.
+And `title` describes the **series** (`media_type: 'tv'`, 362 files across 13
+languages) while `subtitles` describes the **episode** (36 English). Do not render
+`title.subtitle_count` as the count for the episode on screen.
+
+Drop `episode` to get the season, drop both to get the series.
+
+### Parameters
+
+```js
+await sdb.byImdb('tt0133093', {
+  lang: 'en',                  // one code, or up to 16 comma separated
+  format: 'srt',
+  sort: 'cues',                // 'lang' | 'downloads' | 'cues' | 'bytes'
+  limit: 50,                   // API defaults to 20, caps at 100
+  offset: 0,
+  response_class: 'standard',  // 'minimal' | 'standard' | 'detailed' | 'full'
+  season: 1,                   // every lookup except bySubid
+  episode: 1,
+  signal: controller.signal,
+});
+```
+
+`limit` and `offset` page the `subtitles` bucket, not the title.
+
+`lang` and `format` bite on a movie and on an episode drill. They are **ignored** on
+a series or season bundle, which the API serves whole by design. A client that ranks
+a series bundle has to filter locally, because the filter it asked for did not run.
+
+One shared `limit` covers every code in a `lang` list, filled in the API's order, so
+`lang: 'fr,en'` with `limit: 100` can come back 100 English and no French. Issue one
+request per language instead when the order matters.
+
+### response_class
+
+How much TMDB metadata rides on `title`:
+
+```js
+(await sdb.byImdb('tt0133093', { response_class: 'minimal' })).title;
+// imdb, tmdb_id, media_type, name, year, subtitle_count, subtitle_languages
+
+(await sdb.byImdb('tt0133093', { response_class: 'standard' })).title;
+// the same, plus poster_path, backdrop_path, overview, original_title,
+// release_date, genres, vote, runtime_min, tagline, original_language
+```
+
+The API defaults to `minimal`. Ask for `standard` only if you are drawing artwork or
+a synopsis, because it is the expensive half of the response.
+
+### Errors
+
+```js
+import { SubtitleDbError, SubtitleDbAbort } from '@subtitledb/core';
+
+try {
+  await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
+} catch (e) {
+  e instanceof SubtitleDbError; // true
+  console.log(e.message, e.status, e.code);
+}
+```
+
+```text
+no title mapped to that infohash   404   not_found
+```
+
+A malformed id never leaves the process, and comes back with `status: 0`:
+
+```js
+await sdb.byImdb('nope');
+// SubtitleDbError: not an imdb id: nope   (status 0, code bad_request)
+```
+
+An IMDb id nobody has mapped does **not** 404. It answers with `name: ''`,
+`tmdb_id: null` and whatever rows happen to be filed under it:
+
+```js
+(await sdb.byImdb('tt9999999')).title;
+// { imdb: 'tt9999999', tmdb_id: null, media_type: null, name: '',
+//   year: null, subtitle_count: 24, subtitle_languages: { id: 10, en: 6, ... } }
+```
+
+So check `title.name` before you trust the list. This is the single easiest way to
+show a viewer subtitles for the wrong film.
+
+Only 429, 5xx and transport failures retry. `SubtitleDbAbort` is what an aborted
+`signal` throws, and it is not a `SubtitleDbError`.
+
+Retry spacing is exported, if you are building your own loop:
+
+```js
+import { backoffMs } from '@subtitledb/core';
+
+backoffMs(0, null); // ~150, then ~300, ~600 as the attempt number rises
+backoffMs(0, '5');  // 5000   a Retry-After header wins outright
+```
+
+### Fetching the bytes
+
+```js
+const sub = bundle.subtitles.items[0];
+const { text, format } = await sdb.fetchSubtitleText(sub);
+
+format;      // 'srt'
+text.length; // 110190
+```
+
+It follows `download_url` exactly as the API returned it, and returns the stored
+format untouched. Building a files-host URL yourself is a bug with a long fuse: the
+`/get/` redirect exists precisely so that host can move.
+
+Convert it yourself if the player needs WebVTT:
+
+```js
+import { toVtt } from '@subtitledb/core';
+
+toVtt(text, format); // 'srt', 'ass' and 'ssa' in, WebVTT out
+toVtt(text, 'sub');  // ConvertError: cannot convert sub to vtt
+```
+
+### Health and artwork
+
+```js
+await sdb.health();
+// { ok: true, clickhouse: 'up',
+//   titles: 519754, indexed_subtitles: 10702424, tmdb_mappings: 160973 }
+
+sdb.posterUrl('/abc.jpg');         // https://api.thesubtitledb.org/p/w342/abc.jpg
+sdb.posterUrl('/abc.jpg', 'w780'); // https://api.thesubtitledb.org/p/w780/abc.jpg
+sdb.posterUrl(null);               // null
+```
+
+`posterUrl` proxies TMDB artwork through our host, so a page needs no TMDB key and
+leaks no viewer to a third party.
+
+### Client options
+
+```js
+createClient({
+  apiBase: 'https://api.thesubtitledb.org',
+  client: 'my-app/1.0', // a query param, not a header: no CORS preflight
+  timeoutMs: 10000,     // per attempt, so the budget is this times retries + 1
+  retries: 2,
+  fetch: myFetch,       // injected for tests
+});
+```
+
+`client` is a query parameter on purpose. A custom header makes the browser issue a
+preflight before every new path, and an attribution string is not worth a round trip.
+
+### Caching your own lookups
+
+`SingleFlightCache` is the TTL cache the session uses. `resolve` is the method that
+matters: concurrent callers for one key share a single request.
+
+```js
+import { SingleFlightCache } from '@subtitledb/core';
+
+const cache = new SingleFlightCache({ ttlMs: 300000, maxEntries: 200 });
+
+const load = () => sdb.byImdb('tt0133093', { lang: 'en' });
+
+const [a, b] = await Promise.all([
+  cache.resolve('tt0133093:en', load),
+  cache.resolve('tt0133093:en', load),
+]);
+
+a === b; // true, and load ran once
+```
+
+A page with several players, or a player that fires `ready` twice, would otherwise
+issue the same lookup several times in a few milliseconds. A rejection is never
+cached, so a blip does not become a TTL-long outage for that key.
+
+The rest is an ordinary map:
+
+```js
+cache.get('k');     // undefined once the TTL has passed
+cache.set('k', v);
+cache.pending('k'); // is a call for this key already in the air
+cache.size;
+cache.delete('k');
+cache.clear();
+```
+
+`ttlMs` defaults to 5 minutes and `maxEntries` to 200, evicting the oldest write
+first.
 
 ## Load patterns
 
