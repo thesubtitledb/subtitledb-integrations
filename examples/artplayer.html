@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB in ArtPlayer</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@subtitledb/core": "./vendor/core/index.js",
+          "@subtitledb/artplayer": "./vendor/artplayer-adapter/index.js",
+          "artplayer": "./vendor/artplayer/artplayer.mjs"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>SubtitleDB in ArtPlayer</h1>
+      <p>
+        Live against <code>api.thesubtitledb.org</code>. Subtitles are resolved when the player
+        loads, not when the menu is opened.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div class="picker">
+          <button type="button" data-pick="film" class="on">Film: The Matrix</button>
+          <button type="button" data-pick="episode">TV: Game of Thrones S01E01</button>
+          <button type="button" data-pick="filename">From a filename only</button>
+        </div>
+        <div id="player" class="player"></div>
+        <p class="hint">
+          The sample video is a placeholder. Subtitle resolution does not depend on it, which is
+          the point of the status panel.
+        </p>
+      </section>
+
+      <aside class="panel" id="panel">
+        <h2>What happened</h2>
+        <!-- Kept outside #status: renderStatus rewrites that list wholesale, so an
+             element nested inside it would be destroyed on the second render. -->
+        <p class="state" id="state">starting</p>
+        <dl id="status"></dl>
+        <h2>Candidates <span id="count" class="count"></span></h2>
+        <ol id="candidates" class="candidates">
+          <li class="muted">nothing yet</li>
+        </ol>
+        <h2>Selected subtitle</h2>
+        <pre id="preview" class="preview muted">select a language from the player menu</pre>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { attachSubtitleDb } from '@subtitledb/artplayer';
+      import { languageName } from '@subtitledb/core';
+      import Artplayer from 'artplayer';
+
+      const SOURCES = {
+        // An explicit IMDb id is the strongest hint and the fastest path.
+        film: { label: 'The Matrix', hint: { imdbId: 'tt0133093' } },
+        // A TV episode, addressed by its own episode-level IMDb id. This works today
+        // even though season and episode numbers are not populated in the corpus.
+        episode: { label: 'Game of Thrones S01E01', hint: { imdbId: 'tt1480055' } },
+        // No id at all: everything is inferred from the release filename.
+        filename: {
+          label: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv',
+          hint: undefined,
+          src: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv',
+        },
+      };
+
+      const el = (id) => document.getElementById(id);
+      const setState = (s) => {
+        el('state').textContent = s;
+      };
+
+      function renderStatus(result, requests) {
+        const t = result.title;
+        setState('resolved');
+        const rows = [
+          ['tier', result.tier],
+          ['identified as', JSON.stringify(result.hint)],
+          ['title', t ? `${t.name} (${t.year})` : 'not resolved'],
+          ['imdb', t ? t.imdb : '-'],
+          ['tmdb', t && t.tmdb_id !== null ? String(t.tmdb_id) : 'null (map is empty)'],
+          ['kind', t ? t.kind : '-'],
+          ['api requests', String(requests)],
+          ['unrenderable', `${result.unrenderable} dropped (format not supported)`],
+        ];
+        if (result.blocked) rows.push(['blocked', result.blocked]);
+
+        el('status').innerHTML = rows
+          .map(
+            ([k, v]) =>
+              `<dt>${k}</dt><dd>${String(v).replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</dd>`,
+          )
+          .join('');
+      }
+
+      function renderCandidates(result) {
+        el('count').textContent = result.candidates.length ? `(${result.candidates.length})` : '';
+        const list = el('candidates');
+        if (!result.candidates.length) {
+          list.innerHTML = '<li class="muted">no renderable candidates</li>';
+          return;
+        }
+        list.innerHTML = result.candidates
+          .slice(0, 12)
+          .map((c) => {
+            const s = c.subtitle;
+            return `<li><b>${languageName(s.language)}</b> <span class="tag">${s.format}</span>
+              <span class="muted">${s.cues} cues, ${(s.bytes / 1024).toFixed(0)} KB, id ${s.id}</span></li>`;
+          })
+          .join('');
+      }
+
+      let art = null;
+      let handle = null;
+      let requests = 0;
+
+      // Wrap fetch so the page can show exactly how many API calls an attach costs.
+      const countingFetch = (input, init) => {
+        requests++;
+        return fetch(input, init);
+      };
+
+      async function load(which) {
+        if (handle) handle.destroy();
+        if (art) art.destroy(false);
+        requests = 0;
+        setState('loading');
+        el('preview').textContent = 'select a language from the player menu';
+        el('preview').classList.add('muted');
+
+        const source = SOURCES[which];
+        art = new Artplayer({
+          container: '#player',
+          url: source.src ?? 'media/sample.mp4',
+          volume: 0,
+          autoSize: false,
+          setting: true,
+          subtitleOffset: true,
+        });
+
+        handle = attachSubtitleDb(art, {
+          fetch: countingFetch,
+          clientName: 'example-artplayer/0.1.0',
+          languages: ['en', 'fr', 'es'],
+          ...(source.hint ? { hint: source.hint } : {}),
+          onResolved(result) {
+            renderStatus(result, requests);
+            renderCandidates(result);
+            document.body.dataset.resolved = 'true';
+          },
+          onSelected(loaded) {
+            const s = loaded.candidate.subtitle;
+            el('preview').textContent =
+              `# ${languageName(s.language)}, ${loaded.format}, id ${s.id}\n\n` +
+              `${loaded.text.slice(0, 600)}\n...`;
+            el('preview').classList.remove('muted');
+            document.body.dataset.selected = String(s.id);
+          },
+          onError(err) {
+            setState(`error: ${err?.message ?? String(err)}`);
+          },
+        });
+
+        // ArtPlayer emits `ready` once it has mounted. If the placeholder video fails
+        // to load, `ready` may never arrive, so resolve directly after a short grace
+        // period. The session caches by identity, so at worst this is a no-op.
+        setTimeout(() => {
+          if (document.body.dataset.resolved !== 'true' && handle) handle.refresh();
+        }, 600);
+      }
+
+      for (const btn of document.querySelectorAll('[data-pick]')) {
+        btn.addEventListener('click', () => {
+          for (const b of document.querySelectorAll('[data-pick]')) b.classList.remove('on');
+          btn.classList.add('on');
+          document.body.dataset.resolved = 'false';
+          load(btn.dataset.pick);
+        });
+      }
+
+      // Exposed so the end-to-end tests can drive selection through the same code
+      // path the player menu uses, rather than reaching into ArtPlayer internals.
+      window.__pickFirst = async () => {
+        const r = handle?.current();
+        if (r?.candidates.length) await handle.select(r.candidates[0]);
+      };
+
+      load('film');
+    </script>
+  </body>
+</html>

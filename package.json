@@ -1,0 +1,50 @@
+{
+  "name": "subtitledb-integrations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Subtitle integrations for web video players, media servers and desktop players, backed by the SubtitleDB open API.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/core packages/artplayer packages/html5 packages/players",
+    "typecheck": "node scripts/check-no-stray-build.mjs && tsc -b packages/core packages/artplayer packages/html5 packages/players --force",
+    "lint": "biome ci --error-on-warnings .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "vendor": "node scripts/make-sample-video.mjs && node scripts/make-licences.mjs && node scripts/vendor-examples.mjs",
+    "e2e": "playwright test",
+    "serve": "node scripts/serve-examples.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@clappr/player": "^0.14.4",
+    "@flowplayer/player": "^3.41.0",
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^25.9.3",
+    "artplayer": "^5.2.5",
+    "bitmovin-player": "^8.273.0",
+    "dplayer": "^1.27.1",
+    "esbuild": "^0.28.2",
+    "fluid-player": "^3.60.0",
+    "hls.js": "^1.7.1",
+    "media-chrome": "^4.19.2",
+    "mediaelement": "^7.1.0",
+    "nplayer": "^1.0.15",
+    "openplayerjs": "^2.14.12",
+    "plyr": "^3.8.4",
+    "shaka-player": "^5.2.7",
+    "theoplayer": "^11.10.0",
+    "typescript": "^6.0.3",
+    "video.js": "^8.24.0",
+    "vidstack": "^1.15.6",
+    "vitest": "^4.1.8",
+    "xgplayer": "^3.0.26"
+  }
+}

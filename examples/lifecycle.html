@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB under every way a page can load</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@subtitledb/core": "./vendor/core/index.js",
+          "@subtitledb/html5": "./vendor/html5-adapter/index.js",
+          "@subtitledb/players": "./vendor/players-adapter/index.js"
+        }
+      }
+    </script>
+  </head>
+  <body data-mode="" data-done="false">
+    <header class="bar">
+      <h1>Load patterns</h1>
+      <p>
+        The order a page loads in is not something an integration gets to decide. Each mode here
+        is a real sequence a host page can produce, driven by <code>?mode=</code>.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div id="stage"></div>
+        <p class="hint" id="story">starting</p>
+      </section>
+
+      <aside class="panel">
+        <h2>What happened</h2>
+        <p class="state" id="state">starting</p>
+        <dl id="status"></dl>
+        <h2>Tracks <span id="count" class="count"></span></h2>
+        <ol id="candidates" class="candidates">
+          <li class="muted">nothing yet</li>
+        </ol>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { attachSubtitleDb, observeSubtitleDb } from '@subtitledb/players';
+
+      const SRC = 'media/sample.webm';
+      const FILM = 'tt0133093';
+      const EPISODE = 'tt1480055';
+
+      const mode = new URLSearchParams(location.search).get('mode') ?? 'late-source';
+      document.body.dataset.mode = mode;
+
+      const stage = document.getElementById('stage');
+      const story = document.getElementById('story');
+      const state = document.getElementById('state');
+      const status = document.getElementById('status');
+      const list = document.getElementById('candidates');
+      const count = document.getElementById('count');
+
+      const log = [];
+      const say = (text) => {
+        log.push(text);
+        story.textContent = log.join(' -> ');
+      };
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      function render(handle) {
+        const result = handle?.current();
+        status.innerHTML = '';
+        const row = (k, v) => {
+          status.insertAdjacentHTML(
+            'beforeend',
+            `<dt>${k}</dt><dd>${String(v).replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</dd>`,
+          );
+        };
+        row('binding', handle ? `${handle.player.label} (${handle.player.name})` : 'none');
+        row('title', result?.title?.name ?? result?.hint?.title ?? 'none');
+        row('imdb', result?.hint?.imdbId ?? 'none');
+
+        const tracks = handle?.tracks() ?? [];
+        count.textContent = tracks.length ? `(${tracks.length})` : '';
+        list.innerHTML = tracks.length
+          ? tracks.map((c) => `<li>${c.subtitle.language} ${c.subtitle.format}</li>`).join('')
+          : '<li class="muted">nothing yet</li>';
+      }
+
+      /**
+       * Every mode attaches with the same options, including a visible onError: a
+       * page that swallows failures cannot show which load pattern broke.
+       */
+      const opts = (extra) => ({
+        languages: ['en', 'fr'],
+        onError: (err) => say(`error: ${err?.message ?? err}`),
+        ...extra,
+      });
+      /** A bare video, added to the page whenever the mode wants it there. */
+      function video(src) {
+        const el = document.createElement('video');
+        el.className = 'player';
+        el.controls = true;
+        el.muted = true;
+        el.playsInline = true;
+        if (src) el.src = src;
+        return el;
+      }
+
+      const MODES = {
+        /**
+         * The element exists but has no source yet, which is what a lazy player and
+         * most frameworks produce. Attach first, set the source a second later.
+         */
+        async 'late-source'() {
+          const el = video();
+          stage.append(el);
+          const handle = attachSubtitleDb(el, opts({ hint: { imdbId: FILM } }));
+          say('attached to an empty video');
+          render(handle);
+
+          await wait(600);
+          el.src = SRC;
+          say('source set');
+          return handle;
+        },
+
+        /**
+         * Nothing is in the page at attach time. The observer waits for whatever the
+         * page builds later, which is the tag manager and single page app case.
+         */
+        async observe() {
+          const watcher = observeSubtitleDb(
+            opts({ hint: { imdbId: FILM }, onAttach: () => say('observer attached a player') }),
+          );
+          say(`observer started, ${watcher.handles().length} players in the page`);
+
+          await wait(600);
+          stage.append(video(SRC));
+          say('player added to the page');
+
+          await new Promise((resolve) => {
+            const check = () => (watcher.handles().length ? resolve() : setTimeout(check, 50));
+            check();
+          });
+          window.__watcher = watcher;
+          return watcher.handles()[0];
+        },
+
+        /** The same script on the page twice, or a component mounted twice. */
+        async twice() {
+          const el = video(SRC);
+          stage.append(el);
+          const options = opts({ hint: { imdbId: FILM } });
+          const first = attachSubtitleDb(el, options);
+          const second = attachSubtitleDb(el, options);
+          say(second === first ? 'second attach returned the first handle' : 'TWO HANDLES');
+          window.__same = second === first;
+          return first;
+        },
+
+        /** A next episode, or a quality switch: the media changes under a live handle. */
+        async 'source-change'() {
+          const el = video(SRC);
+          stage.append(el);
+          const handle = attachSubtitleDb(el, opts({ hint: { imdbId: FILM }, languages: ['en'] }));
+          await handle.refresh();
+          say(`film resolved to ${handle.current()?.hint?.imdbId}`);
+          render(handle);
+
+          await wait(300);
+          // What a host page does when it knows the identity changed.
+          window.__second = attachSubtitleDb;
+          handle.destroy();
+          const next = attachSubtitleDb(el, opts({ hint: { imdbId: EPISODE }, languages: ['en'] }));
+          await next.refresh();
+          say(`episode resolved to ${next.current()?.hint?.imdbId}`);
+          return next;
+        },
+
+        /** Attached, then torn down before anything was chosen. */
+        async destroy() {
+          const el = video(SRC);
+          stage.append(el);
+          const handle = attachSubtitleDb(el, opts({ hint: { imdbId: FILM }, languages: ['en'] }));
+          await handle.refresh();
+          const before = el.querySelectorAll('track').length;
+          handle.destroy();
+          const after = el.querySelectorAll('track').length;
+          window.__tracks = { before, after };
+          say(`tracks ${before} -> ${after} after destroy`);
+          return handle;
+        },
+      };
+
+      const run = MODES[mode];
+      if (!run) {
+        state.textContent = `unknown mode ${mode}`;
+        document.body.dataset.done = 'error';
+      } else {
+        try {
+          const handle = await run();
+          // Give the eager resolve a moment to land, whichever mode produced it.
+          for (let i = 0; i < 60 && !(handle?.tracks() ?? []).length; i++) await wait(200);
+          render(handle);
+          window.__handle = handle;
+          state.textContent = 'done';
+          document.body.dataset.tracks = String((handle?.tracks() ?? []).length);
+          document.body.dataset.imdb = handle?.current()?.hint?.imdbId ?? '';
+          document.body.dataset.done = 'true';
+        } catch (err) {
+          state.textContent = String(err?.message ?? err);
+          document.body.dataset.done = 'error';
+        }
+      }
+    </script>
+  </body>
+</html>

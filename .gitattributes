@@ -1,0 +1,4 @@
+# Biome formats with LF. Without this, git checkout rewrites the working tree to
+# CRLF on Windows and every file then fails the format check locally while passing
+# in CI, which is a confusing way to lose an afternoon.
+* text=auto eol=lf

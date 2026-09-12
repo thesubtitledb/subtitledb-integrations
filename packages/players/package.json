@@ -1,0 +1,32 @@
+{
+  "name": "@subtitledb/players",
+  "version": "0.2.1",
+  "description": "SubtitleDB subtitles for every major web video player, through one attach call with per-player bindings.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./marks": {
+      "types": "./dist/marks.d.ts",
+      "default": "./dist/marks.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force"
+  },
+  "dependencies": {
+    "@subtitledb/core": "0.4.0",
+    "@subtitledb/html5": "0.2.1"
+  }
+}

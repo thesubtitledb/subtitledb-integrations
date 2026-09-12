@@ -1,0 +1,252 @@
+:root {
+  --bg: oklch(0.17 0.012 260);
+  --surface: oklch(0.22 0.014 260);
+  --surface-2: oklch(0.26 0.016 260);
+  --ink: oklch(0.95 0.005 260);
+  --ink-dim: oklch(0.74 0.012 260);
+  --line: oklch(0.34 0.018 260);
+  --accent: oklch(0.72 0.15 195);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    15px / 1.55 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+.bar {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bar h1 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.bar p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.87em;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 24px;
+  padding: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.picker button {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 0.87rem;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.picker button:hover {
+  background: var(--surface-2);
+}
+
+.picker button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: oklch(0.12 0.01 260);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.hint {
+  color: var(--ink-dim);
+  font-size: 0.83rem;
+  margin: 10px 2px 0;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 16px 18px;
+}
+
+.panel h2 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-dim);
+  margin: 18px 0 8px;
+}
+
+.panel h2:first-child {
+  margin-top: 0;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+dt {
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  color: var(--accent);
+}
+
+.candidates {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.84rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.candidates li {
+  margin-bottom: 5px;
+}
+
+.tag {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.muted {
+  color: var(--ink-dim);
+}
+
+.preview {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  background: oklch(0.14 0.01 260);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 11px 13px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.links {
+  padding: 0 24px 32px;
+}
+
+.links a {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker button {
+    transition: none;
+  }
+}
+
+.state {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  margin: 0 0 10px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* The html5 example lists tracks as buttons, since a bare video element has no menu
+   of its own. Same affordance as the source picker above the player. */
+.candidates button {
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.candidates button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+video.player {
+  display: block;
+  object-fit: contain;
+}
+
+/* players.html mounts one library at a time into the stage. Each of them wants to
+   size itself, so the stage only provides the box and the aspect ratio comes from
+   .player as everywhere else. */
+.stage {
+  display: grid;
+}
+
+.stage > .player {
+  min-width: 0;
+}
+
+media-controller.player,
+media-player.player {
+  display: block;
+}

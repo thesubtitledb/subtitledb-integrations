@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB in a plain video element</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@subtitledb/core": "./vendor/core/index.js",
+          "@subtitledb/html5": "./vendor/html5-adapter/index.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>SubtitleDB in a plain video element</h1>
+      <p>
+        No player library. A bare <code>&lt;video&gt;</code> with <code>&lt;track&gt;</code>
+        elements, which renders WebVTT and nothing else, so the subtitle is converted in the
+        browser on selection.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div class="picker">
+          <button type="button" data-pick="film" class="on">Film: The Matrix</button>
+          <button type="button" data-pick="episode">TV: Game of Thrones S01E01</button>
+          <button type="button" data-pick="filename">From a filename only</button>
+        </div>
+        <video id="player" class="player" controls muted playsinline></video>
+        <p class="hint">
+          The video is a placeholder. Subtitle resolution does not depend on it, which is what the
+          status panel is for.
+        </p>
+      </section>
+
+      <aside class="panel" id="panel">
+        <h2>What happened</h2>
+        <p class="state" id="state">starting</p>
+        <dl id="status"></dl>
+        <h2>Tracks <span id="count" class="count"></span></h2>
+        <ol id="candidates" class="candidates">
+          <li class="muted">nothing yet</li>
+        </ol>
+        <h2>Selected subtitle, as WebVTT</h2>
+        <pre id="preview" class="preview muted">pick a track below the player</pre>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { languageName } from '@subtitledb/core';
+      import { attachSubtitleDb } from '@subtitledb/html5';
+
+      const SOURCES = {
+        film: { hint: { imdbId: 'tt0133093' } },
+        episode: { hint: { imdbId: 'tt1480055' } },
+        filename: { hint: undefined, src: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv' },
+      };
+
+      const el = (id) => document.getElementById(id);
+      const setState = (s) => {
+        el('state').textContent = s;
+      };
+
+      function renderStatus(result, requests) {
+        const t = result.title;
+        setState('resolved');
+        const rows = [
+          ['tier', result.tier],
+          ['identified as', JSON.stringify(result.hint)],
+          ['title', t ? `${t.name} (${t.year})` : 'not resolved'],
+          ['imdb', t ? t.imdb : '-'],
+          ['api requests', String(requests)],
+          ['unrenderable', `${result.unrenderable} dropped (not convertible)`],
+        ];
+        if (result.blocked) rows.push(['blocked', result.blocked]);
+
+        el('status').innerHTML = rows
+          .map(
+            ([k, v]) =>
+              `<dt>${k}</dt><dd>${String(v).replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</dd>`,
+          )
+          .join('');
+      }
+
+      function renderCandidates(result, handle) {
+        el('count').textContent = result.candidates.length ? `(${result.candidates.length})` : '';
+        const list = el('candidates');
+        list.innerHTML = '';
+        if (!result.candidates.length) {
+          list.innerHTML = '<li class="muted">no renderable subtitles</li>';
+          return;
+        }
+        for (const c of result.candidates.slice(0, 12)) {
+          const s = c.subtitle;
+          const li = document.createElement('li');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.sub = String(s.id);
+          btn.textContent = `${languageName(s.language)} - ${s.format.toUpperCase()}`;
+          btn.addEventListener('click', () => handle.select(c));
+          li.append(btn);
+          const note = document.createElement('span');
+          note.className = 'muted';
+          note.textContent = ` ${s.cues} cues, id ${s.id}`;
+          li.append(note);
+          list.append(li);
+        }
+      }
+
+      let handle = null;
+      let requests = 0;
+
+      const countingFetch = (input, init) => {
+        requests++;
+        return fetch(input, init);
+      };
+
+      function load(which) {
+        if (handle) handle.destroy();
+        requests = 0;
+        setState('loading');
+        el('preview').textContent = 'pick a track below the player';
+        el('preview').classList.add('muted');
+        document.body.dataset.resolved = 'false';
+
+        const video = el('player');
+        const source = SOURCES[which];
+        video.src = source.src ?? 'media/sample.webm';
+
+        handle = attachSubtitleDb(video, {
+          fetch: countingFetch,
+          clientName: 'example-html5/0.1.0',
+          languages: ['en', 'fr', 'es'],
+          ...(source.hint ? { hint: source.hint } : {}),
+          onResolved(result) {
+            renderStatus(result, requests);
+            renderCandidates(result, handle);
+            document.body.dataset.resolved = 'true';
+          },
+          onSelected(loaded) {
+            const s = loaded.candidate.subtitle;
+            const from = loaded.convertedFrom ? ` converted from ${loaded.convertedFrom}` : '';
+            el('preview').textContent =
+              `# ${languageName(s.language)}, id ${s.id}${from}\n\n${loaded.text.slice(0, 600)}\n...`;
+            el('preview').classList.remove('muted');
+            document.body.dataset.selected = String(s.id);
+            document.body.dataset.convertedFrom = loaded.convertedFrom ?? '';
+          },
+          onError(err) {
+            setState(`error: ${err?.message ?? String(err)}`);
+          },
+        });
+
+        // A missing placeholder video never fires loadedmetadata, and this page has to
+        // work whether or not the media loads, so resolve directly as well. The session
+        // caches by identity, so the duplicate costs nothing.
+        handle.refresh();
+      }
+
+      for (const btn of document.querySelectorAll('[data-pick]')) {
+        btn.addEventListener('click', () => {
+          for (const b of document.querySelectorAll('[data-pick]')) b.classList.remove('on');
+          btn.classList.add('on');
+          load(btn.dataset.pick);
+        });
+      }
+
+      window.__pickFirst = async () => {
+        const r = handle?.current();
+        if (r?.candidates.length) await handle.select(r.candidates[0]);
+      };
+
+      load('film');
+    </script>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Runs on GitHub-hosted ubuntu-latest, which carries sudo, make, python3 and the
+# dotnet/node toolchains. The per-job bootstrapping below (interpreter fallback,
+# pip from pypa, Lua from source) is left in place: it is defensive and still
+# correct here, it is simply no longer load-bearing.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - run: npm ci
+
+      # Order is the repo gate: lint, typecheck, unit, end to end, build. Each step
+      # fails on the cheapest signal available, so a formatting slip never costs a
+      # browser run.
+      - name: Lint
+        run: ./node_modules/.bin/biome ci .
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # The end to end run drives the example pages against the live API. It is the
+      # only place the whole chain is exercised at once: import map, ES modules, CORS,
+      # the /get/ redirect, blob URLs and the browser's own WebVTT parser.
+      - name: End to end
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # Kept separate, but blocking. These call api.thesubtitledb.org directly, so a
+  # failure here means the API changed or is down, not that this repo regressed, and
+  # that difference is worth being able to read off the job list. It is still a
+  # failure: this suite is the only thing that proves the plugins match the live
+  # contract, and it spent its first weeks red behind continue-on-error while four
+  # assertions described an API that no longer existed.
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - run: npm ci
+
+      - name: Live API contract tests
+        run: npm run test:live

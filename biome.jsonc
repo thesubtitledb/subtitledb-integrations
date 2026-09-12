@@ -1,0 +1,51 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+  // useIgnoreFile is off deliberately: biome resolves it relative to this config and
+  // the excludes below are explicit, so `biome ci .` behaves the same from any cwd.
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": false },
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/coverage",
+      "!examples/vendor",
+      // Built by packages/loader/build.mjs: minified bundles with hashed names, which
+      // biome will happily report three hundred findings against.
+      "!cdn",
+      "!test-results",
+      "!playwright-report",
+      // NuGet and MSBuild drop machine-specific JSON here (project.assets.json and
+      // friends). CI lints before it ever builds the dotnet plugins, so this only
+      // shows up locally: 27 findings in files git already ignores.
+      "!**/bin",
+      "!**/obj"
+    ]
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": { "noExplicitAny": "warn" }
+    }
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "trailingCommas": "all", "semicolons": "always" }
+  },
+  "overrides": [
+    {
+      // The shared match cases are read by four test suites and laid out one case per
+      // line so a diff shows which rule changed. Biome's JSON formatter would put
+      // every field on its own line, which is 400 lines of noise for a one-word edit.
+      "includes": ["plugins/shared/match-cases.json"],
+      "formatter": { "enabled": false }
+    }
+  ]
+}

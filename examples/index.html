@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB integration examples</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>SubtitleDB integration examples</h1>
+      <p>
+        Runnable pages that talk to the live API at <code>api.thesubtitledb.org</code>. These are
+        what the end-to-end tests drive.
+      </p>
+    </header>
+
+    <div class="links">
+      <h2 style="font-size: 0.9rem">Players</h2>
+      <ul>
+        <li>
+          <a href="./minimal.html">The smallest page that works</a> - a video, three options, one
+          call. This is the copy printed in the integration guide
+        </li>
+        <li><a href="./artplayer.html">ArtPlayer</a> - eager resolve on load, lazy fetch on select</li>
+        <li>
+          <a href="./html5.html">Plain video element</a> - no player library, srt and ass converted
+          to WebVTT in the browser
+        </li>
+        <li>
+          <a href="./players.html">Every supported player</a> - one attach call against a real
+          build of Video.js, Shaka, Vidstack, Plyr, DPlayer, Clappr, xgplayer,
+          MediaElement.js, OpenPlayerJS and Media Chrome
+        </li>
+      </ul>
+
+      <h2 style="font-size: 0.9rem; margin-top: 24px">Before running</h2>
+      <pre class="preview">npm install
+npm run build
+npm run vendor
+npm run serve</pre>
+      <p class="hint">
+        <code>npm run vendor</code> copies the built packages and the ArtPlayer bundle into
+        <code>examples/vendor</code>, which is generated and not committed. Nothing here loads
+        anyone else's code from a CDN.
+      </p>
+    </div>
+  </body>
+</html>

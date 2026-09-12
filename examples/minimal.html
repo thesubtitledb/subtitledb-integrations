@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB, the smallest page that works</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@subtitledb/core": "./vendor/core/index.js",
+          "@subtitledb/html5": "./vendor/html5-adapter/index.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>The smallest page that works</h1>
+      <p>
+        A video, three options, one call. This page is the copy in
+        <code>docs/documentation.md</code>, kept runnable so the copy cannot drift from
+        something that works.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <video id="player" class="player" controls muted playsinline src="media/sample.webm"></video>
+      </section>
+    </main>
+
+    <script type="module">
+      import { attachSubtitleDb } from '@subtitledb/html5';
+
+      const handle = attachSubtitleDb(document.getElementById('player'), {
+        hint: { imdbId: 'tt0133093' },
+        languages: ['en'],
+        autoSelect: true,
+        onError: (err) => console.error(err),
+      });
+
+      // Only so the end to end test can see what the page ended up with. A real page
+      // needs none of this: the subtitle is on screen without it.
+      window.__handle = handle;
+    </script>
+  </body>
+</html>

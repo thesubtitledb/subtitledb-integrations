@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+examples/vendor/
+examples/media/
+test-results/
+playwright-report/
+.env
+.env.*
+licences.env
+examples/licences.js
+__pycache__/
+*.pyc
+cdn/

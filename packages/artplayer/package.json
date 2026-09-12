@@ -1,0 +1,30 @@
+{
+  "name": "@subtitledb/artplayer",
+  "version": "0.2.1",
+  "description": "SubtitleDB subtitles for ArtPlayer. Resolves eagerly on player ready and on every source change.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force"
+  },
+  "dependencies": {
+    "@subtitledb/core": "0.4.0"
+  },
+  "peerDependencies": {
+    "artplayer": ">=5"
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "_": [
+    "One set of cases, read by all five test suites: TypeScript, Python, C# and Lua.",
+    "",
+    "Five plugins in four languages have to agree on which subtitle is the right one.",
+    "Nothing enforces that except this file: each suite loads it and asserts the same",
+    "answers, so a rule changed in one language fails the others' CI job rather than",
+    "quietly giving Kodi users a different pick from Jellyfin users.",
+    "",
+    "Title resolution is the server's job now (the by-* lookup verbs), so only the",
+    "client-side rules live here: language names, release-name similarity and subtitle",
+    "ranking. Scores are never asserted. Ordering and thresholds are, because a Dice",
+    "coefficient in Lua and one in C# agree on which is larger long before they agree",
+    "on the seventh decimal place."
+  ],
+
+  "similarity": [
+    { "a": "The Matrix", "b": "The Matrix", "min": 1.0, "why": "identical" },
+    { "a": "The Matrix", "b": "the matrix", "min": 1.0, "why": "case folds" },
+    { "a": "Amelie", "b": "Amélie", "min": 1.0, "why": "combining marks are stripped" },
+    { "a": "Amélie", "b": "Amélie", "min": 1.0, "why": "NFKD, so precomposed equals decomposed" },
+    { "a": "The Matrix", "b": "Matrix, The", "min": 0.7, "why": "word order and punctuation" },
+    { "a": "WALL-E", "b": "WALL E", "min": 1.0, "why": "punctuation is not a difference" },
+    { "a": "Spider-Man: No Way Home", "b": "Spider Man No Way Home", "min": 0.95 },
+    { "a": "The Matrix", "b": "Inception", "max": 0.2, "why": "different films" },
+    { "a": "", "b": "The Matrix", "max": 0.0, "why": "nothing matches nothing" }
+  ],
+
+  "languages": [
+    { "input": "en", "code": "en", "name": "English" },
+    { "input": "eng", "code": "en", "name": "English" },
+    { "input": "English", "code": "en", "name": "English" },
+    { "input": "EN", "code": "en", "name": "English" },
+    { "input": "fr", "code": "fr", "name": "French" },
+    { "input": "fra", "code": "fr", "name": "French" },
+    { "input": "fre", "code": "fr", "name": "French", "why": "ISO639-2/B as well as /T" },
+    { "input": "de", "code": "de", "name": "German" },
+    { "input": "ger", "code": "de", "name": "German" },
+    { "input": "deu", "code": "de", "name": "German" },
+    {
+      "input": "pb",
+      "code": "pb",
+      "name": "Portuguese (Brazil)",
+      "why": "OpenSubtitles code, not ISO. A plain table renders it as PB."
+    },
+    { "input": "pob", "code": "pb", "name": "Portuguese (Brazil)" },
+    { "input": "pt-BR", "code": "pb", "name": "Portuguese (Brazil)" },
+    { "input": "pt_br", "code": "pb", "name": "Portuguese (Brazil)" },
+    { "input": "Portuguese (Brazil)", "code": "pb", "name": "Portuguese (Brazil)" },
+    { "input": "Brazilian Portuguese", "code": "pb", "name": "Portuguese (Brazil)" },
+    { "input": "pt", "code": "pt", "name": "Portuguese" },
+    { "input": "por", "code": "pt", "name": "Portuguese" },
+    { "input": "zh", "code": "zh", "name": "Chinese" },
+    { "input": "zho", "code": "zh", "name": "Chinese" },
+    { "input": "chi", "code": "zh", "name": "Chinese" },
+    { "input": "zt", "code": "zt", "name": "Chinese (traditional)" },
+    { "input": "zh-Hant", "code": "zt", "name": "Chinese (traditional)" },
+    { "input": "ze", "code": "ze", "name": "Chinese (bilingual)" },
+    { "input": "el", "code": "el", "name": "Greek" },
+    { "input": "gre", "code": "el", "name": "Greek" },
+    { "input": "ell", "code": "el", "name": "Greek" },
+    { "input": "he", "code": "he", "name": "Hebrew" },
+    { "input": "heb", "code": "he", "name": "Hebrew" },
+    { "input": "iw", "code": "he", "name": "Hebrew", "why": "the pre-1989 code, still emitted by some hosts" },
+    { "input": "in", "code": "id", "name": "Indonesian", "why": "same, for Indonesian" },
+    { "input": "nb", "code": "no", "name": "Norwegian" },
+    { "input": "nor", "code": "no", "name": "Norwegian" },
+    { "input": "sr-Latn", "code": "sr", "name": "Serbian" },
+    { "input": "qq", "code": "qq", "name": "QQ", "why": "unknown codes pass through rather than resolving to English" },
+    { "input": "", "code": null, "name": null }
+  ],
+
+  "subtitle_ranking": [
+    {
+      "why": "language preference order beats everything below it",
+      "options": { "languages": ["fr", "en"], "formats": ["srt", "ass"] },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900 },
+        { "id": 2, "language": "fr", "format": "srt", "cues": 900 }
+      ],
+      "expect_order": [2, 1]
+    },
+    {
+      "why": "a format the player cannot render is dropped, not ranked last",
+      "options": { "languages": ["en"], "formats": ["srt"] },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "sub", "cues": 900 },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900 }
+      ],
+      "expect_order": [2],
+      "expect_unrenderable": 1
+    },
+    {
+      "why": "the release name is what makes a subtitle actually line up with the file",
+      "options": {
+        "languages": ["en"],
+        "formats": ["srt"],
+        "release": "Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL"
+      },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900, "release_name": "Anatomy.of.a.Fall.2023.720p.WEBRip.x264-GALAXY" },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "release_name": "Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL" }
+      ],
+      "expect_order": [2, 1]
+    },
+    {
+      "why": "a file with no cues renders as an empty track, which is worse than no track",
+      "options": { "languages": ["en"], "formats": ["srt"] },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 0 },
+        { "id": 2, "language": "en", "format": "srt", "cues": 800 }
+      ],
+      "expect_order": [2, 1]
+    },
+    {
+      "why": "hearing impaired is a preference in both directions",
+      "options": { "languages": ["en"], "formats": ["srt"], "hearing_impaired": true },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900, "hearing_impaired": false },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "hearing_impaired": true }
+      ],
+      "expect_order": [2, 1]
+    },
+    {
+      "why": "the wrong episode is not a worse match, it is the wrong file",
+      "options": { "languages": ["en"], "formats": ["srt"], "season": 5, "episode": 14 },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900, "season": 5, "episode": 15 },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "season": 5, "episode": 14 }
+      ],
+      "expect_order": [2]
+    },
+    {
+      "why": "a row with no season at all is kept: sub_meta has no entry for every id",
+      "options": { "languages": ["en"], "formats": ["srt"], "season": 5, "episode": 14 },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900, "season": null, "episode": null },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "season": 5, "episode": 14 }
+      ],
+      "expect_order": [2, 1]
+    },
+    {
+      "why": "ties break on the id, so two runs of the same query agree",
+      "options": { "languages": ["en"], "formats": ["srt"] },
+      "subtitles": [
+        { "id": 7, "language": "en", "format": "srt", "cues": 900 },
+        { "id": 3, "language": "en", "format": "srt", "cues": 900 }
+      ],
+      "expect_order": [3, 7]
+    }
+  ]
+}
