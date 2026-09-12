@@ -1,19 +1,6 @@
 # subtitledb-integrations
 
-Subtitle plugins for web video players.
-
-One call finds what is playing, asks the [SubtitleDB](https://thesubtitledb.org) open
-API what exists for it, and fills the player's own captions menu.
-
-No key. No signup. No account.
-
-Sixteen bindings over fifteen player libraries, plus a bare `<video>` (also how hls.js
-and dash.js are reached). Nothing is imported from the player, so there is no player
-dependency and no version to pin.
-
-## Install
-
-One script tag, no build step:
+Subtitles in the player's own captions menu. [thesubtitledb.org](https://thesubtitledb.org)
 
 ```html
 <video id="v" controls src="film.mp4"></video>
@@ -27,119 +14,155 @@ One script tag, no build step:
 </script>
 ```
 
-About 2 KB. It fetches only the half of the code your page needs.
+No key, no signup, about 2 KB.
 
-ES module build at the same path: `subtitle-finder.esm.js`.
-
-From source, if the page has a build step:
+## Bundled
 
 ```bash
 git clone https://github.com/thesubtitledb/subtitledb-integrations
 cd subtitledb-integrations
-npm install
-npm run build
-npm run vendor
+npm install && npm run build && npm run vendor
 ```
 
-`vendor` writes plain ES modules into `examples/vendor`. Point an import map at them.
+```js
+import { attachSubtitleDb } from '@subtitledb/players';
 
-Not on npm yet.
+const handle = attachSubtitleDb(player, {
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en', 'fr'],
+  autoSelect: true,
+});
+```
+
+`vendor` writes ES modules to `examples/vendor`. Not on npm yet.
+
+## Targets
+
+```js
+attachSubtitleDb(videoEl);                    // bare <video>
+attachSubtitleDb(player);                     // player instance
+attachSubtitleDb(container);                  // its container
+attachSubtitleDb({ plyr });                   // plyr-react
+attachSubtitleDb({ player });                 // @videojs-player/vue
+attachSubtitleDb({ player, videoElement });   // shaka-player-react
+attachSubtitleDb(ref);                        // React useRef, Vue ref
+attachSubtitleDb(player, { player: 'plyr' }); // skip detection
+```
+
+Sixteen bindings over fifteen libraries. hls.js and dash.js through `<video>`.
 
 ## CDN helper
 
-The `SubtitleDB` global, and the ES module's named exports. Same four either way.
+```js
+import {
+  attach,
+  preload,
+  setBasePath,
+  version,
+} from 'https://cdn.thesubtitledb.org/latest/subtitle-finder.esm.js';
+```
 
-| Method | Returns | Does |
+| Member | Type | Does |
 |---|---|---|
-| `attach(target, options?)` | `DeferredHandle` | Mounts on a player, element or framework ref. Loads bindings only if the target needs them. |
-| `preload()` | `Promise<unknown>` | Warms the chunks before the first attach. |
-| `setBasePath(path)` | `void` | Overrides where chunks are fetched from. For self-hosting. |
-| `version` | `string` | Build version, stamped at publish. |
+| `attach(target, options?)` | `DeferredHandle` | Mounts. Loads bindings only if the target needs them. |
+| `preload()` | `Promise<unknown>` | Warms the chunks early. |
+| `setBasePath(path)` | `void` | Fetch chunks from your own copy. |
+| `version` | `string` | Stamped at publish. |
 
-`target` can be a player instance, its container, a bare `<video>`, or a framework
-ref: `{plyr}`, `{player}`, `{player, videoElement}`, a React `useRef`, a Vue `ref`.
+## Handle
 
-## The handle
+```js
+const h = SubtitleDB.attach(video, { hint: { imdbId: 'tt0133093' } });
 
-`attach()` returns at once. The loaded handle settles on `ready`.
+await h.ready;
+h.player.name;                  // 'videojs'
+h.player.via;                   // 'instance'
+h.tracks();                     // Candidate[], menu order
+await h.select(h.tracks()[0]);
+h.current();                    // ResolveResult
+h.media();                      // the <video> playing now
+await h.refresh();
+h.destroy();
+```
 
-| Member | Type | Notes |
+| Member | Type | Null until |
 |---|---|---|
-| `ready` | `Promise<AttachHandle>` | The real handle, once its module has loaded. |
-| `player` | `PlayerInfo \| null` | `name`, `label`, `untested`, `via`. Null until ready. |
-| `degraded` | `DegradedInfo \| null` | Set only when a player was seen but not reachable. |
-| `session` | `SubtitleSession \| null` | The underlying session. Null until ready. |
-| `media()` | `HTMLVideoElement \| null` | The element playing now, read live, never cached. |
-| `refresh()` | `Promise<ResolveResult>` | Force a fresh resolve. |
-| `select(candidate)` | `Promise<void>` | Fetch, convert if the player cannot render it, show it. |
-| `tracks()` | `Candidate[]` | Candidates offered, in menu order. Empty before the first resolve. |
-| `current()` | `ResolveResult \| null` | Last resolve. Null before the first. |
-| `destroy()` | `void` | Detach and clean up. |
+| `ready` | `Promise<AttachHandle>` | - |
+| `player` | `PlayerInfo` | ready |
+| `degraded` | `DegradedInfo` | ready, and after it unless degraded |
+| `session` | `SubtitleSession` | ready |
+| `media()` | `HTMLVideoElement` | - |
+| `refresh()` | `Promise<ResolveResult>` | - |
+| `select(candidate)` | `Promise<void>` | - |
+| `tracks()` | `Candidate[]` | empty until first resolve |
+| `current()` | `ResolveResult` | first resolve |
+| `destroy()` | `void` | - |
 
-`player.via` says how the target was reached: `named`, `instance`, `element`, `ref`,
-`descend`, `ascend`, `native`.
+`player.via`: `named`, `instance`, `element`, `ref`, `descend`, `ascend`, `native`.
 
 ## Options
 
-Three matter most. Dropping one is the usual reason nothing appears.
+```js
+attachSubtitleDb(player, {
+  hint: { imdbId: 'tt0133093' }, // exact identity; otherwise inferred
+  languages: ['en', 'fr'],       // best first; otherwise alphabetical
+  autoSelect: true,              // show one; otherwise offer only
+  player: 'plyr',                // force a binding
+  formats: ['vtt'],              // what the player renders natively
+  convert: true,                 // srt, ass, ssa to WebVTT in the browser
+  maxTracks: 30,
+  strict: false,                 // throw rather than degrade
+});
+```
 
-| Option | Default | Notes |
-|---|---|---|
-| `hint` | inferred | `{ imdbId }` and friends. Exact beats inference. |
-| `languages` | API order | Best first. Unset is alphabetical: ask for The Matrix, get Arabic. |
-| `autoSelect` | `false` | Puts one on screen. Unset offers without showing. |
+Dropping one of the first three is the usual reason nothing appears.
 
-Also accepted: `player`, `formats`, `convert`, `maxTracks`, `hearingImpaired`,
-`limit`, `strict`, `apiBase`, `clientName`, `fetch`, `cacheTtlMs`, `maxRequests`, and
-the callbacks `onResolved`, `onSelected`, `onDegraded`, `onError`.
-
-Full table in [docs/documentation.md](docs/documentation.md).
+Also accepted: `hearingImpaired`, `limit`, `apiBase`, `clientName`, `fetch`,
+`cacheTtlMs`, `maxRequests`, `onResolved`, `onSelected`, `onDegraded`, `onError`.
+Defaults in [docs/documentation.md](docs/documentation.md).
 
 ## Packages
 
 | Package | For |
 |---|---|
-| `@subtitledb/players` | Any of the sixteen bindings. One attach call. |
-| `@subtitledb/html5` | A bare `<video>` and its track list. |
-| `@subtitledb/artplayer` | ArtPlayer's own plugin shape. |
-| `@subtitledb/core` | Client, identify, filename, match, convert, cache. |
+| `@subtitledb/players` | Sixteen bindings, one call |
+| `@subtitledb/html5` | Bare `<video>` and its track list |
+| `@subtitledb/artplayer` | ArtPlayer's own plugin shape |
+| `@subtitledb/core` | Client, identify, filename, match, convert, cache |
 
-`@subtitledb/players` also exports `attachSubtitleDb`, `attachedTo`,
-`observeSubtitleDb`, `resolvePlayer`, `findPlayer`, `playerFor`, `findVideo`,
-`isVideoElement`, `detectBinding`, `bindingByName`, `BINDINGS`, `ownerOf`,
-`looksOwned`, `OWNER_CLASSES`.
+```js
+import {
+  attachSubtitleDb, attachedTo, observeSubtitleDb, resolvePlayer, findPlayer,
+  playerFor, findVideo, isVideoElement, detectBinding, bindingByName, BINDINGS,
+  ownerOf, looksOwned, OWNER_CLASSES,
+} from '@subtitledb/players';
 
-`@subtitledb/core` also exports `createClient`, `SubtitleDbClient`, `createSession`,
-`SubtitleSession`, `findSubtitles`, `similarity`, `candidateLabel`, `identify`,
-`elementIdentity`, `isResolvable`, `parseFilename`, `basename`, `toVtt`, `srtToVtt`,
-`assToVtt`, `subtitleMime`, `CONVERTIBLE`, `SingleFlightCache`, `handleFor`,
-`handleForAny`, `registerHandle`, `languageName`, `hasLanguageName`, `normaliseImdb`,
-`backoffMs`, `EMPTY_RESULT`, `DEFAULT_API_BASE`.
+import {
+  createClient, SubtitleDbClient, createSession, SubtitleSession, findSubtitles,
+  similarity, candidateLabel, identify, elementIdentity, isResolvable,
+  parseFilename, basename, toVtt, srtToVtt, assToVtt, subtitleMime, CONVERTIBLE,
+  SingleFlightCache, handleFor, handleForAny, registerHandle, languageName,
+  hasLanguageName, normaliseImdb, backoffMs, EMPTY_RESULT, DEFAULT_API_BASE,
+} from '@subtitledb/core';
+```
 
 ## Scripts
 
-| Command | Does |
-|---|---|
-| `npm test` | Unit. Hermetic, no network. |
-| `npm run test:live` | Contract tests against the real API. |
-| `npm run typecheck` | Types, and fails on stray build output in `src`. |
-| `npm run build` | Compile all four packages. |
-| `npm run vendor` | Built packages into `examples/vendor`. |
-| `npm run serve` | <http://localhost:4173> |
-| `npm run e2e` | Playwright over the example pages. |
-| `npm run lint` | Biome. |
-| `npm run lint:fix` | Biome, writing fixes. |
+```bash
+npm test              # unit, hermetic, no network
+npm run test:live     # contract tests against the real API
+npm run typecheck     # types, plus the stray-build check
+npm run build         # all four packages
+npm run vendor        # built packages -> examples/vendor
+npm run serve         # localhost:4173
+npm run e2e           # Playwright over the examples
+npm run lint          # Biome
+npm run lint:fix      # Biome, writing fixes
+```
 
-## Docs
+## More
 
-- [docs/documentation.md](docs/documentation.md) - options, the handle, load patterns, limits.
-- [docs/players.md](docs/players.md) - every player, which binding reaches it, what has been run.
-- [examples/minimal.html](examples/minimal.html) - the smallest page that works.
-
-## Stremio
-
-Different shape, separate repo:
-[thesubtitledb/subtitledb-stremio](https://github.com/thesubtitledb/subtitledb-stremio).
-
-A hosted service, not a plugin the client loads. It vendors this repo's converter and
-similarity function under a CI drift gate.
+- [docs/documentation.md](docs/documentation.md) - options, handle, load patterns, limits
+- [docs/players.md](docs/players.md) - every player, which binding, what was run
+- [examples/minimal.html](examples/minimal.html) - smallest working page
+- [subtitledb-stremio](https://github.com/thesubtitledb/subtitledb-stremio) - hosted addon, not a plugin
