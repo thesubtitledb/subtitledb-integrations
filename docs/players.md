@@ -16,6 +16,18 @@ Adding a `<track>` to the element is enough to render a subtitle. The
 player-specific binding exists only so the player's own captions menu lists what
 we added, rather than the subtitle appearing with no way to switch it.
 
+```js
+import { attachSubtitleDb } from '@subtitledb/players';
+
+const handle = attachSubtitleDb(plyrInstance, { hint: { imdbId: 'tt0133093' } });
+
+await handle.ready;
+handle.player; // { name: 'plyr', label: 'Plyr', untested: false, via: 'instance' }
+```
+
+Hand any of these the `<video>` instead and the subtitle still renders, just
+without the player's own menu entry.
+
 | Player | Licence | Binding | Notes |
 |---|---|---|---|
 | Native `<video>` | - | `native` | The floor. Everything else degrades to this |
@@ -45,6 +57,14 @@ so the binding has to speak the player's API. This is also where the better
 integration lives, because the player's own menu, styling and offset controls
 come for free.
 
+The call does not change. Hand one of these a bare `<video>` and you get nothing
+on screen and no error, which is why the group matters:
+
+```js
+attachSubtitleDb(videojsPlayer, { hint: { imdbId: 'tt0133093' } }); // menu, styling
+attachSubtitleDb(videojsPlayer.el().querySelector('video'));        // silence
+```
+
 | Player | Licence | Binding | API used |
 |---|---|---|---|
 | [Video.js](https://videojs.com) | Apache-2.0 | `videojs` | `addRemoteTextTrack`, `remoteTextTracks` |
@@ -71,6 +91,21 @@ ArtPlayer are the six that publish through a player API and never touch the
 element.
 
 ArtPlayer has two entry points and they are not the same thing.
+
+```js
+// fuller: adds an entry to ArtPlayer's own settings menu
+import { subtitleDbPlugin } from '@subtitledb/artplayer';
+
+new Artplayer({
+  container: '#player',
+  url: 'film.mp4',
+  plugins: [subtitleDbPlugin({ hint: { imdbId: 'tt0133093' } })],
+});
+
+// enough to stop it resolving to `native`
+attachSubtitleDb(artplayerInstance, { hint: { imdbId: 'tt0133093' } });
+```
+
 `@subtitledb/artplayer` is the fuller one: it adds an entry to ArtPlayer's own
 settings menu and it is what `plugins: [subtitleDbPlugin()]` takes. The
 `artplayer` binding in this package exists so that an ArtPlayer handed to the
@@ -154,14 +189,22 @@ unit test against a fake:
 The one player where everything this adapter does is correct and the screen is
 still empty. OpenPlayerJS hides the browser's own cue container:
 
-    .op-player video::-webkit-media-text-track-container { display: none !important; }
+```css
+.op-player video::-webkit-media-text-track-container {
+  display: none !important;
+}
+```
 
 and draws captions itself from a track list it snapshots when it is constructed,
 so a track added afterwards is in neither. Nothing an adapter can do from outside
 the player changes that. A host page that wants subtitles rendered gives the
 browser its cue container back, which is one line and puts the cues on screen:
 
-    .op-player video::-webkit-media-text-track-container { display: block !important; }
+```css
+.op-player video::-webkit-media-text-track-container {
+  display: block !important;
+}
+```
 
 The cues then render in the browser's own caption style rather than the player's,
 and OpenPlayerJS's captions button still lists only what it saw at construction.
@@ -230,6 +273,15 @@ wrapper never does:
 | `{ value }` | any Vue `ref`, holding any of the above |
 | a container element | a component that keeps its player private |
 
+```js
+attachSubtitleDb({ plyr });                  // plyr-react
+attachSubtitleDb({ player });                // @videojs-player/vue
+attachSubtitleDb({ player, videoElement });  // shaka-player-react
+attachSubtitleDb(useRef());                  // { current }
+attachSubtitleDb(vueRef);                    // { value }, holding any of the above
+attachSubtitleDb(containerEl);               // player kept private
+```
+
 None of those is a player instance, so every one of them missed all fifteen bindings
 and reached `native`, which is last and whose detect is satisfied by any object with
 a video element somewhere inside it. Measured across the fakes: 15 of 15 wrapper
@@ -260,6 +312,19 @@ framework wrapper cannot disagree about what a target is:
 `handle.player.via` reports which step answered. It is on the handle because after
 the fact "the resolver found nothing" and "the resolver was never reached" produce
 the identical symptom, and that ambiguity is what let this stay invisible.
+
+```js
+await handle.ready;
+
+handle.player.via;
+// 'named'    the page passed player: '...'
+// 'instance' the object itself was the player
+// 'element'  it was a media element
+// 'ref'      unwrapped from current, value or __v_raw
+// 'descend'  found inside the object
+// 'ascend'   climbed from the media element, shadow boundaries included
+// 'native'   no player, driving the element directly
+```
 
 `native` is still a correct answer and not a failure. hls.js, dash.js, jPlayer,
 Griffith, Kaltura, Jellyfin and Video-React are all served properly by driving the
@@ -326,6 +391,32 @@ Three outcomes, and the asymmetry is the design:
   `handle.degraded` is set, `onDegraded` fires once, and that is all. `strict: true`
   promotes it to a throw for a page that would rather fail its own tests.
 
+Both halves in code:
+
+```js
+import { PlayerNotReachableError, UnknownPlayerError } from '@subtitledb/core';
+
+try {
+  const handle = attachSubtitleDb(target, {
+    hint: { imdbId: 'tt0133093' },
+    onDegraded: (info) => {
+      info; // { player: 'plyr', reason: 'menu' }
+    },
+  });
+
+  await handle.ready;
+  handle.degraded; // the same object, or null
+} catch (e) {
+  if (e instanceof PlayerNotReachableError) {
+    e.player; // 'videojs' -- the binding name that was seen
+  }
+  e instanceof UnknownPlayerError; // true either way
+}
+```
+
+`PlayerNotReachableError` extends `UnknownPlayerError`, so a page already catching
+the older type keeps catching this one.
+
 ### The half that needs no fingerprint
 
 A marker table only catches players somebody already wrote down. Headless Shaka is
@@ -371,6 +462,11 @@ scope for this repo.
 Group 1 plus group 2 is every player anyone self-hosts or embeds directly, which
 is the whole addressable set. The split that actually decides reach is not the
 player, it is the format:
+
+```js
+attachSubtitleDb(player, { convert: false }); // 2,487 subtitles of 6.86 million
+attachSubtitleDb(player);                     // convert: true, about 94%
+```
 
 - With conversion off, only a player with its own srt or ass parser can be
   served, and a bare `<track>` player gets 2,487 subtitles out of 6.86 million.
