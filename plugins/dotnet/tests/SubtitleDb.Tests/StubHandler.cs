@@ -53,8 +53,10 @@ namespace SubtitleDb.Tests
 
                 if (route.Location != null)
                 {
-                    // HttpClient follows this itself, so the test sees where it landed.
-                    response.Headers.Location = new Uri(route.Location);
+                    // A handler this far down never follows it; DownloadAsync does.
+                    response.Headers.Location = new Uri(
+                        route.Location,
+                        route.Location.StartsWith("/", StringComparison.Ordinal) ? UriKind.Relative : UriKind.Absolute);
                 }
 
                 return Task.FromResult(response);

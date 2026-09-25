@@ -11,12 +11,14 @@ URL, which exists only so a test can point it somewhere else.
 from __future__ import annotations
 
 import gzip
+import http.client
 import json
 import random
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from dataclasses import dataclass
 
 DEFAULT_API_BASE = "https://api.thesubtitledb.org"
@@ -37,6 +39,28 @@ class SubtitleDbError(Exception):
     def fallthrough(self) -> bool:
         """404 and 400 mean "this rung does not apply", not "give up"."""
         return self.status in (400, 404)
+
+
+#: A connection that failed, timed out or broke off mid-body, and a body that does not
+#: decompress. OSError covers URLError, timeouts and resets; HTTPError is caught first.
+_BROKEN = (OSError, http.client.HTTPException, EOFError, zlib.error)
+
+
+class _OurHostsOnly(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to one of our hosts, and refuses it before it is sent.
+
+    urllib follows every redirect by default, so checking where a request ended up
+    would come after the request to somewhere else had already been made.
+    """
+
+    def __init__(self, api_base: str) -> None:
+        self.api_base = api_base
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _ours(newurl, self.api_base):
+            fp.close()
+            raise SubtitleDbError("redirected off our hosts")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 @dataclass
@@ -63,7 +87,8 @@ class Client:
         req.add_header("Accept", accept)
         req.add_header("Accept-Encoding", "gzip")
         req.add_header("User-Agent", self.user_agent)
-        return urllib.request.urlopen(req, timeout=self.timeout)  # noqa: S310
+        opener = urllib.request.build_opener(_OurHostsOnly(self.api_base))
+        return opener.open(req, timeout=self.timeout)
 
     def _backoff(self, attempt: int, retry_after: str | None) -> float:
         """Honour Retry-After, else exponential backoff with full jitter.
@@ -85,10 +110,7 @@ class Client:
         for attempt in range(self.retries + 1):
             try:
                 with self._open(url, "application/json") as res:
-                    raw = res.read()
-                    if res.headers.get("Content-Encoding") == "gzip":
-                        raw = gzip.decompress(raw)
-                    return json.loads(raw.decode("utf-8"))
+                    raw = _read(res)
             except urllib.error.HTTPError as err:
                 body = {}
                 try:
@@ -102,10 +124,16 @@ class Client:
                 last = SubtitleDbError(str(message), err.code, body)
                 if attempt < self.retries:
                     time.sleep(self._backoff(attempt, err.headers.get("Retry-After")))
-            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                continue
+            except _BROKEN as err:
                 last = SubtitleDbError("cannot reach %s: %s" % (self.api_base, err))
                 if attempt < self.retries:
                     time.sleep(self._backoff(attempt, None))
+                continue
+            try:
+                return json.loads(raw.decode("utf-8"))
+            except ValueError as err:
+                raise SubtitleDbError("the API sent something that is not JSON") from err
         raise last if last else SubtitleDbError("request failed")
 
     # ---- lookup verbs -----------------------------------------------------
@@ -134,18 +162,26 @@ class Client:
 
         The URL is used as it was published rather than rebuilt: it redirects to
         wherever the file currently lives, and that address is not ours to store.
-        Only our own hosts are followed, so a redirect cannot turn a subtitle
-        download into a request to somewhere else.
+        Only our own hosts are asked, and a redirect is checked before it is
+        followed, so a subtitle download cannot become a request to somewhere else.
+        Every failure is a SubtitleDbError, the one exception callers catch.
         """
         if not _ours(url, self.api_base):
             raise SubtitleDbError("refusing to download from %s" % url)
-        with self._open(url, "*/*") as res:
-            if not _ours(res.geturl(), self.api_base):
-                raise SubtitleDbError("download redirected off our hosts")
-            raw = res.read()
-            if res.headers.get("Content-Encoding") == "gzip":
-                raw = gzip.decompress(raw)
-            return raw
+        try:
+            with self._open(url, "*/*") as res:
+                return _read(res)
+        except urllib.error.HTTPError as err:
+            raise SubtitleDbError("HTTP %d from %s" % (err.code, url), err.code) from err
+        except _BROKEN as err:
+            raise SubtitleDbError("cannot download %s: %s" % (url, err)) from err
+
+
+def _read(res) -> bytes:
+    raw = res.read()
+    if res.headers.get("Content-Encoding") == "gzip":
+        raw = gzip.decompress(raw)
+    return raw
 
 
 def _imdb(value: str | int) -> str:

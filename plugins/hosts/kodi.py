@@ -15,8 +15,9 @@ search URL, then the download URL the search listed), once per language the samp
 is asked for, and checks that the addon resolved the sample's own title by the
 route expected, listed only the language asked, as many as its settings allow and
 past the API's first page where the index holds more, and saved a subtitle file. For the
-title the index has nothing for it must list nothing and log as much. The addon's
-own log lines, and any traceback, are printed either way.
+title the index has nothing for it must list nothing and log as much, and so must a
+download the API refuses. The addon's own log lines, and any traceback, are printed
+either way.
 
 The NFO files make the scraper's own id the default, as Kodi's TMDB and TVDB
 scrapers do, so the library route only passes if the addon reads the IMDb id by
@@ -45,6 +46,8 @@ VIA = re.compile(r" via ([\w-]+)")
 #: Kodi names languages in English in the search URL and in the addon's list.
 KODI_NAMES = {"en": "English", "es": "Spanish", "pb": "Portuguese (Brazil)"}
 BY_NAME = ("title",)
+#: A download link the API answers with an error: there is no subtitle 0.
+REFUSED = "https://api.thesubtitledb.org/get/0"
 
 
 def by_library(sample: media.Sample) -> tuple[str, ...]:
@@ -290,6 +293,21 @@ def main(argv=None) -> int:
         print("with nothing playing: %d listed" % len((idle or {}).get("files") or []))
     except Failure as err:
         print("  FAIL with nothing playing: %s" % err)
+        failures.append(str(err))
+
+    # A download the host refuses, as it does an expired link: the addon must say so
+    # and end the listing. The HTTP error once escaped it as a traceback.
+    refused = "plugin://%s/?%s" % (ADDON, urllib.parse.urlencode(
+        {"action": "download", "id": 0, "format": "srt", "url": REFUSED}))
+    try:
+        got = rpc(args.url, "Files.GetDirectory", {"directory": refused, "media": "files"})
+        if (got or {}).get("files"):
+            raise Failure("a refused download listed %s" % got["files"])
+        if not any("download failed" in line for entry in addon_log(args.log) for line in entry):
+            raise Failure("a refused download logged no failure")
+        print("a refused download: listed nothing, logged the failure")
+    except Failure as err:
+        print("  FAIL a refused download: %s" % err)
         failures.append(str(err))
 
     samples = list(zip(media.SAMPLES, media.videos(root)))

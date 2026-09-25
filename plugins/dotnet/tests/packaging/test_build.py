@@ -46,7 +46,8 @@ def published(folder: pathlib.Path) -> None:
 def test_the_version_is_the_one_in_the_build_props():
     # One place. A zip named for one version holding an assembly stamped with another
     # is how a host reports an update that changes nothing.
-    assert build.version() == "0.3.0"
+    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
+    assert build.version() == props.split("<Version>")[1].split("</Version>")[0].strip()
 
 
 def test_only_our_own_assemblies_are_published(tmp_path):

@@ -1,11 +1,17 @@
-"""The client, against a fake opener. No network."""
+"""The client, against a fake opener, and against HTTP servers on 127.0.0.1 where what
+urllib does with a redirect or a dead socket is the thing under test."""
 
 from __future__ import annotations
 
 import gzip
+import http.client
+import http.server
 import io
 import json
+import socket
+import threading
 import urllib.error
+import urllib.request
 
 import pytest
 from subtitledb.client import Client, SubtitleDbError, _imdb, _ours
@@ -142,17 +148,111 @@ def test_a_download_from_somewhere_else_is_refused():
         c.download("https://example.invalid/evil.srt")
 
 
-def test_a_download_that_redirects_off_our_hosts_is_refused():
-    res = FakeResponse(b"1\n", {}, "https://example.invalid/evil.srt")
-    c = client_with([res])
-    with pytest.raises(SubtitleDbError, match="redirected"):
+def test_a_body_that_is_not_json_is_a_subtitledb_error():
+    # A proxy's HTML error page with a 200. Callers catch SubtitleDbError and nothing
+    # else, so anything else ends the search with a traceback instead of a message.
+    c = client_with([FakeResponse(b"<html>busy</html>")])
+    with pytest.raises(SubtitleDbError, match="not JSON"):
+        c.by_imdb("tt1")
+
+
+def test_a_body_cut_short_is_retried_then_a_subtitledb_error():
+    calls: list[str] = []
+    c = client_with([http.client.IncompleteRead(b"{"), http.client.IncompleteRead(b"{")], calls)
+    with pytest.raises(SubtitleDbError, match="cannot reach"):
+        c.by_imdb("tt1")
+    assert len(calls) == 2
+
+
+def test_a_corrupt_gzip_download_is_a_subtitledb_error():
+    c = client_with([FakeResponse(b"not gzip", {"Content-Encoding": "gzip"})])
+    with pytest.raises(SubtitleDbError, match="cannot download"):
         c.download("https://api.example.test/get/1")
 
 
-def test_a_download_that_redirects_to_the_files_host_is_allowed():
-    res = FakeResponse(b"1\n00:00:01,000 --> 00:00:02,000\nhi\n", {}, "https://files.example.test/x")
-    c = client_with([res])
-    assert c.download("https://api.example.test/get/1").startswith(b"1\n")
+# ---- against real sockets -------------------------------------------------
+
+
+@pytest.fixture
+def serve():
+    """Start HTTP servers on 127.0.0.1. Each answers GETs from a table of
+    path -> (status, headers, body) and records every path it was asked for."""
+    servers = []
+
+    def start(routes: dict):
+        seen: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(self.path)
+                status, headers, body = routes.get(self.path, (404, {}, b""))
+                self.send_response(status)
+                for name, value in headers.items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
+        servers.append(server)
+        return server.server_address[1], seen
+
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+def local_client(port: int) -> Client:
+    return Client(api_base="http://127.0.0.1:%d" % port, retries=0, timeout=5)
+
+
+def test_a_redirect_off_our_hosts_is_refused_before_it_is_followed(serve):
+    # "localhost" is not the API's host, so it is somewhere else, and the redirect to
+    # it must never be requested. Checking where a download landed is too late.
+    elsewhere, asked_elsewhere = serve({"/evil.srt": (200, {}, b"not ours")})
+    evil = "http://localhost:%d/evil.srt" % elsewhere
+    ours, _ = serve({"/get/1": (302, {"Location": evil}, b""),
+                     "/v1/by-imdb/1?client=subtitledb-plugin": (302, {"Location": evil}, b"")})
+    c = local_client(ours)
+    with pytest.raises(SubtitleDbError, match="redirected off our hosts"):
+        c.download("http://127.0.0.1:%d/get/1" % ours)
+    with pytest.raises(SubtitleDbError, match="redirected off our hosts"):
+        c.by_imdb("tt1")
+    assert asked_elsewhere == []
+    # The control: urllib left to itself does go there, so the test can see a request.
+    with urllib.request.urlopen("http://127.0.0.1:%d/get/1" % ours, timeout=5) as res:  # noqa: S310
+        assert res.read() == b"not ours"
+    assert asked_elsewhere == ["/evil.srt"]
+
+
+def test_a_redirect_between_our_hosts_is_followed(serve):
+    # Another port on the API's host stands in for files.thesubtitledb.org.
+    srt = b"1\n00:00:01,000 --> 00:00:02,000\nhi\n"
+    files, seen = serve({"/file/2": (200, {}, srt)})
+    api, _ = serve({"/get/2": (302, {"Location": "http://127.0.0.1:%d/file/2" % files}, b"")})
+    assert local_client(api).download("http://127.0.0.1:%d/get/2" % api) == srt
+    assert seen == ["/file/2"]
+
+
+def test_a_download_the_host_refuses_is_a_subtitledb_error(serve):
+    port, _ = serve({"/get/3": (410, {}, b"gone")})
+    with pytest.raises(SubtitleDbError, match="HTTP 410") as caught:
+        local_client(port).download("http://127.0.0.1:%d/get/3" % port)
+    assert caught.value.status == 410
+
+
+def test_a_download_from_a_dead_host_is_a_subtitledb_error():
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    # Nothing listens there now, so the connection is refused.
+    with pytest.raises(SubtitleDbError, match="cannot download"):
+        local_client(port).download("http://127.0.0.1:%d/get/4" % port)
 
 
 @pytest.mark.parametrize(

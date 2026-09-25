@@ -13,7 +13,8 @@ namespace SubtitleDb.Tests
     {
         private static SubtitleDbClient Client(StubHandler handler)
         {
-            var client = new SubtitleDbClient(new HttpClient(handler), "https://api.example.test");
+            var client = new SubtitleDbClient(
+                new HttpClient(handler), "https://api.example.test", downloads: new HttpClient(handler));
             // No sleeping in tests: the backoff is asserted by its shape, not its wait.
             client.Delay = (_, __) => Task.CompletedTask;
             return client;
@@ -139,6 +140,69 @@ namespace SubtitleDb.Tests
                 () => Client(handler).DownloadAsync("https://evil.com/1.srt", CancellationToken.None));
 
             Assert.Empty(handler.Calls);
+        }
+
+        [Fact]
+        public async Task ADownloadFollowsARedirectToOurFilesHost()
+        {
+            var handler = new StubHandler()
+                .OnRedirect("/get/1", "https://files.example.test/x/1.srt")
+                .On("/x/1.srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n");
+
+            var bytes = await Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None);
+
+            Assert.StartsWith("1\n", System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+            Assert.Equal(new[] { "https://api.example.test/get/1", "https://files.example.test/x/1.srt" }, handler.Calls);
+        }
+
+        [Fact]
+        public async Task ARelativeRedirectStaysOnTheHostItCameFrom()
+        {
+            var handler = new StubHandler()
+                .OnRedirect("/get/1", "/files/1.srt")
+                .On("/files/1.srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n");
+
+            await Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None);
+
+            Assert.Equal("https://api.example.test/files/1.srt", handler.Calls[1]);
+        }
+
+        [Fact]
+        public async Task ARedirectOffOurHostsIsRefusedBeforeItIsRequested()
+        {
+            // The hosts' own clients follow a redirect and say where they landed, which
+            // is after the request to somewhere else has gone out.
+            var handler = new StubHandler()
+                .OnRedirect("/get/1", "https://evil.com/1.srt")
+                .On("evil.com", "not ours");
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.Contains("off our hosts", err.Message, StringComparison.Ordinal);
+            Assert.Equal(new[] { "https://api.example.test/get/1" }, handler.Calls);
+        }
+
+        [Fact]
+        public async Task ADownloadTheHostRefusesSaysWhy()
+        {
+            var handler = new StubHandler().On("/get/1", string.Empty, HttpStatusCode.Gone);
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.Equal(HttpStatusCode.Gone, err.Status);
+        }
+
+        [Fact]
+        public async Task ARedirectLoopEnds()
+        {
+            var handler = new StubHandler().OnRedirect("/get/1", "https://api.example.test/get/1");
+
+            await Assert.ThrowsAsync<SubtitleDbException>(
+                () => Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.Equal(6, handler.Calls.Count);
         }
 
         /// <summary>Fails the first <c>n</c> attempts with a 500, then answers.</summary>

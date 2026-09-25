@@ -42,17 +42,42 @@ namespace SubtitleDb.Core
         private static readonly TimeSpan RetryBase = TimeSpan.FromMilliseconds(300);
         private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(8);
 
+        private const int MaxRedirects = 5;
+
         private static readonly JsonSerializerOptions Json = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
         };
 
+        // The hosts' clients follow a redirect before saying where they landed, which is
+        // after the request to somewhere else has been made. Downloads go through one
+        // that never follows, so each redirect is checked before it is requested.
+        private static readonly Lazy<HttpClient> NoRedirects = new Lazy<HttpClient>(() =>
+            new HttpClient(new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            })
+            {
+                Timeout = TimeSpan.FromSeconds(30),
+            });
+
         private readonly HttpClient _http;
+        private readonly HttpClient? _downloads;
         private readonly Random _jitter = new Random();
 
-        public SubtitleDbClient(HttpClient http, string? apiBase = null, string? client = null)
+        /// <param name="http">The host's client, for the API.</param>
+        /// <param name="apiBase">The API, when a test points somewhere else.</param>
+        /// <param name="client">The plugin's name, for our logs.</param>
+        /// <param name="downloads">A client that does not follow redirects, when a test needs one.</param>
+        public SubtitleDbClient(
+            HttpClient http,
+            string? apiBase = null,
+            string? client = null,
+            HttpClient? downloads = null)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));
+            _downloads = downloads;
             ApiBase = (apiBase ?? DefaultApiBase).TrimEnd('/');
             ClientName = string.IsNullOrWhiteSpace(client) ? "subtitledb-plugin" : client!;
         }
@@ -150,8 +175,8 @@ namespace SubtitleDb.Core
         /// <remarks>
         /// The URL is used as published rather than rebuilt: it redirects to wherever
         /// the file currently lives, and that address is not ours to store. Only our
-        /// own hosts are followed, before and after the redirect, so a download cannot
-        /// be turned into a request to somewhere else.
+        /// own hosts are asked, and each redirect is checked before it is followed, so
+        /// a download cannot be turned into a request to somewhere else.
         /// </remarks>
         public async Task<byte[]> DownloadAsync(string url, CancellationToken cancellationToken)
         {
@@ -160,33 +185,49 @@ namespace SubtitleDb.Core
                 throw new SubtitleDbException("refusing to download from " + url);
             }
 
-            using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+            var next = new Uri(url);
+            var http = _downloads ?? NoRedirects.Value;
+            for (var hop = 0; hop <= MaxRedirects; hop++)
             {
-                request.Headers.TryAddWithoutValidation("Accept", "*/*");
-                using (var response = await _http
-                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                    .ConfigureAwait(false))
+                using (var request = new HttpRequestMessage(HttpMethod.Get, next))
                 {
-                    var landed = response.RequestMessage?.RequestUri?.ToString() ?? url;
-                    if (!IsOurs(landed))
+                    request.Headers.TryAddWithoutValidation("Accept", "*/*");
+                    request.Headers.TryAddWithoutValidation("User-Agent", ClientName + " (+https://thesubtitledb.org)");
+                    using (var response = await http
+                        .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                        .ConfigureAwait(false))
                     {
-                        throw new SubtitleDbException("download redirected off our hosts");
-                    }
+                        var status = (int)response.StatusCode;
+                        var location = response.Headers.Location;
+                        if (status >= 300 && status < 400 && location != null)
+                        {
+                            // The header as sent, resolved against the address asked: on
+                            // Linux a relative "/path" parses as an absolute file:// URI.
+                            next = new Uri(next, location.OriginalString);
+                            if (!IsOurs(next.AbsoluteUri))
+                            {
+                                throw new SubtitleDbException("download redirected off our hosts");
+                            }
 
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        throw new SubtitleDbException(
-                            "download failed: " + (int)response.StatusCode, response.StatusCode);
-                    }
+                            continue;
+                        }
 
-                    using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
-                    using (var buffer = new MemoryStream())
-                    {
-                        await stream.CopyToAsync(buffer, 81920, cancellationToken).ConfigureAwait(false);
-                        return buffer.ToArray();
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            throw new SubtitleDbException("download failed: " + status, response.StatusCode);
+                        }
+
+                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var buffer = new MemoryStream())
+                        {
+                            await stream.CopyToAsync(buffer, 81920, cancellationToken).ConfigureAwait(false);
+                            return buffer.ToArray();
+                        }
                     }
                 }
             }
+
+            throw new SubtitleDbException("download redirected more than " + MaxRedirects + " times");
         }
 
         private static Dictionary<string, string?> PageParameters(string? language, int limit, int offset)

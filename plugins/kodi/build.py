@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the installable Kodi addon.
 
-    python3 build.py            -> dist/service.subtitles.subtitledb-0.3.1.zip
+    python3 build.py            -> dist/service.subtitles.subtitledb-0.3.2.zip
     python3 build.py --repo     -> and dist/addons.xml, dist/addons.xml.md5
 
 Kodi installs a zip whose single top-level directory is the addon id, so the zip is

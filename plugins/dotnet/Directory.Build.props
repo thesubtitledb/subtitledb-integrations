@@ -6,7 +6,7 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>
