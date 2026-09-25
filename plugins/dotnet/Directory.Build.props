@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
+         reads. Cheaper to fail the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>0.3.0</Version>
+    <Authors>SubtitleDB</Authors>
+    <Company>SubtitleDB</Company>
+    <Product>SubtitleDB</Product>
+    <!-- Stamped into every assembly. The Emby zip unpacks into a directory other
+         plugins share, so the DLLs carry this rather than a LICENSE file. -->
+    <Copyright>Copyright (c) 2026 TheSubtitleDb.org</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>

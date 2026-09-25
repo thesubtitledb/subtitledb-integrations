@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB from the CDN, module and a player</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./vendor/videojs/video-js.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>A module, and a player that owns the element</h1>
+      <p>
+        The other half of the pair. Same loader, imported rather than script-tagged, and
+        handed a Video.js player instead of a bare element, which is what makes it fetch the
+        bindings the other page never asks for.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div id="stage"></div>
+        <p id="status" class="note">loading the loader</p>
+      </section>
+    </main>
+
+    <script src="./vendor/videojs/video.min.js"></script>
+    <script type="module">
+      const status = document.getElementById('status');
+      const CDN =
+        new URL(location.href).searchParams.get('cdn') || 'https://cdn.thesubtitledb.org';
+
+      const el = document.createElement('video');
+      el.className = 'video-js player';
+      el.controls = true;
+      el.muted = true;
+      el.playsInline = true;
+      document.getElementById('stage').append(el);
+      const player = window.videojs(el, {
+        sources: [{ src: 'media/sample.webm', type: 'video/webm' }],
+      });
+
+      // The documented import is a static one:
+      //   import { attach } from 'https://cdn.thesubtitledb.org/latest/subtitle-finder.esm.js';
+      // Dynamic here for the same reason the other page injects its script: so the end to
+      // end run can aim it at a locally built tree. import.meta.url inside the module is the
+      // URL it was fetched from either way, which is what the chunk paths are built from.
+      const { attach } = await import(`${CDN}/latest/subtitle-finder.esm.js`);
+
+      const handle = attach(player, {
+        hint: { imdbId: 'tt0133093' },
+        languages: ['en'],
+        autoSelect: true,
+        onError: (err) => {
+          status.textContent = String(err.message ?? err);
+        },
+      });
+
+      handle.ready.then(() => {
+        status.textContent = `attached via ${handle.player.label}`;
+      });
+
+      // Test-only, as on the other page. Video.js emulates text tracks in JavaScript
+      // unless told to use the native ones, so the cues live in its list and never in
+      // the element's; a spec reading video.textTracks here sees an empty list and
+      // concludes nothing was published.
+      window.__handle = handle;
+      window.__video = () => document.querySelector('#stage video');
+      window.__seek = (t) => player.currentTime(t);
+      window.__cues = () => {
+        const list = player.textTracks();
+        const all = Array.from({ length: list.length }, (_, i) => list[i]);
+        const showing = all.filter((t) => t.mode === 'showing');
+        const first = showing[0]?.cues?.[0];
+        return {
+          showing: showing.length,
+          label: showing[0]?.label ?? '',
+          first: first ? first.startTime : -1,
+          active: showing[0]?.activeCues?.length ?? 0,
+        };
+      };
+    </script>
+  </body>
+</html>

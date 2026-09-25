@@ -242,6 +242,17 @@ describe('request budget', () => {
     if (!pick) throw new Error('expected a candidate');
     expect(await s.load(pick)).not.toBeNull();
   });
+
+  it('charges every page a limit past 100 can take', async () => {
+    // 250 a language is up to three pages, and the ceiling has to hold for all three.
+    const tight = session([BY_IMDB], { languages: ['en'], limit: 250, maxRequests: 3 });
+    expect((await tight.s.resolve({ imdbId: 'tt0133093' })).candidates).toHaveLength(0);
+    expect(tight.calls).toHaveLength(0);
+
+    const room = session([BY_IMDB], { languages: ['en'], limit: 250, maxRequests: 4 });
+    expect((await room.s.resolve({ imdbId: 'tt0133093' })).candidates).toHaveLength(1);
+    expect(room.s.requestCount).toBe(4);
+  });
 });
 
 describe('lifecycle', () => {

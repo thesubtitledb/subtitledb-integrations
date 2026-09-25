@@ -96,7 +96,64 @@ describe('findSubtitles ladder', () => {
     expect(r.candidates).toHaveLength(1);
   });
 
-  it('rung 3: drills a series title straight to the episode by its numbers', async () => {
+  it('rung 3: an episode with no id of its own goes by the series id before the name', async () => {
+    // By name, the API answers "Friends" with Matlock (2024). The series' id, drilled
+    // to the season and episode, is the episode's own page.
+    const { client, calls } = clientWith([
+      {
+        match: /by-imdb\/tt0108778\/season\/1\/episode\/1/,
+        body: episodeBundle([bundleSubtitle({ id: 7 })], {
+          season: 1,
+          episode: 1,
+          title: lookupTitle({ imdb: 'tt0108778', name: 'Friends', year: 1994 }),
+        }),
+      },
+      { match: /by-title/, body: movieBundle([bundleSubtitle({ id: 9 })]) },
+    ]);
+
+    const r = await findSubtitles({
+      client,
+      hint: { seriesImdbId: 'tt0108778', title: 'Friends', season: 1, episode: 1 },
+      formats: SRT_ONLY,
+    });
+
+    expect(r.tier).toBe('series-imdb');
+    expect(r.candidates.map((c) => c.subtitle.id)).toEqual([7]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("an episode's own id comes before its series id", async () => {
+    const { client, calls } = clientWith([
+      { match: /by-imdb\/tt0583459/, body: movieBundle([bundleSubtitle()]) },
+    ]);
+
+    const r = await findSubtitles({
+      client,
+      hint: { imdbId: 'tt0583459', seriesImdbId: 'tt0108778', season: 1, episode: 1 },
+      formats: SRT_ONLY,
+    });
+
+    expect(r.tier).toBe('explicit-imdb');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('an episode the series id cannot drill to falls through to the name', async () => {
+    const { client, calls } = clientWith([
+      { match: /by-imdb/, status: 404, body: {} },
+      { match: /by-title/, body: movieBundle([bundleSubtitle()]) },
+    ]);
+
+    const r = await findSubtitles({
+      client,
+      hint: { seriesImdbId: 'tt0108778', title: 'Friends', season: 1, episode: 99 },
+      formats: SRT_ONLY,
+    });
+
+    expect(r.tier).toBe('title');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('rung 4: drills a series title straight to the episode by its numbers', async () => {
     // The server matches the title and narrows by season/episode, so the client sends
     // the numbers in the slug and never ranks a list of titles itself.
     const { client, calls } = clientWith([
@@ -345,5 +402,96 @@ describe('language fan-out', () => {
     const { client, asked } = fanFetch({ en: [bundleSubtitle({ id: 1 })] });
     await findSubtitles({ client, hint: { imdbId: 'tt0133093' }, formats: ['srt'] });
     expect(asked).toEqual([undefined]);
+  });
+});
+
+describe('reading past the first page', () => {
+  // The API sends at most 100 rows a request. The Matrix holds 147 in English, so a
+  // client that reads one page never offers the other 47.
+  function rows(total: number, language = 'en', first = 1): BundleSubtitle[] {
+    return Array.from({ length: total }, (_, i) => bundleSubtitle({ id: first + i, language }));
+  }
+
+  // Pages the way the API does: `limit` rows from `offset`, and the full count in `total`.
+  function pagedFetch(byLang: Record<string, BundleSubtitle[]>, honourOffset = true) {
+    const asked: { lang?: string; offset?: number; limit?: number }[] = [];
+    const client = {
+      byImdb: async (_id: string, q: { lang?: string; offset?: number; limit?: number }) => {
+        asked.push({ lang: q.lang, offset: q.offset, limit: q.limit });
+        const all = byLang[q.lang ?? 'en'] ?? [];
+        const from = honourOffset ? (q.offset ?? 0) : 0;
+        const page = movieBundle(all.slice(from, from + (q.limit ?? 20)));
+        return { ...page, subtitles: { ...page.subtitles, total: all.length } };
+      },
+    } as unknown as SubtitleDbClient;
+    return { client, asked };
+  }
+
+  const matrix = { imdbId: 'tt0133093' };
+
+  it('reads a long list a page at a time', async () => {
+    const { client, asked } = pagedFetch({ en: rows(250) });
+    const r = await findSubtitles({ client, hint: matrix, limit: 500, formats: SRT_ONLY });
+    expect(asked.map((a) => [a.offset, a.limit])).toEqual([
+      [undefined, 100],
+      [100, 100],
+      [200, 100],
+    ]);
+    expect(r.candidates).toHaveLength(250);
+  });
+
+  it('stops at the limit', async () => {
+    const { client, asked } = pagedFetch({ en: rows(250) });
+    const r = await findSubtitles({ client, hint: matrix, limit: 150, formats: SRT_ONLY });
+    expect(asked.map((a) => [a.offset, a.limit])).toEqual([
+      [undefined, 100],
+      [100, 50],
+    ]);
+    expect(r.candidates).toHaveLength(150);
+  });
+
+  it('reads one page by default', async () => {
+    const { client, asked } = pagedFetch({ en: rows(250) });
+    const r = await findSubtitles({ client, hint: matrix, formats: SRT_ONLY });
+    expect(asked).toEqual([{ lang: undefined, offset: undefined, limit: 100 }]);
+    expect(r.candidates).toHaveLength(100);
+  });
+
+  it('stops when a page brings nothing new', async () => {
+    // An API that ignored the offset would send the first page forever.
+    const { client, asked } = pagedFetch({ en: rows(250) }, false);
+    const r = await findSubtitles({ client, hint: matrix, limit: 500, formats: SRT_ONLY });
+    expect(asked).toHaveLength(2);
+    expect(r.candidates).toHaveLength(100);
+  });
+
+  it('holds the limit for each language', async () => {
+    const { client } = pagedFetch({ en: rows(150), fr: rows(150, 'fr', 1001) });
+    const r = await findSubtitles({
+      client,
+      hint: matrix,
+      languages: ['en', 'fr'],
+      limit: 150,
+      formats: SRT_ONLY,
+    });
+    const langs = r.candidates.map((c) => c.subtitle.language);
+    expect(langs.filter((l) => l === 'en')).toHaveLength(150);
+    expect(langs.filter((l) => l === 'fr')).toHaveLength(150);
+  });
+
+  it('sends an offset only past the first page', async () => {
+    const all = rows(150);
+    const page = (items: BundleSubtitle[], offset: number) => ({
+      title: lookupTitle(),
+      subtitles: { total: all.length, limit: 100, offset, items },
+    });
+    const { client, calls } = clientWith([
+      { match: /offset=100/, body: page(all.slice(100), 100) },
+      { match: /by-imdb/, body: page(all.slice(0, 100), 0) },
+    ]);
+    const r = await findSubtitles({ client, hint: matrix, limit: 500, formats: SRT_ONLY });
+    expect(calls.map((c) => new URL(c.url).searchParams.get('offset'))).toEqual([null, '100']);
+    expect(new URL(calls[1]?.url ?? '').searchParams.get('limit')).toBe('100');
+    expect(r.candidates).toHaveLength(150);
   });
 });

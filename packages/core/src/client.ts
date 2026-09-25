@@ -220,10 +220,10 @@ export class SubtitleDbClient {
 
   /**
    * The lookup surface: hand over one identifier, get back the whole title as a single
-   * bundle. Every verb returns the same shape, `{title, subtitles, seasons}` plus the
-   * verb's own extras: `subtitles` is the page for the scope asked for and `seasons` is
-   * the tree, null for a movie and for an episode drill. There is nothing to narrow;
-   * see LookupBundle.
+   * bundle. Every verb returns `{title, subtitles}` plus the verb's own extras:
+   * `subtitles` is the page for the scope asked for, and `seasons`, the tree, is there
+   * only for a series root or a season drill. There is nothing to narrow; see
+   * LookupBundle.
    *
    * tmdb is the headline key and by-imdb sits right beside it, first-class and the same
    * bundle shape, because media servers identify content by IMDb id. `lang`/`format`/

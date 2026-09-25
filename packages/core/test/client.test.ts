@@ -307,10 +307,9 @@ describe('SubtitleDbClient lookup verbs', () => {
     const c = new SubtitleDbClient({ fetch });
 
     const bundle = await c.byTmdb(603);
-    // `seasons` is present and null on a movie, so its presence is not a series test.
-    // The live suite pins the same three keys against production at every scope.
-    expect(Object.keys(bundle).sort()).toEqual(['seasons', 'subtitles', 'title']);
-    expect(bundle.seasons).toBeNull();
+    // A movie has no `seasons` key; only a series root or a season drill carries one.
+    // The live suite pins the same keys against production at every scope.
+    expect(Object.keys(bundle).sort()).toEqual(['subtitles', 'title']);
     expect(bundle.title.imdb).toBe('tt0133093');
   });
 });

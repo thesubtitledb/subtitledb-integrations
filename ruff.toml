@@ -1,0 +1,27 @@
+# One config for every Python tree in the repo: the shared client, the Bazarr
+# provider, the Kodi addon and the .NET build tools. They are separate packages on
+# purpose, but a lint rule that only applies to one of them is a rule that stops
+# being applied.
+line-length = 100
+
+# 3.9 is the floor because that is what Kodi 20 ships. Nothing here needs anything
+# newer, and `from __future__ import annotations` covers the type syntax that does.
+target-version = "py39"
+
+extend-exclude = ["**/dist", "**/.lua"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "S", "C4", "RUF"]
+ignore = [
+  # The plugins run inside hosts that catch nothing, so a bare except around a
+  # decode or a settings read is the difference between a missing subtitle and a
+  # crashed media server.
+  "S110",
+  # This tree formats with `%`, in Python and in the Lua and C# ports beside it, so
+  # the same line reads the same way in each. Rewriting the call sites to f-strings
+  # changes nothing but the diff.
+  "UP031",
+]
+
+[lint.per-file-ignores]
+"**/tests/*" = ["S101"]

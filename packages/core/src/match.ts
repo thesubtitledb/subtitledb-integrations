@@ -9,11 +9,12 @@ import type { BundleSubtitle, LookupBundle, LookupTitle } from './types.js';
  *
  * tmdb is the headline key and leads the ladder; imdb sits right behind it, because
  * media servers identify content by IMDb id and the imdb->tmdb map is only partial, so
- * `explicit-tmdb` 404s for many ids and hands off to `explicit-imdb`. Free text is the
- * last automatic rung: the server matches the title and drills to the episode, so no
- * ranked list of titles crosses the wire.
+ * `explicit-tmdb` 404s for many ids and hands off to `explicit-imdb`. An episode with
+ * no id of its own goes by its series' id, drilled to the season and episode
+ * (`series-imdb`). Free text is the last automatic rung: the server matches the title
+ * and drills to the episode, so no ranked list of titles crosses the wire.
  */
-export type MatchTier = 'explicit-tmdb' | 'explicit-imdb' | 'title' | 'manual';
+export type MatchTier = 'explicit-tmdb' | 'explicit-imdb' | 'series-imdb' | 'title' | 'manual';
 
 export interface Candidate {
   subtitle: BundleSubtitle;
@@ -84,7 +85,10 @@ export interface RankOptions {
   formats: string[];
   /** Prefer, or avoid, hearing-impaired subtitles. Undefined means no preference. */
   hearingImpaired?: boolean;
-  /** Maximum candidates to return. */
+  /**
+   * The most subtitles per language. `rank` keeps this many in all; `findSubtitles`
+   * reads and keeps this many for each language, 100 to a request. Default 100.
+   */
   limit?: number;
 }
 
@@ -94,6 +98,8 @@ export interface MatchOptions extends RankOptions {
 }
 
 const DEFAULT_LIMIT = 100;
+/** The most rows the API returns for one request. More takes an offset. */
+export const PAGE = 100;
 /** How much each step down the language preference list costs. */
 const LANGUAGE_STEP = 20;
 /** How close two release names have to be before we call it the same encode. */
@@ -209,7 +215,7 @@ function wrongEpisode(s: BundleSubtitle, hint: MediaHint): boolean {
 
 /**
  * Filter, score and order. Exported because this is the behaviour the shared cases in
- * plugins/shared/match-cases.json pin, which every host language reads.
+ * plugins/shared/match-cases.json pin, in four languages.
  *
  * The bundle already sorts a page newest-first and carries no download count, so ties
  * break on the id: two runs of the same query then agree on the order.
@@ -255,7 +261,8 @@ function scopedItems(b: LookupBundle): BundleSubtitle[] {
 }
 
 /**
- * Fetch a bundle, one request per preferred language, and merge the scoped pages.
+ * Fetch a bundle, up to `cap` rows per preferred language, and merge them in the
+ * caller's order.
  *
  * The API `lang` parameter takes a single ISO code. Passing a comma separated list is
  * silently ignored rather than rejected, which is the dangerous shape: the request
@@ -265,32 +272,40 @@ function scopedItems(b: LookupBundle): BundleSubtitle[] {
  * works and quietly never finds the language the user asked for.
  *
  * Fanning out costs one small request per configured language, which is typically one
- * to three, and each is independently cacheable at the edge.
+ * to three, and each is independently cacheable at the edge. The languages are asked
+ * at once. Within one, the API sends at most 100 rows a request, so a longer list is
+ * read a page at a time until the title runs out, the cap is reached, or a page
+ * brings nothing new.
  */
 export async function fetchBundlePage(
-  fetchOne: (lang: string | undefined) => Promise<LookupBundle>,
+  fetchOne: (lang: string | undefined, offset: number, limit: number) => Promise<LookupBundle>,
   langs: string[] | undefined,
+  cap: number = PAGE,
 ): Promise<{ title: LookupTitle; subs: BundleSubtitle[] }> {
-  if (!langs || langs.length === 0) {
-    const b = await fetchOne(undefined);
-    return { title: b.title, subs: scopedItems(b) };
-  }
-  if (langs.length === 1 && langs[0]) {
-    const b = await fetchOne(langs[0]);
-    return { title: b.title, subs: scopedItems(b) };
-  }
+  const readLanguage = async (lang: string | undefined) => {
+    const pages: LookupBundle[] = [];
+    const seen = new Set<number>();
+    let read = 0;
+    let more = true;
+    while (more) {
+      const b = await fetchOne(lang, read, Math.min(PAGE, cap - read));
+      const items = scopedItems(b);
+      const fresh = items.filter((s) => !seen.has(s.id));
+      for (const s of fresh) seen.add(s.id);
+      pages.push(b);
+      read += items.length;
+      // No new row means the offset was ignored or went past the end.
+      more = fresh.length > 0 && read < cap && read < (b.subtitles.total ?? 0);
+    }
+    return pages;
+  };
 
-  const bundles = await Promise.all(langs.map((lang) => fetchOne(lang)));
-  const first = bundles[0];
-  if (!first) {
-    const b = await fetchOne(undefined);
-    return { title: b.title, subs: scopedItems(b) };
-  }
+  const pages = (await Promise.all((langs?.length ? langs : [undefined]).map(readLanguage))).flat();
 
   // Preserve the caller's language priority, and drop any duplicate id defensively.
   const seen = new Set<number>();
   const subs: BundleSubtitle[] = [];
-  for (const b of bundles) {
+  for (const b of pages) {
     for (const s of scopedItems(b)) {
       if (seen.has(s.id)) continue;
       seen.add(s.id);
@@ -298,7 +313,8 @@ export async function fetchBundlePage(
     }
   }
 
-  return { title: first.title, subs };
+  // Every language reads at least one page.
+  return { title: (pages[0] as LookupBundle).title, subs };
 }
 
 /**
@@ -313,21 +329,22 @@ export async function findSubtitles(opts: MatchOptions): Promise<MatchResult> {
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const langs = opts.languages?.length ? opts.languages : undefined;
 
+  // The limit holds per language, so the ranked list keeps that many for each.
+  const keep = { ...opts, limit: limit * (langs?.length ?? 1) };
   const finish = (
     title: LookupTitle | null,
     subs: BundleSubtitle[],
     tier: MatchTier,
   ): MatchResult => {
-    const { candidates, dropped, wrong } = rank(subs, opts);
+    const { candidates, dropped, wrong } = rank(subs, keep);
     return { title, candidates, tier, unrenderable: dropped, wrongEpisode: wrong };
   };
 
-  // The drill and paging shared by every verb on every rung. A movie ignores
-  // `season`/`episode`; a series narrows to exactly them.
+  // The drill shared by every verb on every rung. A movie ignores `season`/`episode`;
+  // a series narrows to exactly them.
   const drill: DrillParams = {
     ...(hint.season !== undefined ? { season: hint.season } : {}),
     ...(hint.episode !== undefined ? { episode: hint.episode } : {}),
-    limit,
     ...(signal ? { signal } : {}),
   };
 
@@ -336,9 +353,18 @@ export async function findSubtitles(opts: MatchOptions): Promise<MatchResult> {
     tier: MatchTier,
   ): Promise<MatchResult | null> => {
     try {
+      // The first page goes without an offset, so its URL, and its cache entry, are
+      // the ones a single page always had.
       const { title, subs } = await fetchBundlePage(
-        (lang) => verb(lang ? { ...drill, lang } : drill),
+        (lang, offset, pageLimit) =>
+          verb({
+            ...drill,
+            limit: pageLimit,
+            ...(offset ? { offset } : {}),
+            ...(lang ? { lang } : {}),
+          }),
         langs,
+        limit,
       );
       return finish(title, subs, tier);
     } catch (err) {
@@ -362,7 +388,15 @@ export async function findSubtitles(opts: MatchOptions): Promise<MatchResult> {
     if (r) return r;
   }
 
-  // Rung 3: free text, drilled to the episode when the numbers are known. The server
+  // Rung 3: the series' IMDb id, drilled to the season and episode. A page's structured
+  // data often names the series and not the episode. A name can resolve to another
+  // show (the API answers "Friends" with Matlock), and an id cannot.
+  if (hint.seriesImdbId && hint.seriesImdbId !== hint.imdbId) {
+    const r = await via((p) => client.byImdb(hint.seriesImdbId as string, p), 'series-imdb');
+    if (r) return r;
+  }
+
+  // Rung 4: free text, drilled to the episode when the numbers are known. The server
   // matches the title (top-1) and narrows by season/episode, so no title list crosses
   // the wire.
   if (hint.title && hint.title.length > 1) {

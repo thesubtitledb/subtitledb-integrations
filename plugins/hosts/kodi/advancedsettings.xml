@@ -1,0 +1,4 @@
+<advancedsettings version="1.0">
+    <!-- Debug, because the addon logs its searches at LOGDEBUG. -->
+    <loglevel>1</loglevel>
+</advancedsettings>

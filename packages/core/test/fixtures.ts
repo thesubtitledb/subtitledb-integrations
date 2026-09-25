@@ -16,10 +16,10 @@ import type {
  * These are the lean bundle shapes the SDK actually reads. The leaf `Subtitle`/`Title`
  * shapes are a different, wider read the SDK no longer issues, so no fixture builds them.
  *
- * Every bundle carries `title`, `subtitles` and `seasons`, at every scope. Leaving
- * `seasons` off is what let the four-way union survive: fixtures without the key made
- * `'seasons' in b` false, so the narrowing looked like it worked here and was wrong
- * against production, where the key is always present and null for a movie.
+ * Every bundle carries `title` and `subtitles`; only a series root or a season drill
+ * adds `seasons`. Keep these exactly as the wire has them: fixtures that left `seasons`
+ * off while production sent it as null are what let the old four-way union survive.
+ * Production leaves it off a movie and an episode drill since 2026-09-09, so these do.
  */
 
 export function lookupTitle(over: Partial<LookupTitle> = {}): LookupTitle {
@@ -70,12 +70,11 @@ export function movieBundle(
   return {
     title: t,
     subtitles: { total: subs.length, limit: 20, offset: 0, items: subs },
-    seasons: null,
   };
 }
 
 /**
- * An episode drill: one episode's own files in the top-level page, and `seasons: null`.
+ * An episode drill: one episode's own files in the top-level page, and no `seasons`.
  * Identical in shape to a movie bundle, which is exactly what the API sends.
  */
 export function episodeBundle(
@@ -85,13 +84,12 @@ export function episodeBundle(
   return {
     title: over.title ?? lookupTitle(),
     subtitles: { total: subs.length, limit: 20, offset: 0, items: subs },
-    seasons: null,
   };
 }
 
 /**
  * A whole series: the tree in `seasons[]`, and the files belonging to no episode in the
- * top-level page. The only bundle shape where `seasons` is not null.
+ * top-level page. The only bundle shape here that carries `seasons`.
  */
 export function seriesBundle(
   episodes: { season?: number; episode?: number; subs: BundleSubtitle[] }[],

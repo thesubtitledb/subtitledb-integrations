@@ -4,7 +4,7 @@ import { CONVERTIBLE, toVtt } from './convert.js';
 import { SubtitleDbAbort, SubtitleDbError } from './errors.js';
 import { type IdentifyOptions, identify, isResolvable, type MediaHint } from './identify.js';
 import { baseLanguage, localeLanguages } from './languages.js';
-import { type Candidate, findSubtitles, type MatchResult } from './match.js';
+import { type Candidate, findSubtitles, type MatchResult, PAGE } from './match.js';
 import {
   type LoadContext,
   type ResolvedTranscribe,
@@ -69,7 +69,7 @@ export interface SessionOptions {
 
   /**
    * The engine behind {@link transcribe}, injected so core stays free of it. The CDN
-   * CDN loader wires this to a lazily loaded engine; a page bundling the
+   * loader wires this to a lazily loaded `@subtitledb/transcribe`; a page bundling the
    * packages passes one built from that package. Not part of the declarative surface:
    * `transcribe` decides whether to offer, this decides what actually runs.
    */
@@ -242,8 +242,11 @@ export class SubtitleSession {
     try {
       // Charge the budget only when this will actually hit the network. The ladder
       // costs a search plus one title fetch per preferred language, because the API
-      // filters on a single language code per request and silently ignores a list.
-      const cost = 1 + Math.max(1, langs?.length ?? 0);
+      // filters on a single language code per request and silently ignores a list,
+      // and each language takes one request per 100 rows `limit` asks for. This is
+      // the most a resolve can take, so the ceiling holds.
+      const pages = Math.max(1, Math.ceil((this.opts.limit ?? PAGE) / PAGE));
+      const cost = 1 + Math.max(1, langs?.length ?? 0) * pages;
       // A cached hit is free, and so is a duplicate that arrives while the first is
       // still in the air: single-flight collapses it into the same call. Players fire
       // ready and loadstart and loadedmetadata within a few milliseconds of each

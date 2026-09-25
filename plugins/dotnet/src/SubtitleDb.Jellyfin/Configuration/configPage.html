@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>SubtitleDB</title>
+</head>
+<body>
+<div id="SubtitleDbConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-controller="__plugin/subtitledb.js">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="SubtitleDbConfigForm">
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">SubtitleDB</h2>
+                    </div>
+                    <p>
+                        Subtitles from the SubtitleDB open index. There is no account, no key and
+                        no quota, so there is nothing to sign up for and nothing to paste here.
+                    </p>
+                    <p>
+                        Turn it on under Dashboard, Playback, Subtitles, and set the languages you
+                        want there: this plugin answers in whichever language Jellyfin asks for.
+                    </p>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="PerLanguage">Subtitles per language</label>
+                    <input id="PerLanguage" name="PerLanguage" type="number" is="emby-input"
+                           min="100" max="2000" required />
+                    <div class="fieldDescription">
+                        The most to offer for each language. Past 100, each further 100 is one more request.
+                    </div>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="ApiBase">API address</label>
+                    <input id="ApiBase" name="ApiBase" type="url" is="emby-input" required />
+                    <div class="fieldDescription">
+                        Leave this alone unless you run your own mirror of the API.
+                    </div>
+                </div>
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script type="text/javascript">
+        var SubtitleDbConfig = { pluginUniqueId: 'e8067282-ad64-415a-b9ed-9057e6679483' };
+
+        document.querySelector('#SubtitleDbConfigPage')
+            .addEventListener('pageshow', () => {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(SubtitleDbConfig.pluginUniqueId).then((config) => {
+                    document.querySelector('#ApiBase').value = config.ApiBase;
+                    document.querySelector('#PerLanguage').value = config.PerLanguage;
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+        document.querySelector('#SubtitleDbConfigForm')
+            .addEventListener('submit', (e) => {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(SubtitleDbConfig.pluginUniqueId).then((config) => {
+                    config.ApiBase = document.querySelector('#ApiBase').value;
+                    config.PerLanguage = parseInt(document.querySelector('#PerLanguage').value, 10);
+                    ApiClient.updatePluginConfiguration(SubtitleDbConfig.pluginUniqueId, config)
+                        .then(Dashboard.processPluginConfigurationUpdateResult);
+                });
+                return false;
+            });
+    </script>
+</div>
+</body>
+</html>

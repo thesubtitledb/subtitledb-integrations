@@ -1,0 +1,6 @@
+<settings version="2">
+    <!-- JSON-RPC over HTTP on localhost, which is how kodi.py drives it. -->
+    <setting id="services.webserver">true</setting>
+    <setting id="services.webserverport">8080</setting>
+    <setting id="services.webserverauthentication">false</setting>
+</settings>

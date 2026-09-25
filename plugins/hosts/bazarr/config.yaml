@@ -1,0 +1,20 @@
+# Bazarr's config/config.yaml, written before its first start. Bazarr fills every key
+# left out with its default. The keys are throwaway ones for throwaway containers,
+# and bazarr.py sends the same ones.
+auth:
+  apikey: cccccccccccccccccccccccccccccccc
+general:
+  # The provider logs its searches at debug.
+  debug: true
+  use_radarr: true
+  use_sonarr: true
+  enabled_providers:
+    - subtitledb
+radarr:
+  ip: 127.0.0.1
+  port: 7878
+  apikey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sonarr:
+  ip: 127.0.0.1
+  port: 8989
+  apikey: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

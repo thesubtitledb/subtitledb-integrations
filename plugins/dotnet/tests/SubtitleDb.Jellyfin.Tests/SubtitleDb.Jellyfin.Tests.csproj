@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>SubtitleDb.Jellyfin.Tests</AssemblyName>
+    <RootNamespace>SubtitleDb.Jellyfin.Tests</RootNamespace>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host package again, and not private here: the plugin hides it so the
+         published folder does not shadow the server's own copies, which leaves the
+         test project with no SubtitleSearchRequest to build a request from. -->
+    <PackageReference Include="Jellyfin.Controller" Version="10.10.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Its own project because Jellyfin and Emby each ship an assembly called
+         MediaBrowser.Controller, and one process cannot hold both. -->
+    <ProjectReference Include="../../src/SubtitleDb.Jellyfin/SubtitleDb.Jellyfin.csproj" />
+  </ItemGroup>
+
+</Project>

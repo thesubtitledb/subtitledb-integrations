@@ -44,20 +44,21 @@ describe('live API contract', () => {
     expect(b.match && 'imdb' in b.match ? b.match.imdb : b.title.imdb).toMatch(/^tt\d{7,}$/);
   });
 
-  it('returns one bundle shape at every scope, with no key to narrow on', async () => {
-    // A movie, a whole series and an episode drill. All three carry title + subtitles +
-    // seasons, and seasons is the only field that varies: the tree, or null.
+  it('returns title + subtitles at every scope, and seasons only where there is a tree', async () => {
+    // A movie, a whole series and an episode drill. All three carry title + subtitles;
+    // seasons is the only field that varies, and only a series root or a season has it.
     const [movie, series, episode] = await Promise.all([
       client.byImdb(FILM_IMDB, { limit: 1 }),
       client.byImdb(SERIES_IMDB, { limit: 1 }),
       client.byImdb(SERIES_IMDB, { season: 1, episode: 1, limit: 1 }),
     ]);
     for (const b of [movie, series, episode]) {
-      expect(Object.keys(b)).toEqual(expect.arrayContaining(['title', 'subtitles', 'seasons']));
+      expect(Object.keys(b)).toEqual(expect.arrayContaining(['title', 'subtitles']));
       expect(b.subtitles.items).toBeInstanceOf(Array);
     }
-    expect(movie.seasons).toBeNull();
-    expect(episode.seasons).toBeNull();
+    // Sent as null here until 2026-09-09, now left out: presence means a tree.
+    expect('seasons' in movie).toBe(false);
+    expect('seasons' in episode).toBe(false);
     expect(Array.isArray(series.seasons)).toBe(true);
     expect(series.seasons?.[0]?.episodes.length).toBeGreaterThan(0);
   });
@@ -88,9 +89,9 @@ describe('live API contract', () => {
     const b = await client.byImdb(SERIES_IMDB, { season: 1, episode: 1, lang: 'en', limit: 5 });
     expect(b.title.imdb).toBe(SERIES_IMDB);
     expect(b.title.name).toMatch(/game of thrones/i);
-    // An episode drill puts the episode's own files in the top-level page and sends
-    // seasons: null. There is no `episode` key; the SDK narrowed on one for two days.
-    expect(b.seasons).toBeNull();
+    // An episode drill puts the episode's own files in the top-level page and has no
+    // seasons. There is no `episode` key; the SDK narrowed on one for two days.
+    expect(b.seasons).toBeUndefined();
     expect(scopePage(b).items.length).toBeGreaterThan(0);
     expect(scopePage(b).items.every((s) => s.language === 'en')).toBe(true);
   });

@@ -1,0 +1,11 @@
+<Config>
+  <!-- Radarr's config.xml, written before its first start, with the key bazarr.py sends. -->
+  <ApiKey>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</ApiKey>
+  <Port>7878</Port>
+  <BindAddress>*</BindAddress>
+  <AuthenticationMethod>External</AuthenticationMethod>
+  <AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>
+  <AnalyticsEnabled>False</AnalyticsEnabled>
+  <UpdateMechanism>Docker</UpdateMechanism>
+  <LogLevel>info</LogLevel>
+</Config>

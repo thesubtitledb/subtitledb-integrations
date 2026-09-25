@@ -10,6 +10,9 @@
  *
  * That rule is about not handing our visitors' IP addresses to a third party, and
  * publishing our own origin for other people's pages is the opposite direction of
+ * travel, not a reversal. packages/loader is that: examples/cdn.html and
+ * examples/cdn-esm.html load it from a locally built tree served by
+ * scripts/serve-cdn.mjs on a second port, so they stay hermetic too.
  *
  * examples/vendor is generated and gitignored. Run `npm run build` first.
  */

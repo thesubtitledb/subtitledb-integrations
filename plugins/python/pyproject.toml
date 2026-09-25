@@ -1,0 +1,22 @@
+[project]
+name = "subtitledb"
+version = "0.3.0"
+description = "SubtitleDB client shared by the Bazarr provider and the Kodi addon"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = []
+
+# 3.9 is the floor because that is what Kodi 20 ships. Nothing here needs anything
+# newer, and `from __future__ import annotations` covers the type syntax that does.
+
+[build-system]
+# 77 is the first setuptools that reads `license` as an SPDX expression.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["subtitledb*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -34,6 +34,29 @@
         </li>
       </ul>
 
+      <h2 style="font-size: 0.9rem; margin-top: 24px">From the CDN</h2>
+      <ul>
+        <li>
+          <a href="./cdn.html?cdn=http://localhost:4174">One script tag</a> - a classic
+          <code>&lt;script&gt;</code> and a bare video, which never downloads the bindings
+        </li>
+        <li>
+          <a href="./cdn-esm.html?cdn=http://localhost:4174">A module and a player</a> - the same
+          loader imported, handed Video.js, which does
+        </li>
+        <li>
+          <a href="./players.html?via=cdn&amp;cdn=http://localhost:4174">Every supported player</a>
+          - the page above, attaching through the loader instead of the import map. Add
+          <code>&amp;target=element</code> to hand it the media element rather than the player
+        </li>
+      </ul>
+      <p class="hint">
+        Both need <code>npm run build:cdn &amp;&amp; npm run serve:cdn</code> running alongside
+        <code>npm run serve</code>. The tree is served on port 4174 rather than this one on
+        purpose: everything the loader does that is easy to get wrong is cross-origin, and
+        serving it here would pass by accident.
+      </p>
+
       <h2 style="font-size: 0.9rem; margin-top: 24px">Before running</h2>
       <pre class="preview">npm install
 npm run build

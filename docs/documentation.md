@@ -35,14 +35,14 @@ a page can load a player.
 ## Install
 
 If the page has no build step, there is nothing to install: one script tag from
-`https://cdn.thesubtitledb.org/latest/subtitle-finder.js` does the whole thing.
-Everything below is for a page that does have one.
+`cdn.thesubtitledb.org` does the whole thing, and [cdn.md](cdn.md) is the shorter
+guide. Everything below is for a page that does have one.
 
 Nothing here is on npm yet. Until it is, use the built files.
 
 ```bash
-git clone https://github.com/thesubtitledb/subtitledb-integrations
-cd subtitledb-integrations
+git clone https://github.com/thesubtitledb/subtitledb-cdn
+cd subtitledb-cdn
 npm install
 npm run build
 npm run vendor      # copies the built packages into examples/vendor
@@ -161,7 +161,7 @@ one frozen object and fails if any of them stops honouring it.
 | `maxTracks` | 30 | Cap on how many subtitles are offered. |
 | `convert` | on | Convert srt, ass and ssa to WebVTT in the browser. |
 | `formats` | the binding's own | What the player renders unaided. Anything else is converted. |
-| `limit` | 100 | Candidates requested per language. |
+| `limit` | 100 | Subtitles per language. The API sends 100 a request, so each further 100 is one more request per language, charged to `maxRequests`. |
 | `cacheTtlMs` | 5 minutes | How long a resolve is reused. |
 | `maxRequests` | 12 | Hard ceiling on network calls for the session's whole life. |
 | `apiBase` | public API | Point at another SubtitleDB deployment. |
@@ -179,10 +179,6 @@ file exactly as the API served it. `convert` then means one thing on all of them
 convert what this player cannot render. Setting `formats` yourself overrides both.
 
 ### Transcription
-
-The engine that satisfies `transcribe` is not in this repository. It is loaded by the
-CDN script tag; a page building from source here supplies its own by passing
-`transcriber`.
 
 `transcribe` adds a fallback for a title the corpus has nothing for: the video's own
 audio, transcribed on the device, offered as one more row in the picker. It is off by
@@ -216,7 +212,7 @@ things to know: the audio has to be readable, so the media must be same-origin o
 served with CORS; the output language is the audio's own, and `translate` only ever
 targets English, so `autoSelect: 'locale'` on a foreign film is not satisfied by it;
 and on the CDN the engine and model load from jsDelivr and HuggingFace, which needs a
-wider CSP.
+[wider CSP](cdn.md#on-device-transcription).
 
 `source` is the escape hatch for a media element whose own source a `fetch` cannot
 read. A `<video>` plays a cross-origin file that carries no CORS header, but reading its
@@ -320,6 +316,7 @@ interface LoadedSubtitle {
 |---|---|
 | `explicit-imdb` | You gave an IMDb id. Exact. |
 | `explicit-tmdb` | You gave a TMDB id. Exact, but see [Limits](#limits). |
+| `series-imdb` | You gave the series' IMDb id and none for the episode. Exact, with a season and episode. |
 | `title` | Matched by searching a title, and a year when there was one. |
 | `manual` | Nothing matched. `candidates` is whatever a plain search returned, or empty. |
 
@@ -778,9 +775,15 @@ Pass `languages` with it. `hint` says which film; `languages` says which subtitl
 it you want. With no `languages` the API returns its own default order, which is
 alphabetical by language, so this same call without the second key offers Arabic.
 
-TV resolves today by episode-level IMDb id. Naming an episode by series plus season
-plus episode is implemented but blocked on corpus metadata, and reports itself as
-blocked rather than guessing.
+An episode resolves by its own IMDb id, or by its series' IMDb id with the season and
+episode, which is what a page that knows only the show has:
+
+```js
+attachSubtitleDb(player, {
+  hint: { seriesImdbId: 'tt0944947', season: 1, episode: 1 },
+  languages: ['en'],
+});
+```
 
 ## What it costs
 
@@ -788,7 +791,9 @@ Two phases, deliberately split.
 
 **Resolve** is eager: it runs on attach and on every source change, costs one search
 request per configured language, and downloads no subtitle bytes. Duplicate resolves
-for the same media are collapsed and are not charged to `maxRequests`.
+for the same media are collapsed and are not charged to `maxRequests`. A `limit` past
+100 reads further pages of a language that holds more, one request each, and the
+budget is charged for every page the limit could take.
 
 One request per language used to be forced by the API: `lang` took a single ISO
 code, a comma separated list was accepted and silently ignored, and the default

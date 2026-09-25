@@ -1,0 +1,11 @@
+<Config>
+  <!-- Sonarr's config.xml, written before its first start, with the key bazarr.py sends. -->
+  <ApiKey>bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</ApiKey>
+  <Port>8989</Port>
+  <BindAddress>*</BindAddress>
+  <AuthenticationMethod>External</AuthenticationMethod>
+  <AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>
+  <AnalyticsEnabled>False</AnalyticsEnabled>
+  <UpdateMechanism>Docker</UpdateMechanism>
+  <LogLevel>info</LogLevel>
+</Config>

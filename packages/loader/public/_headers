@@ -1,0 +1,36 @@
+# Cloudflare Pages reads this from the root of the deployed directory.
+#
+# Both header sets matter for reasons that are invisible until a real third-party
+# page loads this. An ES module fetched from another origin is CORS-checked, so
+# without Access-Control-Allow-Origin every dynamic import fails. And a host page
+# that sets Cross-Origin-Embedder-Policy rejects any subresource that does not opt
+# in, so without Cross-Origin-Resource-Policy the script tag itself is blocked.
+# Neither shows up when the files are served from the same origin as the test page.
+
+# Written once per release and never rewritten, so the browser never has to ask.
+/v/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+
+# Read by retain.mjs at the start of every deploy to decide which releases to carry
+# forward. A cached copy here is a release deleted: the fetch would answer with a list
+# written before the last publish, everything missing from it would be left out of the
+# tree being uploaded, and the deploy would report success. Pages defaults to four
+# hours, which is four hours during which any deploy silently drops the newest release.
+/versions.json
+  Cache-Control: no-store
+  Access-Control-Allow-Origin: *
+
+# The two files that are overwritten. Five minutes is how long a bad release stays
+# on a page that did not pin, and how long a fix takes to reach one. Cloudflare Pages
+# defaults static assets to four hours, which is four hours of either.
+/latest/*
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+
+# The Jellyfin repository and the Emby zip, overwritten on every deploy under the same
+# names. A media server fetches them, not a page, so they need no CORS.
+/plugins/*
+  Cache-Control: public, max-age=300, must-revalidate

@@ -1,0 +1,27 @@
+{
+  "name": "@subtitledb/transcribe",
+  "version": "0.2.1",
+  "description": "On-device speech-to-text for SubtitleDB: transcribe a video's own audio in the browser, offered as a subtitle when the corpus has none. transformers.js by default, whisper.cpp WASM as a second engine. Loaded lazily; nothing downloads until a viewer asks for it.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force"
+  },
+  "dependencies": {
+    "@subtitledb/core": "0.4.0"
+  }
+}

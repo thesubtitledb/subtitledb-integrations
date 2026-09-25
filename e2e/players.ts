@@ -3,8 +3,8 @@
  * test surface the page publishes for reading the answer.
  *
  * Shared rather than written twice. `players.spec.ts` drives this list through the
- * vendored packages and an import map. A second copy of the list would drift the
- * first time a player
+ * vendored packages and an import map; `cdn.spec.ts` drives the same list through the
+ * published loader on a second origin. Two copies would drift the first time a player
  * was added to one of them, and the CDN run would then quietly cover less than the
  * one it exists to mirror.
  *

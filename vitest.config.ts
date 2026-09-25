@@ -18,7 +18,22 @@ export default defineConfig({
       { find: '@subtitledb/players', replacement: src('players/src/index.ts') },
       { find: '@subtitledb/core', replacement: src('core/src/index.ts') },
       { find: '@subtitledb/html5', replacement: src('html5/src/index.ts') },
+      { find: '@subtitledb/transcribe', replacement: src('transcribe/src/index.ts') },
     ],
+  },
+  // What build.mjs stamps in. The loader reads all four, and a test that had to
+  // supply them by hand would be testing a different program than the one shipped.
+  // The chunk names point at real fixture modules so the dynamic import under test is
+  // a real dynamic import.
+  define: {
+    __SDB_VERSION__: JSON.stringify('0.0.0-test'),
+    __SDB_CHUNKS__: JSON.stringify({
+      engine: 'engine.mjs',
+      players: 'players.mjs',
+      transcribe: 'transcribe.mjs',
+    }),
+    __SDB_BASE__: JSON.stringify('https://cdn.example.test/v/0.0.0-test/'),
+    __SDB_PIN__: 'false',
   },
   test: {
     // Hermetic tests only. Anything that touches the real API lives in *.live.test.ts

@@ -15,7 +15,8 @@ Subtitles in the player's own captions menu, and a client for the API behind it.
 </script>
 ```
 
-No key, no signup, about 2 KB.
+No key, no signup, about 2 KB. The same for media servers and desktop players:
+[plugins](#plugins) for Jellyfin, Emby, Kodi, VLC and Bazarr.
 
 ## Query the API
 
@@ -285,8 +286,9 @@ result.candidates.map(candidateLabel);
 //   'English - The.Matrix.1999.WEB-DL.TUBI' ]
 ```
 
-`tier` names the rung that won: `explicit-imdb`, `explicit-tmdb`, `title`, or
-`manual` when nothing automatic worked. `unrenderable` counts rows dropped for
+`tier` names the rung that won: `explicit-imdb`, `explicit-tmdb`, `series-imdb` (the
+series' id with a season and episode), `title`, or `manual` when nothing automatic
+worked. `unrenderable` counts rows dropped for
 format alone, `wrongEpisode` rows filed under a different episode.
 
 ## Helpers
@@ -414,7 +416,50 @@ import {
 | `setBasePath(path)` | `void` | Fetch chunks from your own copy. |
 | `version` | `string` | Stamped at publish. |
 
-## Install
+## Plugins
+
+| Host | Install |
+|---|---|
+| Jellyfin 10.10+ | Dashboard > Plugins > Repositories, add `https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install SubtitleDB from the catalog, restart |
+| Emby 4.8+ | Unzip [subtitledb-emby.zip](https://cdn.thesubtitledb.org/plugins/emby/subtitledb-emby.zip) into Emby's `plugins` directory, restart |
+| Kodi 19+ | Settings > Add-ons > Install from zip file, with the zip from the newest `kodi-v` [release](https://github.com/thesubtitledb/subtitledb-integrations/releases) |
+| VLC 3 | Copy `subtitledb.lua` from the newest `vlc-v` [release](https://github.com/thesubtitledb/subtitledb-integrations/releases) into VLC's `lua/extensions` directory |
+| Bazarr | Unzip the newest `bazarr-v` [release](https://github.com/thesubtitledb/subtitledb-integrations/releases), run `python3 bazarr/install.py /path/to/bazarr` |
+
+Each plugin's README covers its settings and what it does with what the host knows:
+[dotnet](plugins/dotnet/README.md) (Jellyfin and Emby), [kodi](plugins/kodi/README.md),
+[vlc](plugins/vlc/README.md), [bazarr](plugins/bazarr/README.md). They rank subtitles by
+the same rules, and `plugins/shared/match-cases.json` is the one file every suite reads,
+so the rules cannot drift apart language by language.
+
+## Releases
+
+Everything above that gets installed is built by this repository's CI, from the commit
+the release names, after every test has passed. Each release carries a `SHA256SUMS`
+and a build attestation signed by GitHub.
+
+| Tag | Files |
+|---|---|
+| `loader-v*` | every file cdn.thesubtitledb.org serves for that version, zipped, and `SHA256SUMS` by path |
+| `jellyfin-v*` | the plugin zip and the repository `manifest.json` |
+| `emby-v*` | the plugin zip |
+| `kodi-v*` | the add-on zip |
+| `vlc-v*` | `subtitledb.lua` |
+| `bazarr-v*` | the provider, the shared client and `install.py` |
+
+The CDN serves the release files unchanged, so a file can be checked from either place:
+
+```bash
+curl -sO https://cdn.thesubtitledb.org/v/0.4.3/subtitle-finder.js
+gh attestation verify subtitle-finder.js --repo thesubtitledb/subtitledb-integrations
+```
+
+A release is made when a version changes: `packages/loader/package.json`,
+`plugins/dotnet/Directory.Build.props` (Jellyfin and Emby), the Kodi `addon.xml`,
+`S.VERSION` in `subtitledb.lua`, and `plugins/python/pyproject.toml` (the shared client,
+which is most of the Bazarr files). A published release cannot be changed.
+
+## Build from source
 
 ```bash
 git clone https://github.com/thesubtitledb/subtitledb-integrations
@@ -430,6 +475,8 @@ npm install && npm run build && npm run vendor
 | `@subtitledb/players` | Sixteen bindings, one call |
 | `@subtitledb/html5` | Bare `<video>` and its track list |
 | `@subtitledb/artplayer` | ArtPlayer's own plugin shape |
+| `@subtitledb/transcribe` | On-device speech to text, offered when the index has nothing |
+| `@subtitledb/loader` | The cdn.thesubtitledb.org script |
 
 ## Scripts
 
@@ -437,17 +484,38 @@ npm install && npm run build && npm run vendor
 npm test              # unit, hermetic, no network
 npm run test:live     # contract tests against the real API
 npm run typecheck     # types, plus the stray-build check
-npm run build         # all four packages
+npm run build         # every package
 npm run vendor        # built packages -> examples/vendor
 npm run serve         # localhost:4173
 npm run e2e           # Playwright over the examples
 npm run lint          # Biome
 npm run lint:fix      # Biome, writing fixes
+npm run build:cdn     # the cdn.thesubtitledb.org tree, into cdn/
+npm run serve:cdn     # cdn/ on localhost:4174, a second origin on purpose
 ```
+
+The plugins have their own toolchains:
+
+```bash
+ruff check .                                          # every Python tree at once
+(cd plugins/python && python -m pytest)               # the shared client
+(cd plugins/bazarr && python -m pytest)
+(cd plugins/kodi   && python -m pytest && python build.py)
+(cd plugins/dotnet && dotnet test SubtitleDb.sln && python -m pytest)
+(cd plugins/vlc    && tests/get-lua.sh && tests/.lua/bin/lua tests/run.lua)
+```
+
+Those test each plugin against stubs. The Live hosts workflow installs each one into
+Jellyfin, Emby, Kodi, VLC or Bazarr and downloads a subtitle through it: Actions >
+Live hosts > Run workflow. [docs/testing.md](docs/testing.md) lists every suite, what it
+proves and which CI job runs it.
 
 ## More
 
 - [docs/documentation.md](docs/documentation.md) - every export, every option
 - [docs/players.md](docs/players.md) - every player, which binding, what was run
+- [docs/cdn.md](docs/cdn.md) - the script tag, what it downloads, pinning, CSP, self-hosting
 - [examples/minimal.html](examples/minimal.html) - smallest working page
+- [examples/cdn.html](examples/cdn.html) - the same with no build step
+- [plugins/hosts](plugins/hosts/README.md) - each plugin run inside the real application
 - [subtitledb-stremio](https://github.com/thesubtitledb/subtitledb-stremio) - hosted addon, not a plugin

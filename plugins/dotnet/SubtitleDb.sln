@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6B922A9F-DDA1-42B4-A512-B5436138C8C8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Core", "src\SubtitleDb.Core\SubtitleDb.Core.csproj", "{A07980A2-D46C-461C-AFDB-48BD584D3E2E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Jellyfin", "src\SubtitleDb.Jellyfin\SubtitleDb.Jellyfin.csproj", "{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Emby", "src\SubtitleDb.Emby\SubtitleDb.Emby.csproj", "{6167009D-432E-4CF3-A87B-6F8197C49BEC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{BB7B0E03-F4F9-4329-9540-01EA687D6CEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Tests", "tests\SubtitleDb.Tests\SubtitleDb.Tests.csproj", "{45C43390-9B37-4016-96E7-3FF85C0E393D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Jellyfin.Tests", "tests\SubtitleDb.Jellyfin.Tests\SubtitleDb.Jellyfin.Tests.csproj", "{C8EE3810-30D2-4121-80CE-357512B168BB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtitleDb.Emby.Tests", "tests\SubtitleDb.Emby.Tests\SubtitleDb.Emby.Tests.csproj", "{B06FE14B-8EE4-42AD-A67C-661C4679AEB5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A07980A2-D46C-461C-AFDB-48BD584D3E2E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A07980A2-D46C-461C-AFDB-48BD584D3E2E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A07980A2-D46C-461C-AFDB-48BD584D3E2E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A07980A2-D46C-461C-AFDB-48BD584D3E2E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6167009D-432E-4CF3-A87B-6F8197C49BEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6167009D-432E-4CF3-A87B-6F8197C49BEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6167009D-432E-4CF3-A87B-6F8197C49BEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6167009D-432E-4CF3-A87B-6F8197C49BEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45C43390-9B37-4016-96E7-3FF85C0E393D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45C43390-9B37-4016-96E7-3FF85C0E393D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45C43390-9B37-4016-96E7-3FF85C0E393D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45C43390-9B37-4016-96E7-3FF85C0E393D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C8EE3810-30D2-4121-80CE-357512B168BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8EE3810-30D2-4121-80CE-357512B168BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8EE3810-30D2-4121-80CE-357512B168BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8EE3810-30D2-4121-80CE-357512B168BB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B06FE14B-8EE4-42AD-A67C-661C4679AEB5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B06FE14B-8EE4-42AD-A67C-661C4679AEB5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B06FE14B-8EE4-42AD-A67C-661C4679AEB5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B06FE14B-8EE4-42AD-A67C-661C4679AEB5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A07980A2-D46C-461C-AFDB-48BD584D3E2E} = {6B922A9F-DDA1-42B4-A512-B5436138C8C8}
+		{79DDAA5F-6D3D-4C21-A38B-9CA45ACC19EE} = {6B922A9F-DDA1-42B4-A512-B5436138C8C8}
+		{6167009D-432E-4CF3-A87B-6F8197C49BEC} = {6B922A9F-DDA1-42B4-A512-B5436138C8C8}
+		{45C43390-9B37-4016-96E7-3FF85C0E393D} = {BB7B0E03-F4F9-4329-9540-01EA687D6CEF}
+		{C8EE3810-30D2-4121-80CE-357512B168BB} = {BB7B0E03-F4F9-4329-9540-01EA687D6CEF}
+		{B06FE14B-8EE4-42AD-A67C-661C4679AEB5} = {BB7B0E03-F4F9-4329-9540-01EA687D6CEF}
+	EndGlobalSection
+EndGlobal

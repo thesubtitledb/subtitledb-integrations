@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Emby loads plugins as netstandard2.0 assemblies, whatever runtime the server
+         itself is on. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>SubtitleDb.Emby</AssemblyName>
+    <RootNamespace>SubtitleDb.Emby</RootNamespace>
+    <!-- NU1701: the Emby package targets net46 as well and NuGet warns about the
+         fallback. Emby ship it that way and it is the only package there is. -->
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.8.11" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core is compiled into this assembly rather than referenced. Emby loads each
+         DLL in its plugins directory on its own and resolves a plugin's references
+         only against the server's assemblies, so a SubtitleDb.Core.dll beside this
+         one is never found and the plugin fails to load. Top level only, so Core's
+         obj/ does not bring its generated assembly attributes along. -->
+    <Compile Include="../SubtitleDb.Core/*.cs" LinkBase="Core" />
+    <!-- The 6.0 line, not Core's 8.0: Emby 4.8 runs on .NET 6, whose System.Text.Json
+         is 6.0.0.0, and a plugin that asks for 8.0.0.0 fails every search there with
+         FileNotFoundException. 4.9 and later, on .NET 8, bind a 6.0.0.0 request to
+         their newer copy. -->
+    <PackageReference Include="System.Text.Json" Version="6.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>SubtitleDb.Emby.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

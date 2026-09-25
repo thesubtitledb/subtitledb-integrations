@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubtitleDB from the CDN, classic script</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>One script tag, one call</h1>
+      <p>
+        The page in <code>docs/cdn.md</code>. Nothing is built, nothing is installed and no
+        import map is involved: a classic script from another origin, then
+        <code>SubtitleDB.attach()</code>. Add <code>?cdn=http://localhost:4174</code> to point
+        it at a locally built tree; <code>npm run build:cdn &amp;&amp; npm run serve:cdn</code>
+        puts one there.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <video id="player" class="player" controls muted playsinline src="media/sample.webm"></video>
+        <p id="status" class="note">loading the loader</p>
+      </section>
+    </main>
+
+    <script>
+      // The published snippet is one script element pointing at
+      // https://cdn.thesubtitledb.org/latest/subtitle-finder.js, with nothing around it. It is injected
+      // here only so the end to end run can point the page at a locally built tree on another
+      // port, which is the whole reason that run catches CORS and resource-policy mistakes at
+      // all. A dynamically inserted script still sets document.currentScript while it
+      // executes, so the loader resolves its chunks the same way either way.
+      const CDN = new URL(location.href).searchParams.get('cdn') || 'https://cdn.thesubtitledb.org';
+      const el = document.createElement('script');
+      el.src = `${CDN}/latest/subtitle-finder.js`;
+      el.onload = start;
+      el.onerror = () => {
+        document.getElementById('status').textContent = `could not load ${el.src}`;
+      };
+      document.head.appendChild(el);
+
+      function start() {
+        const status = document.getElementById('status');
+
+        // Everything below is the documented snippet, unchanged.
+        const handle = SubtitleDB.attach(document.getElementById('player'), {
+          hint: { imdbId: 'tt0133093' },
+          languages: ['en'],
+          autoSelect: true,
+          onError: (err) => {
+            status.textContent = String(err.message || err);
+          },
+        });
+
+        handle.ready.then(() => {
+          status.textContent = `attached via ${handle.player.label}`;
+        });
+
+        // Only so the end to end test can see what the page ended up with. A real page
+        // needs none of it: the subtitle is on screen without it.
+        const video = document.getElementById('player');
+        window.__handle = handle;
+        window.__video = () => video;
+        window.__seek = (t) => {
+          video.currentTime = t;
+        };
+        window.__cues = () => {
+          const showing = [...video.textTracks].filter((t) => t.mode === 'showing');
+          const first = showing[0]?.cues?.[0];
+          return {
+            showing: showing.length,
+            label: showing[0]?.label ?? '',
+            first: first ? first.startTime : -1,
+            active: showing[0]?.activeCues?.length ?? 0,
+          };
+        };
+      }
+    </script>
+  </body>
+</html>

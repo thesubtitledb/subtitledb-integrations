@@ -1,0 +1,31 @@
+{
+  "name": "@subtitledb/loader",
+  "version": "0.4.3",
+  "description": "The script tag. Loads whichever SubtitleDB integration the page turns out to need, and nothing else.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/entry.esm.js",
+  "types": "./dist/entry.esm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/entry.esm.d.ts",
+      "default": "./dist/entry.esm.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force",
+    "build:cdn": "node build.mjs"
+  },
+  "dependencies": {
+    "@subtitledb/core": "0.4.0",
+    "@subtitledb/html5": "0.2.1",
+    "@subtitledb/players": "0.2.1",
+    "@subtitledb/transcribe": "0.2.1"
+  }
+}

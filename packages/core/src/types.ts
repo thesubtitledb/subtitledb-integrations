@@ -295,23 +295,21 @@ export interface LookupExtras {
 
 /**
  * Every `by-*` verb returns this one object. There is no union and nothing to narrow:
- * `title`, `subtitles` and `seasons` are always all three present, plus whichever
- * LookupExtras block the verb adds.
+ * `title` and `subtitles` are always present, `seasons` only where there is a tree to
+ * return, plus whichever LookupExtras block the verb adds.
  *
  * This was modelled as a four-way union (`MovieBundle | SeriesBundle | SeasonBundle |
  * EpisodeBundle`) narrowed on `'episode' in b` / `'season' in b`. The API never sent
- * those keys. Every consumer fell through to `subtitles` and was right by accident,
- * while `'seasons' in b` -- documented as the test for a series -- is true for a movie
- * too, because the key is present and null. Verified against production 2026-09-06 on
- * by-imdb, by-tmdb, by-subid, by-title and by-releasename.
+ * those keys. Every consumer fell through to `subtitles` and was right by accident.
  *
  * `subtitles` is always the page for exactly the scope asked for: a movie's files, a
- * drilled episode's own files, or a series' unbucketed files. `seasons` is the tree
- * and is null for a movie AND for an episode drill; a season drill still returns every
+ * drilled episode's own files, or a series' unbucketed files. `seasons` is the tree:
+ * present on a series root and a season drill, absent on a movie AND on an episode drill
+ * (the API sent it as null there until 2026-09-09). A season drill still returns every
  * season in it, so read `subtitles` and not `seasons[0]` when a slug was used.
  */
 export interface LookupBundle extends LookupExtras {
   title: LookupTitle;
   subtitles: SubtitlePage;
-  seasons: LookupSeason[] | null;
+  seasons?: LookupSeason[];
 }

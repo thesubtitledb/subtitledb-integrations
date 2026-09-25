@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 so one build of this library loads inside both hosts: Emby
+         plugins are netstandard2.0, Jellyfin plugins are net8.0. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>SubtitleDb.Core</AssemblyName>
+    <RootNamespace>SubtitleDb.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The only dependency. Both hosts already ship System.Text.Json, so this
+         binds to theirs at runtime rather than adding a file to the plugin. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The URL builder and the host allow-list are not API, but they are exactly
+         what a test should hold to: a download that follows a redirect off our hosts
+         is the failure worth naming. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>SubtitleDb.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

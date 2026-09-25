@@ -1,0 +1,9 @@
+# Cloudflare Pages reads this from the root of the deployed directory.
+#
+# The entry files were sdb.js and sdb.esm.js in 0.1.0. Those two paths were on the
+# published snippet, so they answer permanently rather than 404 for anyone who
+# copied it. Only the mutable /latest/ pair needs this: /v/0.1.0/sdb.js is a real
+# file that retain.mjs carries forward on every deploy, and it is served under an
+# immutable header, so it must keep answering as itself and never as a redirect.
+/latest/sdb.js      /latest/subtitle-finder.js      301
+/latest/sdb.esm.js  /latest/subtitle-finder.esm.js  301

@@ -10,6 +10,12 @@ playwright-report/
 .env.*
 licences.env
 examples/licences.js
+plugins/kodi/dist/
 __pycache__/
 *.pyc
+plugins/vlc/tests/.lua/
+plugins/dotnet/dist/
+plugins/dotnet/**/bin/
+plugins/dotnet/**/obj/
 cdn/
+release/

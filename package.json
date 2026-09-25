@@ -12,15 +12,18 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/core packages/artplayer packages/html5 packages/players",
-    "typecheck": "node scripts/check-no-stray-build.mjs && tsc -b packages/core packages/artplayer packages/html5 packages/players --force",
+    "build": "tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/loader",
+    "typecheck": "node scripts/check-no-stray-build.mjs && tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/loader --force",
     "lint": "biome ci --error-on-warnings .",
     "lint:fix": "biome check --write .",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.ts",
     "vendor": "node scripts/make-sample-video.mjs && node scripts/make-licences.mjs && node scripts/vendor-examples.mjs",
     "e2e": "playwright test",
-    "serve": "node scripts/serve-examples.mjs"
+    "serve": "node scripts/serve-examples.mjs",
+    "build:cdn": "npm run build --workspace @subtitledb/loader && node packages/loader/build.mjs",
+    "retain:cdn": "node packages/loader/retain.mjs",
+    "serve:cdn": "node scripts/serve-cdn.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.9",

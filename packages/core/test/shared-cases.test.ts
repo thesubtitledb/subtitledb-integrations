@@ -2,7 +2,6 @@
  * The shared cases, run against the TypeScript rules.
  *
  * plugins/shared/match-cases.json is the same file the Python, C# and Lua suites
- * in the media-server plugins
  * read. A rule changed in one language and not the others fails here, rather than
  * quietly giving a Kodi user a different subtitle from a browser user.
  *

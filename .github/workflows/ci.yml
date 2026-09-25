@@ -7,12 +7,15 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never on main, where the last job publishes releases: a cancelled run can leave
+  # one half made.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# Runs on GitHub-hosted ubuntu-latest, which carries sudo, make, python3 and the
-# dotnet/node toolchains. The per-job bootstrapping below (interpreter fallback,
-# pip from pypa, Lua from source) is left in place: it is defensive and still
-# correct here, it is simply no longer load-bearing.
+permissions:
+  contents: read
+
+# Runs on GitHub-hosted ubuntu-latest. The Python and Lua jobs bring their own
+# interpreter and tools rather than trusting whatever the runner image carries.
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -57,6 +60,131 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The ranking rules are written out four times over, in TypeScript, Python, C# and
+  # Lua, because each host will only load its own language. plugins/shared/match-cases.json
+  # is the one file all four test suites read, so a rule changed in one language and
+  # not the others fails in one of the jobs below rather than in somebody's player.
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The floor, not the newest: the Kodi addon runs on whatever Python Kodi ships,
+      # and a test suite green only on 3.13 says nothing about that.
+      #
+      # Not a hard pin, though. setup-python fetches the interpreter from a
+      # githubusercontent release asset, and when that download stalls, a hard pin
+      # stops the whole Python suite, which is a worse answer than running it on the
+      # wrong version. ruff's target-version = "py39" is the static half of the floor
+      # and needs no interpreter at all, so the fallback gives up the runtime half
+      # rather than all of it, and says so in the job.
+      - uses: actions/setup-python@v6
+        id: cpython
+        continue-on-error: true
+        with:
+          python-version: '3.9'
+
+      # Everything setup-python was quietly supplying, supplied by hand.
+      #
+      # It is not only the interpreter: its build carries pip, and it puts itself on
+      # PATH as `python`. A distro python has neither. Ubuntu installs `python3` with
+      # no `python`, and ships pip and ensurepip as separate packages. So the fallback
+      # bootstraps pip from pypa rather than assuming one.
+      - name: Interpreter and tools
+        run: |
+          set -eu
+          if [ "${{ steps.cpython.outcome }}" != success ]; then
+            echo "::warning::setup-python could not fetch 3.9. Running on this runner's own interpreter; the 3.9 floor is still enforced statically by ruff target-version = py39."
+          fi
+          if ! command -v python >/dev/null; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            ln -s "$(command -v python3)" "$RUNNER_TEMP/bin/python"
+            PATH="$RUNNER_TEMP/bin:$PATH"
+            printf '%s\n' "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
+          python -VV
+          if ! python -m pip --version >/dev/null 2>&1; then
+            python -m ensurepip --user >/dev/null 2>&1 || {
+              # Fetched with the interpreter itself, so this needs no curl either.
+              python -c "import urllib.request,sys;sys.stdout.buffer.write(urllib.request.urlopen('https://bootstrap.pypa.io/get-pip.py').read())" > "$RUNNER_TEMP/get-pip.py"
+              python "$RUNNER_TEMP/get-pip.py" --user --break-system-packages
+            }
+          fi
+          # A distro python is externally managed (PEP 668) and pip refuses to write
+          # into it without the flag; older pips do not know the flag at all.
+          python -m pip install --user --break-system-packages ruff pytest \
+            || python -m pip install --user ruff pytest
+          printf '%s\n' "$(python -c 'import site; print(site.USER_BASE)')/bin" >> "$GITHUB_PATH"
+
+      - name: Lint
+        run: ruff check .
+
+      # The C# tables are generated from the Python ones and checked in, so the .NET
+      # build needs no Python. This is what stops the copy drifting from the source.
+      - name: Language tables are current
+        run: python tools/gen-languages.py --check
+        working-directory: plugins/dotnet
+
+      - name: Shared client
+        run: python -m pytest
+        working-directory: plugins/python
+
+      - name: Bazarr provider
+        run: python -m pytest
+        working-directory: plugins/bazarr
+
+      - name: Kodi addon
+        run: python -m pytest
+        working-directory: plugins/kodi
+
+      - name: Plugin packaging
+        run: python -m pytest
+        working-directory: plugins/dotnet
+
+      - name: Build the Kodi addon
+        run: python build.py
+        working-directory: plugins/kodi
+
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+        env:
+          # Under the job's temp directory, apart from the runner's own copies.
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+
+      # Warnings are errors in Directory.Build.props, so this is the typecheck step
+      # as well as the build one.
+      - name: Tests
+        run: dotnet test SubtitleDb.sln
+        working-directory: plugins/dotnet
+
+      # The zips are what a user installs, and how they are laid out is the whole
+      # difference between a plugin the host loads and one it ignores.
+      - name: Package
+        run: python3 tools/build-plugins.py
+        working-directory: plugins/dotnet
+
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Built from source into the working tree: a suite that only runs where
+      # somebody remembered to apt-get install stops being run.
+      - name: Build Lua
+        run: bash tests/get-lua.sh
+        working-directory: plugins/vlc
+
+      - name: Extension tests
+        run: tests/.lua/bin/lua tests/run.lua
+        working-directory: plugins/vlc
+
   # Kept separate, but blocking. These call api.thesubtitledb.org directly, so a
   # failure here means the API changed or is down, not that this repo regressed, and
   # that difference is worth being able to read off the job list. It is still a
@@ -76,3 +204,80 @@ jobs:
 
       - name: Live API contract tests
         run: npm run test:live
+
+  # Every file a release publishes, built once, here, from this commit: the CDN tree,
+  # the Jellyfin, Emby and Kodi zips, the VLC script and the Bazarr bundle, each with a
+  # SHA256SUMS. On a pull request this proves they still build; on main the release job
+  # below publishes these very files, so what is released is what was built here.
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+
+      - run: npm ci
+
+      - name: Build the packages
+        run: npm run build
+
+      - name: Build the release files
+        run: scripts/release.sh build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  # Publishes a release for each version that has none yet, from the files the build
+  # job made, and only once every other job has passed on this commit. A version
+  # already released is left alone: releases cannot be changed once published.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, python, dotnet, lua, live, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Every tag, to say when something changed since its last release.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+
+      - name: Which versions have no release yet
+        id: plan
+        run: scripts/release.sh plan
+
+      # One attestation over every file about to be published, signed with this run's
+      # identity. gh attestation verify finds it by any of those files' digest.
+      - uses: actions/attest-build-provenance@v4
+        if: steps.plan.outputs.tags != ''
+        with:
+          subject-checksums: release/new.sha256
+
+      - name: Publish them
+        if: steps.plan.outputs.tags != ''
+        env:
+          TAGS: ${{ steps.plan.outputs.tags }}
+        run: scripts/release.sh publish
