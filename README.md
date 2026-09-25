@@ -445,6 +445,8 @@ npm run lint          # Biome
 npm run lint:fix      # Biome, writing fixes
 ```
 
+Where each suite lives, what it proves and which CI job runs it: [CLAUDE.md](CLAUDE.md#tests).
+
 ## More
 
 - [docs/documentation.md](docs/documentation.md) - every export, every option
