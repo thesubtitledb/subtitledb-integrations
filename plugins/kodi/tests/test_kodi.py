@@ -382,6 +382,14 @@ def test_the_zip_carries_the_license_addon_xml_names(tmp_path, monkeypatch):
     assert "<license>MIT</license>" in xml
 
 
+def test_the_source_link_is_this_directory_in_the_public_repository():
+    # The checker follows it, and a reviewer reads the tests and the vendored client
+    # there, which the repo-scripts copy does not carry.
+    xml = (HERE / "service.subtitles.subtitledb" / "addon.xml").read_text(encoding="utf-8")
+    assert re.findall(r"<source>(.*?)</source>", xml) == [
+        "https://github.com/thesubtitledb/subtitledb-integrations/tree/main/plugins/kodi"]
+
+
 # -- what Kodi's repository checker rejects -----------------------------------
 
 

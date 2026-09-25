@@ -6,8 +6,9 @@ SubtitleDB open index. No account, no key, no quota.
 ## Install
 
 Download `service.subtitles.subtitledb-<version>.zip` from the newest `kodi-v`
-[release](https://github.com/thesubtitledb/subtitledb-integrations/releases), then in Kodi: Settings -> Add-ons -> Install from zip file
--> pick it. `python3 build.py` builds the same zip into `dist/`.
+[release](https://github.com/thesubtitledb/subtitledb-integrations/releases), then in
+Kodi: Settings -> Add-ons -> Install from zip file -> pick it. `python3 build.py`
+builds the same zip into `dist/`.
 
 Then turn it on where subtitles are chosen: Settings -> Player -> Language ->
 Subtitle services -> Default TV show service / Default movie service.

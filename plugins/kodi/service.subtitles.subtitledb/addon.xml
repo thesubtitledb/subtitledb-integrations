@@ -14,7 +14,7 @@
     <description lang="en_GB">Subtitles from the SubtitleDB open index. No account, no key and no quota. Films are found by their IMDb id, episodes by series, season and episode number, and a subtitle recorded against the file you are playing is preferred over one that merely matches the title.</description>
     <platform>all</platform>
     <license>MIT</license>
-    <source>https://github.com/xbmc/repo-scripts/tree/matrix/service.subtitles.subtitledb</source>
+    <source>https://github.com/thesubtitledb/subtitledb-integrations/tree/main/plugins/kodi</source>
     <website>https://thesubtitledb.org</website>
     <assets>
       <icon>resources/icon.png</icon>
