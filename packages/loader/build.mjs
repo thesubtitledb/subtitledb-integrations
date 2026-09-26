@@ -90,8 +90,8 @@ for (const name of ['engine', 'players', 'transcribe']) {
 // ---- pass two: the loader --------------------------------------------------
 
 const ENTRIES = [
-  { file: 'entry.iife.ts', name: 'subtitle-finder.js', format: 'iife', global: 'SubtitleDB' },
-  { file: 'entry.esm.ts', name: 'subtitle-finder.esm.js', format: 'esm' },
+  { file: 'entry.iife.ts', name: 'subtitle-helper.js', format: 'iife', global: 'SubtitleDB' },
+  { file: 'entry.esm.ts', name: 'subtitle-helper.esm.js', format: 'esm' },
 ];
 
 async function loader({ file, name, format, global: globalName }, dir, pinned) {

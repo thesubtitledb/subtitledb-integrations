@@ -5,7 +5,7 @@ Subtitles in the player's own captions menu, and a client for the API behind it.
 
 ```html
 <video id="v" controls src="film.mp4"></video>
-<script src="https://cdn.thesubtitledb.org/latest/subtitle-finder.js"></script>
+<script src="https://cdn.thesubtitledb.org/latest/subtitle-helper.js"></script>
 <script>
   SubtitleDB.attach(document.getElementById('v'), {
     hint: { imdbId: 'tt0133093' },
@@ -406,7 +406,7 @@ import {
   preload,
   setBasePath,
   version,
-} from 'https://cdn.thesubtitledb.org/latest/subtitle-finder.esm.js';
+} from 'https://cdn.thesubtitledb.org/latest/subtitle-helper.esm.js';
 ```
 
 | Member | Type | Does |
@@ -450,8 +450,8 @@ and a build attestation signed by GitHub.
 The CDN serves the release files unchanged, so a file can be checked from either place:
 
 ```bash
-curl -sO https://cdn.thesubtitledb.org/v/0.4.3/subtitle-finder.js
-gh attestation verify subtitle-finder.js --repo thesubtitledb/subtitledb-integrations
+curl -sO https://cdn.thesubtitledb.org/v/0.5.0/subtitle-helper.js
+gh attestation verify subtitle-helper.js --repo thesubtitledb/subtitledb-integrations
 ```
 
 A release is made when a version changes: `packages/loader/package.json`,

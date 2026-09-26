@@ -21,23 +21,23 @@ async function reload(currentScript: { src?: string } | null) {
 
 describe('dirOf', () => {
   it('keeps the directory and the slash', () => {
-    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-finder.js')).toBe('https://cdn.test/v/1.0.0/');
+    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-helper.js')).toBe('https://cdn.test/v/1.0.0/');
   });
 
   it('drops a query string, which a cache buster puts there', () => {
-    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-finder.js?v=2')).toBe(
+    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-helper.js?v=2')).toBe(
       'https://cdn.test/v/1.0.0/',
     );
   });
 
   it('drops a fragment', () => {
-    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-finder.js#x')).toBe(
+    expect(dirOf('https://cdn.test/v/1.0.0/subtitle-helper.js#x')).toBe(
       'https://cdn.test/v/1.0.0/',
     );
   });
 
   it('answers nothing for something with no path at all', () => {
-    expect(dirOf('subtitle-finder.js')).toBe('');
+    expect(dirOf('subtitle-helper.js')).toBe('');
   });
 });
 
@@ -62,19 +62,19 @@ describe('basePath', () => {
 
   it('uses the module URL when there is one, because a module knows where it is', async () => {
     const { basePath } = await reload(null);
-    expect(basePath('https://elsewhere.test/js/subtitle-finder.esm.js')).toBe(
+    expect(basePath('https://elsewhere.test/js/subtitle-helper.esm.js')).toBe(
       'https://elsewhere.test/js/',
     );
   });
 
   it('falls back to the script element, which is all a classic script has', async () => {
-    const { basePath } = await reload({ src: 'https://cdn.test/v/1.0.0/subtitle-finder.js' });
+    const { basePath } = await reload({ src: 'https://cdn.test/v/1.0.0/subtitle-helper.js' });
     expect(basePath()).toBe('https://cdn.test/v/1.0.0/');
   });
 
   it('prefers the module URL over the script element', async () => {
-    const { basePath } = await reload({ src: 'https://wrong.test/a/subtitle-finder.js' });
-    expect(basePath('https://right.test/b/subtitle-finder.esm.js')).toBe('https://right.test/b/');
+    const { basePath } = await reload({ src: 'https://wrong.test/a/subtitle-helper.js' });
+    expect(basePath('https://right.test/b/subtitle-helper.esm.js')).toBe('https://right.test/b/');
   });
 
   it('falls back to the stamped origin when nothing on the page says', async () => {
@@ -84,10 +84,10 @@ describe('basePath', () => {
 
   it('an override beats everything, which is what self-hosting needs', async () => {
     const { basePath, setBasePath } = await reload({
-      src: 'https://cdn.test/v/1.0.0/subtitle-finder.js',
+      src: 'https://cdn.test/v/1.0.0/subtitle-helper.js',
     });
     setBasePath('https://mine.test/subtitles');
-    expect(basePath('https://elsewhere.test/js/subtitle-finder.esm.js')).toBe(
+    expect(basePath('https://elsewhere.test/js/subtitle-helper.esm.js')).toBe(
       'https://mine.test/subtitles/',
     );
   });

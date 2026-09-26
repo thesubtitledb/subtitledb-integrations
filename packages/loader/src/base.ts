@@ -23,7 +23,7 @@ declare const __SDB_BASE__: string;
 /**
  * True in the `/latest/` build only, and the reason that build is safe.
  *
- * `/latest/subtitle-finder.js` is overwritten on every release; the chunks under `/v/x.y.z/`
+ * `/latest/subtitle-helper.js` is overwritten on every release; the chunks under `/v/x.y.z/`
  * never are. If the latest entry took its base from its own directory it would ask
  * for chunks under `/latest/`, which would have to be overwritten too, and a browser
  * holding a cached entry from ten minutes ago would then pair it with chunks from a

@@ -27,14 +27,14 @@
 
     <script>
       // The published snippet is one script element pointing at
-      // https://cdn.thesubtitledb.org/latest/subtitle-finder.js, with nothing around it. It is injected
+      // https://cdn.thesubtitledb.org/latest/subtitle-helper.js, with nothing around it. It is injected
       // here only so the end to end run can point the page at a locally built tree on another
       // port, which is the whole reason that run catches CORS and resource-policy mistakes at
       // all. A dynamically inserted script still sets document.currentScript while it
       // executes, so the loader resolves its chunks the same way either way.
       const CDN = new URL(location.href).searchParams.get('cdn') || 'https://cdn.thesubtitledb.org';
       const el = document.createElement('script');
-      el.src = `${CDN}/latest/subtitle-finder.js`;
+      el.src = `${CDN}/latest/subtitle-helper.js`;
       el.onload = start;
       el.onerror = () => {
         document.getElementById('status').textContent = `could not load ${el.src}`;

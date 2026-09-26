@@ -40,7 +40,7 @@ export default defineConfig({
       // than against itself. Same-origin serving passes both by accident.
       command: 'npm run serve:cdn',
       // 404s until the build above writes it, and this poll is what serialises them.
-      url: `http://localhost:${process.env.CDN_PORT ?? 4174}/latest/subtitle-finder.js`,
+      url: `http://localhost:${process.env.CDN_PORT ?? 4174}/latest/subtitle-helper.js`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },

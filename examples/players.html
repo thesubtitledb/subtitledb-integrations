@@ -135,7 +135,7 @@
        * port, which is what makes the cross-origin half of this real.
        */
       const cdnLoader = async () => {
-        await script(`${CDN}/latest/subtitle-finder.js`);
+        await script(`${CDN}/latest/subtitle-helper.js`);
         return window.SubtitleDB;
       };
 

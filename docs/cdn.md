@@ -23,7 +23,7 @@ loading it from a URL.
 ```html
 <video id="player" controls src="film.mp4"></video>
 
-<script src="https://cdn.thesubtitledb.org/latest/subtitle-finder.js"></script>
+<script src="https://cdn.thesubtitledb.org/latest/subtitle-helper.js"></script>
 <script>
   SubtitleDB.attach(document.getElementById('player'), {
     hint: { imdbId: 'tt0133093' },
@@ -59,7 +59,7 @@ The full list is in [players.md](players.md).
 
 ```html
 <script type="module">
-  import { attach } from 'https://cdn.thesubtitledb.org/latest/subtitle-finder.esm.js';
+  import { attach } from 'https://cdn.thesubtitledb.org/latest/subtitle-helper.esm.js';
 
   attach(document.getElementById('player'), {
     hint: { imdbId: 'tt0133093' },
@@ -80,7 +80,7 @@ page turns out to need it.
 
 | File | Fetched when | Gzipped |
 |---|---|---|
-| `subtitle-finder.js` / `subtitle-finder.esm.js` | always | ~1.8 KB |
+| `subtitle-helper.js` / `subtitle-helper.esm.js` | always | ~1.8 KB |
 | the shared core | on the first `attach()` | ~10 KB |
 | the element engine | the target is a plain `<video>` | ~0.1 KB |
 | the player bindings | the target is a player, or a player owns the element | ~6 KB |
@@ -127,8 +127,11 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.2.0/subtitle-finder.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.5.0/subtitle-helper.js"></script>
 ```
+
+Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
+`sdb.js` for 0.1.0. The old `latest/` names redirect to the new one.
 
 Published versions are listed at
 [`/versions.json`](https://cdn.thesubtitledb.org/versions.json), and each one carries
@@ -137,7 +140,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.2.0/subtitle-finder.js"
+  src="https://cdn.thesubtitledb.org/v/0.5.0/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>
@@ -191,7 +194,7 @@ if the entry and its chunks sit in the same directory nothing else is needed.
 If they do not, say so before the first attach:
 
 ```html
-<script src="/assets/subtitle-finder.js"></script>
+<script src="/assets/subtitle-helper.js"></script>
 <script>
   SubtitleDB.setBasePath('https://static.example.com/subtitledb/');
   SubtitleDB.attach(video, options);

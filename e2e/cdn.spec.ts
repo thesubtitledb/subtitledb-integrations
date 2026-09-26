@@ -100,7 +100,7 @@ test('a classic script tag on a bare video, and no bindings anywhere', async ({ 
 
   await expectCaptionOnScreen(page);
 
-  expect(requests.some((u) => u === `${CDN}/latest/subtitle-finder.js`)).toBe(true);
+  expect(requests.some((u) => u === `${CDN}/latest/subtitle-helper.js`)).toBe(true);
   expect(requests.some((u) => u.endsWith(manifest.chunks.engine))).toBe(true);
   // The saving. If this ever goes true the split has stopped working and every page
   // using a plain <video> is paying for a resolver it will never call.
@@ -121,7 +121,7 @@ test('a module handed a player fetches the bindings it actually needs', async ({
     (window as never as { __handle: { ready: Promise<unknown> } }).__handle.ready.catch(() => {}),
   );
 
-  expect(requests.some((u) => u === `${CDN}/latest/subtitle-finder.esm.js`)).toBe(true);
+  expect(requests.some((u) => u === `${CDN}/latest/subtitle-helper.esm.js`)).toBe(true);
   expect(requests.some((u) => u.endsWith(manifest.chunks.players))).toBe(true);
 
   await expectCaptionOnScreen(page);
@@ -157,7 +157,7 @@ test('the same file included twice leaves one copy running the page', async ({ p
       let reported = '';
       await new Promise<void>((done, fail) => {
         const el = document.createElement('script');
-        el.src = `${cdn}/v/${version}/subtitle-finder.js`;
+        el.src = `${cdn}/v/${version}/subtitle-helper.js`;
         el.onload = () => done();
         el.onerror = () => fail(new Error(`could not load ${el.src}`));
         document.head.appendChild(el);
@@ -200,7 +200,7 @@ test('the headers a third-party page depends on are actually served', async ({ r
   expect(chunk.headers()['cross-origin-resource-policy']).toBe('cross-origin');
   expect(chunk.headers()['cache-control']).toContain('immutable');
 
-  const entry = await request.get(`${CDN}/latest/subtitle-finder.js`);
+  const entry = await request.get(`${CDN}/latest/subtitle-helper.js`);
   expect(entry.status()).toBe(200);
   expect(entry.headers()['access-control-allow-origin']).toBe('*');
   // Not immutable, and not four hours either: this is the file a bad release sits in.

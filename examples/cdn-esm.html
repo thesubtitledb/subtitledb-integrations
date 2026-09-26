@@ -41,11 +41,11 @@
       });
 
       // The documented import is a static one:
-      //   import { attach } from 'https://cdn.thesubtitledb.org/latest/subtitle-finder.esm.js';
+      //   import { attach } from 'https://cdn.thesubtitledb.org/latest/subtitle-helper.esm.js';
       // Dynamic here for the same reason the other page injects its script: so the end to
       // end run can aim it at a locally built tree. import.meta.url inside the module is the
       // URL it was fetched from either way, which is what the chunk paths are built from.
-      const { attach } = await import(`${CDN}/latest/subtitle-finder.esm.js`);
+      const { attach } = await import(`${CDN}/latest/subtitle-helper.esm.js`);
 
       const handle = attach(player, {
         hint: { imdbId: 'tt0133093' },

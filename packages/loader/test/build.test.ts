@@ -66,9 +66,9 @@ beforeAll(async () => {
   });
   ({ version } = JSON.parse(await readFile(join(root, 'packages/loader/package.json'), 'utf8')));
   const v = join(out, 'v', version);
-  iife = await readFile(join(v, 'subtitle-finder.js'), 'utf8');
-  esm = await readFile(join(v, 'subtitle-finder.esm.js'), 'utf8');
-  latestIife = await readFile(join(out, 'latest/subtitle-finder.js'), 'utf8');
+  iife = await readFile(join(v, 'subtitle-helper.js'), 'utf8');
+  esm = await readFile(join(v, 'subtitle-helper.esm.js'), 'utf8');
+  latestIife = await readFile(join(out, 'latest/subtitle-helper.js'), 'utf8');
   manifest = JSON.parse(await readFile(join(v, 'manifest.json'), 'utf8'));
 }, 120_000);
 
@@ -76,10 +76,10 @@ describe('the tree', () => {
   it('has both entry formats at the versioned path and at latest', async () => {
     const v = await readdir(join(out, 'v', version));
     expect(v).toEqual(
-      expect.arrayContaining(['subtitle-finder.js', 'subtitle-finder.esm.js', 'manifest.json']),
+      expect.arrayContaining(['subtitle-helper.js', 'subtitle-helper.esm.js', 'manifest.json']),
     );
     expect(await readdir(join(out, 'latest'))).toEqual(
-      expect.arrayContaining(['subtitle-finder.js', 'subtitle-finder.esm.js']),
+      expect.arrayContaining(['subtitle-helper.js', 'subtitle-helper.esm.js']),
     );
   });
 
@@ -113,18 +113,26 @@ describe('the tree', () => {
     expect(rules['cache-control']).toBe('public, max-age=300, must-revalidate');
   });
 
-  it('ships _redirects, so the name this file had in 0.1.0 still answers', async () => {
-    // sdb.js and sdb.esm.js were the published snippet. They are two paths somebody
-    // may have copied, and a rename that 404s them is a rename that breaks pages we
-    // cannot see. Only /latest/ is redirected: /v/0.1.0/sdb.js is a real file that
-    // retain.mjs carries forward, served under a year of immutability, so it has to
-    // keep answering as itself.
-    const redirects = await readFile(join(out, '_redirects'), 'utf8');
-    expect(redirects).toMatch(/^\/latest\/sdb\.js\s+\/latest\/subtitle-finder\.js\s+301$/m);
-    expect(redirects).toMatch(
-      /^\/latest\/sdb\.esm\.js\s+\/latest\/subtitle-finder\.esm\.js\s+301$/m,
-    );
-    expect(redirects).not.toMatch(/^\/v\//m);
+  it('ships _redirects, so the names this file had before still answer', async () => {
+    // sdb.js was the published snippet in 0.1.0, and subtitle-finder.js until 0.5.0.
+    // Both are paths somebody may have copied, and a rename that 404s them is a rename
+    // that breaks pages we cannot see. Each goes straight to the current name, so a
+    // page pays one hop, not a chain. Only /latest/ is redirected: an older /v/<ver>/
+    // file is real, carried forward by retain.mjs and served under a year of
+    // immutability, so it has to keep answering as itself.
+    const rules = (await readFile(join(out, '_redirects'), 'utf8'))
+      .split('\n')
+      .filter((l) => l.startsWith('/'))
+      .map((l) => l.trim().split(/\s+/));
+    expect(rules).toEqual([
+      ['/latest/sdb.js', '/latest/subtitle-helper.js', '301'],
+      ['/latest/sdb.esm.js', '/latest/subtitle-helper.esm.js', '301'],
+      ['/latest/subtitle-finder.js', '/latest/subtitle-helper.js', '301'],
+      ['/latest/subtitle-finder.esm.js', '/latest/subtitle-helper.esm.js', '301'],
+    ]);
+    // A target this build does not write is a redirect to a 404.
+    const latest = await readdir(join(out, 'latest'));
+    for (const [, to] of rules) expect(latest).toContain(to.slice('/latest/'.length));
   });
 
   it('and the copy served is the one under review, not a second one drifting', async () => {
@@ -209,7 +217,7 @@ describe('nothing survives that a browser cannot resolve', () => {
 
 describe('latest is pinned to a version', () => {
   it('so a cached entry cannot pair with chunks from a newer release', () => {
-    // The whole reason two copies of the same file exist. latest/subtitle-finder.js is
+    // The whole reason two copies of the same file exist. latest/subtitle-helper.js is
     // overwritten every release and may be five minutes stale in a browser; if it
     // resolved chunks next to itself it would pull the new ones and put two versions
     // of the WeakMaps on one page.
@@ -227,8 +235,8 @@ describe('the manifest', () => {
     // An integrity hash for a file that is overwritten every release breaks every
     // page holding it, which is why latest is not in here.
     expect(Object.keys(manifest.entries).sort()).toEqual([
-      'subtitle-finder.esm.js',
-      'subtitle-finder.js',
+      'subtitle-helper.esm.js',
+      'subtitle-helper.js',
     ]);
     expect(manifest.version).toBe(version);
     expect(manifest.base).toBe(`${ORIGIN}/v/${version}/`);
@@ -257,8 +265,8 @@ describe('the entry stays small enough to be worth splitting', () => {
   it('under 6 KB, or the lazy loading is paying for itself in the entry', async () => {
     const { gzipSync } = await import('node:zlib');
     for (const [name, text] of [
-      ['subtitle-finder.js', iife],
-      ['subtitle-finder.esm.js', esm],
+      ['subtitle-helper.js', iife],
+      ['subtitle-helper.esm.js', esm],
     ] as const) {
       const gz = gzipSync(Buffer.from(text)).length;
       expect(gz, `${name} is ${gz} B gzipped`).toBeLessThan(6 * 1024);
