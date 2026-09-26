@@ -35,6 +35,14 @@ export { elementIdentity, identify, isResolvable } from './identify.js';
 export { hasLanguageName, languageName } from './languages.js';
 export type { Candidate, MatchOptions, MatchResult, MatchTier } from './match.js';
 export { candidateLabel, findSubtitles, similarity } from './match.js';
+export type {
+  LoadedQuery,
+  QueryConvert,
+  QueryOptions,
+  QueryResult,
+  QuerySubtitle,
+} from './query.js';
+export { query } from './query.js';
 export { handleFor, handleForAny, registerHandle } from './registry.js';
 export type { LoadedSubtitle, ResolveResult, SessionOptions } from './session.js';
 export { createSession, SubtitleSession } from './session.js';
@@ -56,6 +64,8 @@ export {
   SYNTHETIC_ID,
   syntheticCandidate,
 } from './transcribe.js';
+export type { Cue } from './transform.js';
+export { decodeBytes, parseVtt, rescale, serialize, shift } from './transform.js';
 export type {
   ApiErrorBody,
   BundleSubtitle,

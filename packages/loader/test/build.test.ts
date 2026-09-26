@@ -261,6 +261,81 @@ describe('the manifest', () => {
   });
 });
 
+/**
+ * Every name a page can call, in both builds.
+ *
+ * query, get, toBlobUrl and toTrack were documented on the site while they sat on a
+ * branch that never merged, and three releases shipped without them with nothing
+ * failing. This is the list, and docs/cdn.md is held to it as well.
+ */
+const SURFACE = [
+  'attach',
+  'get',
+  'preload',
+  'query',
+  'setBasePath',
+  'toBlobUrl',
+  'toTrack',
+  'version',
+];
+
+/** The names an ES module's last export clause gives out, from its minified text. */
+function exported(text: string): string[] {
+  const clause = [...text.matchAll(/export\s*\{([^}]*)\}/g)].pop()?.[1] ?? '';
+  return clause
+    .split(',')
+    .map(
+      (part) =>
+        part
+          .trim()
+          .split(/\s+as\s+/)
+          .pop() ?? '',
+    )
+    .filter(Boolean);
+}
+
+describe('the public surface', () => {
+  it('the classic script puts exactly these on window.SubtitleDB', async () => {
+    const { runInNewContext } = await import('node:vm');
+    for (const text of [iife, latestIife]) {
+      // A bare context: no document, no crypto. The script has to define its API
+      // without either, the way it does on a page that has not finished parsing.
+      const page: Record<string, unknown> = {};
+      runInNewContext(text, page);
+      const api = page.SubtitleDB as Record<string, unknown>;
+      expect(Object.keys(api).sort()).toEqual(SURFACE);
+      expect(api.version).toBe(version);
+      for (const name of SURFACE.filter((n) => n !== 'version')) {
+        expect(typeof api[name], name).toBe('function');
+      }
+    }
+  });
+
+  it('the module build exports exactly these', async () => {
+    const { pathToFileURL } = await import('node:url');
+    try {
+      const file = pathToFileURL(join(out, 'v', version, 'subtitle-helper.esm.js')).href;
+      const mod = await import(/* @vite-ignore */ file);
+      expect(Object.keys(mod).sort()).toEqual(SURFACE);
+    } finally {
+      // Importing it claims the page's slot, as it would on a page.
+      Reflect.deleteProperty(globalThis, '__subtitledb__');
+    }
+  });
+
+  it('the engine chunk carries query, so asking needs no chunk of its own', async () => {
+    const engine = await readFile(join(out, 'v', version, manifest.chunks.engine), 'utf8');
+    expect(exported(engine).sort()).toEqual(['attachSubtitleDb', 'query']);
+  });
+
+  it('docs/cdn.md documents every one of them', async () => {
+    const doc = await readFile(join(root, 'docs/cdn.md'), 'utf8');
+    for (const name of SURFACE.filter((n) => n !== 'version')) {
+      expect(doc, `SubtitleDB.${name} is not in docs/cdn.md`).toContain(`SubtitleDB.${name}`);
+    }
+  });
+});
+
 describe('the entry stays small enough to be worth splitting', () => {
   it('under 6 KB, or the lazy loading is paying for itself in the entry', async () => {
     const { gzipSync } = await import('node:zlib');

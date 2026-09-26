@@ -19,7 +19,7 @@ declare const __SDB_CHUNKS__: Record<'engine' | 'players' | 'transcribe', string
 
 export type ChunkName = 'engine' | 'players' | 'transcribe';
 
-type Engine = typeof import('@subtitledb/html5');
+type Engine = typeof import('./chunks/engine.js');
 type Players = typeof import('@subtitledb/players');
 type Transcribe = typeof import('@subtitledb/transcribe');
 

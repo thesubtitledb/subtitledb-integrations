@@ -10,6 +10,7 @@ a page can load a player.
 - [Configuration](#configuration)
 - [The handle](#the-handle)
 - [What a resolve gives you](#what-a-resolve-gives-you)
+- [Results without a player](#results-without-a-player)
 - [Query the API directly](#query-the-api-directly)
 - [Load patterns](#load-patterns)
 - [Identification](#identification)
@@ -41,8 +42,8 @@ guide. Everything below is for a page that does have one.
 Nothing here is on npm yet. Until it is, use the built files.
 
 ```bash
-git clone https://github.com/thesubtitledb/subtitledb-cdn
-cd subtitledb-cdn
+git clone https://github.com/thesubtitledb/subtitledb-integrations
+cd subtitledb-integrations
 npm install
 npm run build
 npm run vendor      # copies the built packages into examples/vendor
@@ -336,6 +337,26 @@ The converter is exported too, for a page that fetches subtitle text itself:
 import { toVtt } from '@subtitledb/core';
 const vtt = toVtt(srtText, 'srt'); // also 'ass' and 'ssa'
 ```
+
+## Results without a player
+
+If what you want is the URLs and metadata rather than a player wired up, `query` skips
+the element entirely. It runs the same match and returns the ranked results, each with
+a `url` and a lazy `load()` that fetches and converts on demand:
+
+```js
+import { query } from '@subtitledb/core';
+
+const { results } = await query({
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en'],
+  convertTo: 'vtt',   // and offsetMs, fps, encoding, cues; all applied on load()
+});
+const { text, format } = await results[0].load();
+```
+
+The CDN loader exposes the same thing as `SubtitleDB.query`, plus `get`, `toBlobUrl` and
+`toTrack` helpers on top. See [the script tag](cdn.md#query-api).
 
 ## Query the API directly
 

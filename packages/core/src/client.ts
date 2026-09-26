@@ -1,4 +1,5 @@
 import { SubtitleDbAbort, SubtitleDbError } from './errors.js';
+import { decodeBytes } from './transform.js';
 import type {
   BundleSubtitle,
   HealthResponse,
@@ -44,6 +45,15 @@ export interface ClientOptions {
    * unknown query parameters, verified against the live service.
    */
   client?: string;
+  /**
+   * A per-page-load correlation id, sent as `antispam_id` on every request including
+   * the subtitle download. It ties a page's searches to its downloads server-side so
+   * a burst of downloads with no matching searches reads as a scraper. Not a visitor
+   * id: the loader mints a fresh one each page load and never persists it. Like
+   * `client`, a query parameter to avoid a preflight, and ignored by the API where it
+   * is not read.
+   */
+  antispamId?: string;
 }
 
 export interface RequestOptions {
@@ -137,6 +147,7 @@ export class SubtitleDbClient {
   private readonly timeoutMs: number;
   private readonly retries: number;
   private readonly client: string | undefined;
+  private readonly antispamId: string | undefined;
 
   constructor(opts: ClientOptions = {}) {
     this.apiBase = (opts.apiBase ?? DEFAULT_API_BASE).replace(/\/+$/, '');
@@ -154,6 +165,7 @@ export class SubtitleDbClient {
     this.timeoutMs = opts.timeoutMs ?? 10_000;
     this.retries = opts.retries ?? 2;
     this.client = opts.client;
+    this.antispamId = opts.antispamId;
   }
 
   private url(path: string, params: Record<string, string | number | undefined> = {}): string {
@@ -162,6 +174,7 @@ export class SubtitleDbClient {
       if (v !== undefined && v !== '') u.searchParams.set(k, String(v));
     }
     if (this.client) u.searchParams.set('client', this.client);
+    if (this.antispamId) u.searchParams.set('antispam_id', this.antispamId);
     return u.toString();
   }
 
@@ -339,29 +352,61 @@ export class SubtitleDbClient {
   }
 
   /**
+   * Append the antispam id to a URL this client did not build.
+   *
+   * `url()` handles the /v1 requests; the subtitle download goes to download_url, which
+   * points at the /get/ redirect on the API host but is handed to us whole, so it gets
+   * the parameter here instead. A download_url that will not parse as a URL is left
+   * alone rather than dropped: the download still matters more than the correlation.
+   */
+  private withAntispam(raw: string): string {
+    if (!this.antispamId) return raw;
+    try {
+      const u = new URL(raw);
+      u.searchParams.set('antispam_id', this.antispamId);
+      return u.toString();
+    } catch {
+      return raw;
+    }
+  }
+
+  /**
+   * The address fetchSubtitleText fetches: download_url with the antispam id on it. For
+   * a caller that downloads the file itself, so that download still ties to its search.
+   */
+  downloadUrl(sub: Pick<BundleSubtitle, 'download_url'>): string {
+    return this.withAntispam(sub.download_url);
+  }
+
+  /**
    * Fetch the subtitle bytes as text.
    *
-   * Always follows download_url exactly as the API returned it. The files host is
-   * documented as changeable and the /get/ redirect exists precisely so that stays
-   * true, so building a files-host URL here would be a bug with a long fuse. It has
-   * already moved once: /d/ and /dl/ were removed and /get/:id is the only byte path.
+   * Follows download_url as the API returned it, only adding the `antispam_id` the
+   * loader threads through so the download can be tied to the search that preceded it.
+   * The files host is documented as changeable and the /get/ redirect exists precisely
+   * so that stays true, so building a files-host URL here would be a bug with a long
+   * fuse. It has already moved once: /d/ and /dl/ were removed and /get/:id is the only
+   * byte path.
    *
-   * Returns the stored format untouched. This library never converts.
+   * Returns the stored format untouched. Bytes are decoded as UTF-8 unless `encoding`
+   * asks otherwise: the corpus holds Windows-1251, Windows-1252 and UTF-16 files that
+   * `res.text()` would turn to mojibake, and a caller that knows better can say so.
    */
   async fetchSubtitleText(
     sub: Pick<BundleSubtitle, 'download_url' | 'format'>,
-    opts: RequestOptions = {},
+    opts: RequestOptions & { encoding?: string } = {},
   ): Promise<{ text: string; format: string }> {
     const signal = joinSignals(AbortSignal.timeout(this.timeoutMs), opts.signal);
+    const url = this.downloadUrl(sub);
     let res: Response;
     try {
       const doFetch = this.doFetch;
-      res = await doFetch(sub.download_url, { method: 'GET', signal });
+      res = await doFetch(url, { method: 'GET', signal });
     } catch (cause) {
       if (opts.signal?.aborted) throw new SubtitleDbAbort();
       throw new SubtitleDbError({
         message: 'subtitle download failed',
-        url: sub.download_url,
+        url,
         cause,
       });
     }
@@ -370,8 +415,12 @@ export class SubtitleDbClient {
         message: `subtitle download failed with ${res.status}`,
         status: res.status,
         code: 'download_failed',
-        url: sub.download_url,
+        url,
       });
+    }
+    if (opts.encoding) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      return { text: decodeBytes(bytes, opts.encoding), format: sub.format };
     }
     return { text: await res.text(), format: sub.format };
   }

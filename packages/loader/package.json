@@ -1,6 +1,6 @@
 {
   "name": "@subtitledb/loader",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The script tag. Loads whichever SubtitleDB integration the page turns out to need, and nothing else.",
   "license": "UNLICENSED",
   "type": "module",

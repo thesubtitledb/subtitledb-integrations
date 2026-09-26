@@ -207,6 +207,91 @@ test('the headers a third-party page depends on are actually served', async ({ r
   expect(entry.headers()['cache-control']).toContain('max-age=300');
 });
 
+const API = 'https://api.thesubtitledb.org/';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** The antispam ids on every search and download the page sent the API. */
+function antispamIds(requests: string[]): (string | null)[] {
+  const calls = requests.filter((u) => u.startsWith(`${API}v1/`) || u.startsWith(`${API}get/`));
+  return [...new Set(calls.map((u) => new URL(u).searchParams.get('antispam_id')))];
+}
+
+/**
+ * query and get, from the same script tag, against the live API.
+ *
+ * The unit tests pin the names; this pins that they answer. It also reads what a page
+ * cannot see from inside: every search and download from one page load, the page's
+ * own attach included, carried the same antispam id, and a reload carries another.
+ */
+test('query and get hand back subtitles as data, under one id per page load', async ({ page }) => {
+  const requests = recordRequests(page);
+  await page.goto(`/cdn.html?cdn=${encodeURIComponent(CDN)}`);
+  await expect
+    .poll(() => page.evaluate(() => Boolean((window as never as { __handle?: unknown }).__handle)))
+    .toBe(true);
+
+  const got = await page.evaluate(async () => {
+    interface Result {
+      url: string;
+      language: string;
+    }
+    interface Got {
+      text: string;
+      format: string;
+      url: string;
+      blobUrl: string;
+      track: HTMLTrackElement;
+    }
+    const sdb = (
+      window as never as {
+        SubtitleDB: {
+          query: (o: unknown) => Promise<{ tier: string; results: Result[] }>;
+          get: (o: unknown) => Promise<Got | null>;
+        };
+      }
+    ).SubtitleDB;
+    const res = await sdb.query({ hint: { imdbId: 'tt0133093' }, languages: ['en'] });
+    const one = await sdb.get({
+      hint: { imdbId: 'tt0133093' },
+      languages: ['en'],
+      convertTo: 'vtt',
+    });
+    return {
+      tier: res.tier,
+      count: res.results.length,
+      languages: [...new Set(res.results.map((r) => r.language))],
+      one: one && {
+        format: one.format,
+        head: one.text.slice(0, 6),
+        url: one.url,
+        blob: (await (await fetch(one.blobUrl)).text()) === one.text,
+        track: { tag: one.track.tagName, kind: one.track.kind, srclang: one.track.srclang },
+      },
+    };
+  });
+
+  expect(got.tier).toBe('explicit-imdb');
+  expect(got.count).toBeGreaterThan(0);
+  expect(got.languages).toEqual(['en']);
+  expect(got.one?.format).toBe('vtt');
+  expect(got.one?.head).toBe('WEBVTT');
+  expect(got.one?.blob, 'the blob URL does not hold the loaded text').toBe(true);
+  expect(got.one?.track).toEqual({ tag: 'TRACK', kind: 'subtitles', srclang: 'en' });
+
+  const ids = antispamIds(requests);
+  expect(ids, 'the page load sent more than one id, or none').toHaveLength(1);
+  const id = ids[0] ?? '';
+  expect(id).toMatch(UUID);
+  // A download made from the URL itself ties to the search as well as one made by get.
+  expect(new URL(got.one?.url ?? API).searchParams.get('antispam_id')).toBe(id);
+
+  requests.length = 0;
+  await page.reload();
+  await expect.poll(() => antispamIds(requests).length, { timeout: 30_000 }).toBe(1);
+  expect(antispamIds(requests)[0]).toMatch(UUID);
+  expect(antispamIds(requests)[0], 'a reload kept the same id').not.toBe(id);
+});
+
 /**
  * Every player this repo supports, through the loader instead of through the packages.
  *

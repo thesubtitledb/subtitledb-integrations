@@ -8,8 +8,9 @@
  */
 import { attach, preload } from './attach.js';
 import { setBasePath } from './base.js';
+import { get, query, toBlobUrl, toTrack } from './query.js';
 
 declare const __SDB_VERSION__: string;
 
-export { attach, preload, setBasePath };
+export { attach, get, preload, query, setBasePath, toBlobUrl, toTrack };
 export const version = __SDB_VERSION__;

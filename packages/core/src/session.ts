@@ -20,6 +20,11 @@ export interface SessionOptions {
   apiBase?: string;
   clientName?: string;
   fetch?: ClientOptions['fetch'];
+  /**
+   * A per-page-load correlation id, forwarded to the client as `antispam_id` on every
+   * request and on the download. Set by the loader; see ClientOptions.antispamId.
+   */
+  antispamId?: string;
 
   /**
    * Formats the host player can render itself. Required, and deliberately so: an
@@ -155,6 +160,7 @@ export class SubtitleSession {
         ...(opts.apiBase !== undefined ? { apiBase: opts.apiBase } : {}),
         ...(opts.clientName !== undefined ? { client: opts.clientName } : {}),
         ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
+        ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
       });
     const ttl = opts.cacheTtlMs ?? 5 * 60_000;
     this.cache = new SingleFlightCache<MatchResult>({ ttlMs: ttl });

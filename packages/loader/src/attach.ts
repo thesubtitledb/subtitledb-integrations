@@ -20,15 +20,9 @@ import { isVideoElement, looksOwned } from '@subtitledb/players/marks';
 import { chunk } from './chunks.js';
 import { type DeferredHandle, deferHandle } from './deferred.js';
 import { claim, type Incumbent, mismatch } from './guard.js';
+import { ANTISPAM_ID, CLIENT } from './ids.js';
 
 declare const __SDB_VERSION__: string;
-
-/**
- * Named so the API logs can tell CDN traffic from a page that bundled the packages
- * itself. A query parameter rather than a header because a header would make every
- * request a preflight, and it names the release, never the visitor.
- */
-const CLIENT = `cdn/${__SDB_VERSION__}`;
 
 /**
  * Claimed at import rather than at the first attach: two loaders racing to attach
@@ -73,7 +67,7 @@ export function attach(
     return incumbent.attach(target, options);
   }
 
-  const opts: AttachOptions = { clientName: CLIENT, ...options };
+  const opts: AttachOptions = { clientName: CLIENT, antispamId: ANTISPAM_ID, ...options };
 
   // Wire the transcription engine lazily. `transcribe` is the page's declarative
   // request; this is the engine behind it, and it is the loader's job because only the

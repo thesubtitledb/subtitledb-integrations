@@ -176,6 +176,61 @@ describe('SubtitleDbClient', () => {
     expect(calls[0]?.url).toBe('https://files.example.test/dl/99.srt');
   });
 
+  it('sends the antispam id on every request, alongside the client marker', async () => {
+    const { fetch, calls } = stubFetch([{ match: /\/v1\/|healthz/, body: movieBundle([]) }]);
+    const c = new SubtitleDbClient({ fetch, client: 'cdn/1.0', antispamId: 'aid-123' });
+    await c.byImdb('tt0133093');
+    await c.byTmdb(603);
+    await c.byTitle('the matrix');
+    await c.byReleasename('The.Matrix.1999.1080p');
+    await c.byInfohash('0123456789abcdef0123456789abcdef01234567');
+    await c.bySubid(1);
+    await c.health();
+
+    expect(calls).toHaveLength(7);
+    for (const call of calls) {
+      const url = new URL(call.url);
+      // A query parameter, not a header, for the same reason as `client`: no preflight.
+      expect(url.searchParams.get('antispam_id'), url.pathname).toBe('aid-123');
+      expect(url.searchParams.get('client'), url.pathname).toBe('cdn/1.0');
+    }
+  });
+
+  it('appends the antispam id to the download too, so a search ties to its download', async () => {
+    const { fetch, calls } = stubFetch([{ match: /files\.example\.test/, text: '1\nhi\n' }]);
+    const c = new SubtitleDbClient({ fetch, antispamId: 'aid-123' });
+    const sub = { download_url: 'https://files.example.test/dl/99.srt', format: 'srt' };
+    await c.fetchSubtitleText(sub);
+
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.pathname).toBe('/dl/99.srt');
+    expect(url.searchParams.get('antispam_id')).toBe('aid-123');
+    // The address handed to a caller who downloads it themselves is the same one.
+    expect(c.downloadUrl(sub)).toBe(calls[0]?.url);
+  });
+
+  it('leaves a download_url that is not a URL alone rather than dropping it', () => {
+    const c = new SubtitleDbClient({ antispamId: 'aid-123' });
+    expect(c.downloadUrl({ download_url: 'not a url' })).toBe('not a url');
+    expect(new SubtitleDbClient().downloadUrl({ download_url: 'https://x.test/get/1' })).toBe(
+      'https://x.test/get/1',
+    );
+  });
+
+  it('decodes the download with the requested charset, sniffing a BOM for auto', async () => {
+    // "hi" as UTF-16LE with a byte-order mark. res.text() would read this as UTF-8 and
+    // produce mojibake; the encoding option is what a corpus full of non-UTF-8 needs.
+    const bytes = new Uint8Array([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00]);
+    const impl = (async () => new Response(bytes, { status: 200 })) as unknown as typeof fetch;
+    const c = new SubtitleDbClient({ fetch: impl });
+    const got = await c.fetchSubtitleText(
+      { download_url: 'https://files.example.test/dl/1.srt', format: 'srt' },
+      { encoding: 'auto' },
+    );
+    expect(got.text).toBe('hi');
+    expect(got.format).toBe('srt');
+  });
+
   it('builds proxied poster URLs and passes null through', () => {
     const c = createClient({ apiBase: 'https://api.example.test' });
     expect(c.posterUrl('/abc.jpg')).toBe('https://api.example.test/p/w342/abc.jpg');

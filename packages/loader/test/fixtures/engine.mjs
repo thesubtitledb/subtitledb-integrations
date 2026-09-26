@@ -11,6 +11,33 @@ export function attachSubtitleDb(target, options) {
   return handle('native');
 }
 
+/** Every query() the loader made, with the options it passed. */
+export const queries = [];
+
+/** What the next query() answers with. A test replaces `results` to change it. */
+export const answer = { results: [] };
+
+export async function query(options) {
+  queries.push(options);
+  return { hint: options.hint ?? {}, title: null, tier: 'explicit-imdb', results: answer.results };
+}
+
+/** One result the way core's query() shapes it, loading to the text and format given. */
+export function result(text = 'WEBVTT\n\n00:00.000 --> 00:01.000\nHi\n', format = 'vtt') {
+  const loaded = { text, format, language: 'en', label: 'English - 1 lines' };
+  return {
+    subtitle: { id: 5 },
+    id: 5,
+    language: 'en',
+    format,
+    label: loaded.label,
+    release: '',
+    hearingImpaired: false,
+    url: 'https://api.example.test/get/5',
+    load: async () => loaded,
+  };
+}
+
 export function handle(name) {
   let destroyed = 0;
   return {

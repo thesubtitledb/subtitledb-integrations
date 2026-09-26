@@ -7,6 +7,7 @@ build step, no install, no import map, no account and no key.
 - [As a module](#as-a-module)
 - [What gets downloaded](#what-gets-downloaded)
 - [The handle](#the-handle)
+- [Query API](#query-api)
 - [Pinning a version](#pinning-a-version)
 - [Content Security Policy](#content-security-policy)
 - [Self-hosting](#self-hosting)
@@ -81,8 +82,8 @@ page turns out to need it.
 | File | Fetched when | Gzipped |
 |---|---|---|
 | `subtitle-helper.js` / `subtitle-helper.esm.js` | always | ~1.8 KB |
-| the shared core | on the first `attach()` | ~10 KB |
-| the element engine | the target is a plain `<video>` | ~0.1 KB |
+| the shared core | on the first `attach()`, `query()` or `get()` | ~10 KB |
+| the element engine | the target is a plain `<video>`, or a query | ~0.1 KB |
 | the player bindings | the target is a player, or a player owns the element | ~6 KB |
 
 So a page with a bare `<video>` costs about 12 KB and never downloads the sixteen
@@ -92,7 +93,7 @@ bindings: a `<video>` that Video.js has taken over is still a `<video>`, and put
 plain text track on one publishes something the player renders nothing from.
 
 Nothing subtitle-related is downloaded until a selection is made, and no request is
-made at all until you call `attach`.
+made at all until you call `attach`, `query` or `get`.
 
 To spend the requests earlier, on a page that knows a player is coming:
 
@@ -118,6 +119,74 @@ live handle answers before its first resolve anyway. `player`, `session` and
 Calls made in the meantime are queued, not dropped, and that includes `destroy()`: a
 component that unmounts while its chunk is still downloading tears down correctly.
 
+## Query API
+
+`attach` wires subtitles into a player for you. `query` does the opposite: it hands you
+the subtitles as data so you can wire them into a player of your own. Same matching, same
+corpus, no key. It needs 0.6.0 or later.
+
+```js
+const { results } = await SubtitleDB.query({
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en', 'fr'],
+});
+
+for (const r of results) {
+  r.url;       // absolute, downloadable, CORS-clean
+  r.label;     // "English - 1386 lines"
+  r.language;  // "en"
+}
+```
+
+A result carries its URL and metadata and downloads nothing until you ask. When you want
+the bytes, call one of its handles:
+
+```js
+const best = results[0];
+const track = await best.track();  // a <track> element, ready to append
+video.append(track);
+```
+
+`load()` returns `{ text, format }`, `blobUrl()` returns a same-origin object URL (yours
+to revoke), and `track()` returns a `<track>` element. All three fetch and convert on
+first use and cache the result, so calling two of them downloads once.
+
+### Converting on the way out
+
+Fold conversion into the query and every handle applies it:
+
+```js
+const { results } = await SubtitleDB.query({
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en'],
+  convertTo: 'vtt',               // srt, ass and ssa become WebVTT
+  encoding: 'auto',               // decode non-UTF-8 bytes; auto sniffs a BOM
+  offsetMs: -500,                 // shift every cue earlier by half a second
+  fps: { from: 23.976, to: 25 },  // rescale for a frame-rate mismatch
+  cues: true,                     // also return the parsed cues on load()
+});
+```
+
+Any of `offsetMs`, `fps` or `cues` produces WebVTT, since they are applied to parsed
+cues. With none of the convert options set, a result keeps its stored format.
+
+### One line
+
+`get` is `query` plus "load the best one":
+
+```js
+const sub = await SubtitleDB.get({ hint: { imdbId: 'tt0133093' }, convertTo: 'vtt' });
+if (sub) video.append(sub.track);   // or sub.text, sub.blobUrl, sub.url
+```
+
+It returns the top result already loaded, or `null` when nothing matched.
+`SubtitleDB.toBlobUrl(loaded)` and `SubtitleDB.toTrack(loaded)` turn a `load()` result
+into a blob URL or a `<track>` directly, for when you kept the loaded bytes yourself.
+
+Every query and download carries a per-page-load `antispam_id`, so abusive traffic can
+be told from ordinary use. It is regenerated on each page load and identifies the page,
+not the visitor.
+
 ## Pinning a version
 
 `latest/` is what the examples use and what most pages should. It is cached for five
@@ -127,7 +196,7 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.5.0/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.6.0/subtitle-helper.js"></script>
 ```
 
 Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
@@ -140,7 +209,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.5.0/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/0.6.0/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>
