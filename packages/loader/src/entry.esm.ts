@@ -7,9 +7,9 @@
  * `currentScript` is null anyway.
  */
 import type { QueryOptions } from '@subtitledb/core';
-import type { AttachOptions } from '@subtitledb/players';
-import { attach as run, preload as warm } from './attach.js';
+import { type LoaderAttachOptions, attach as run, preload as warm } from './attach.js';
 import { setBasePath } from './base.js';
+import { type DebugHandle, debug as watchAll } from './debug.js';
 import type { DeferredHandle } from './deferred.js';
 import {
   type GotSubtitle,
@@ -25,8 +25,12 @@ declare const __SDB_VERSION__: string;
 
 const here = import.meta.url;
 
-export function attach(target: unknown, options?: AttachOptions): DeferredHandle {
+export function attach(target: unknown, options?: LoaderAttachOptions): DeferredHandle {
   return run(target, options, here);
+}
+
+export function debug(key: string): DebugHandle {
+  return watchAll(key, here);
 }
 
 export function preload(): Promise<unknown> {
@@ -42,6 +46,13 @@ export function get(options: QueryOptions): Promise<GotSubtitle | null> {
 }
 
 export type { LoadedQuery, QueryOptions, QueryResult, QuerySubtitle } from '@subtitledb/core';
-export type { DeferredHandle, GotSubtitle, WiredResult, WiredSubtitle };
+export type {
+  DebugHandle,
+  DeferredHandle,
+  GotSubtitle,
+  LoaderAttachOptions,
+  WiredResult,
+  WiredSubtitle,
+};
 export { setBasePath, toBlobUrl, toTrack };
 export const version = __SDB_VERSION__;

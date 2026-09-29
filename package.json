@@ -12,8 +12,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/loader",
-    "typecheck": "node scripts/check-no-stray-build.mjs && tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/loader --force",
+    "build": "tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/debug packages/loader",
+    "typecheck": "node scripts/check-no-stray-build.mjs && tsc -b packages/core packages/artplayer packages/html5 packages/players packages/transcribe packages/debug packages/loader --force",
     "lint": "biome ci --error-on-warnings .",
     "lint:fix": "biome check --write .",
     "test": "vitest run",

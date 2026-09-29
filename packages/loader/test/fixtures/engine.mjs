@@ -6,9 +6,16 @@
  */
 export const calls = [];
 
+/** Runs inside the attach, before its handle exists: a test's way to act mid-attach. */
+export const hooks = { attached: null };
+
+/** Teardown steps across the fixtures, in the order they ran. */
+export const order = [];
+
 export function attachSubtitleDb(target, options) {
   calls.push({ target, options });
-  return handle('native');
+  hooks.attached?.(options);
+  return handle('native', target);
 }
 
 /** Every query() the loader made, with the options it passed. */
@@ -38,19 +45,20 @@ export function result(text = 'WEBVTT\n\n00:00.000 --> 00:01.000\nHi\n', format 
   };
 }
 
-export function handle(name) {
+export function handle(name, media = null) {
   let destroyed = 0;
   return {
     player: { name, label: name, untested: false, via: 'element' },
     degraded: null,
     session: { requestCount: 0 },
-    media: () => null,
+    media: () => media,
     refresh: async () => ({ candidates: [] }),
     select: async () => {},
     tracks: () => [{ subtitle: { id: 1 } }],
     current: () => ({ candidates: [] }),
     destroy() {
       destroyed++;
+      order.push('destroy');
     },
     get destroyed() {
       return destroyed;

@@ -1,6 +1,6 @@
 {
   "name": "@subtitledb/loader",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The script tag. Loads whichever SubtitleDB integration the page turns out to need, and nothing else.",
   "license": "UNLICENSED",
   "type": "module",
@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@subtitledb/core": "0.4.0",
+    "@subtitledb/debug": "0.1.0",
     "@subtitledb/html5": "0.2.1",
     "@subtitledb/players": "0.2.1",
     "@subtitledb/transcribe": "0.2.1"

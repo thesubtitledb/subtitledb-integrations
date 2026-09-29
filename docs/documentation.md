@@ -16,6 +16,7 @@ a page can load a player.
 - [Identification](#identification)
 - [What it costs](#what-it-costs)
 - [Failure modes](#failure-modes)
+- [Playback debugger](#playback-debugger)
 - [Limits](#limits)
 
 ## Words used here
@@ -864,6 +865,30 @@ them, and do not put anything in that callback that must run once.
 
 Errors never escape `resolve()` or `select()`. A page that ignores `onError` degrades
 to no subtitles rather than to a broken player.
+
+## Playback debugger
+
+The script tag's `debug` option and `SubtitleDB.debug()` report how video plays on
+your site to the Debugger tab of the developer portal. [cdn.md](cdn.md#playback-debugger)
+covers the key, both calls, every field sent and what is stored in the browser.
+
+From source, the same code is `@subtitledb/debug`:
+
+```ts
+import { watch, watchPage } from '@subtitledb/debug';
+
+const loadId = crypto.randomUUID(); // one per page load, shared by every call
+
+const w = watch(video, { key: 'sdbg_...', loadId });
+w.context({ imdb: 133093, player: 'videojs' }); // what is playing, when you know
+w.stop(); // a last report, then let go of the element
+
+const page = watchPage({ key: 'sdbg_...', loadId }); // every video, now and later
+page.stop();
+```
+
+`loadId` is anything with 16 hex characters once dashes are removed, which a UUID
+is. Watching an element twice returns the first watch.
 
 ## Limits
 

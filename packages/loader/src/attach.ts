@@ -18,6 +18,7 @@
 import type { AttachHandle, AttachOptions } from '@subtitledb/players';
 import { isVideoElement, looksOwned } from '@subtitledb/players/marks';
 import { chunk } from './chunks.js';
+import { debugAttach } from './debug.js';
 import { type DeferredHandle, deferHandle } from './deferred.js';
 import { claim, type Incumbent, mismatch } from './guard.js';
 import { ANTISPAM_ID, CLIENT } from './ids.js';
@@ -57,9 +58,18 @@ function report(options: AttachOptions, message: string): void {
   }
 }
 
+/**
+ * The loader's own options on top of the integration's: `debug`, a debugger key
+ * that turns the playback debugger on for this one video. Not an AttachOptions
+ * field, because only the loader can fetch the chunk behind it.
+ */
+export interface LoaderAttachOptions extends AttachOptions {
+  debug?: string;
+}
+
 export function attach(
   target: unknown,
-  options: AttachOptions = {},
+  options: LoaderAttachOptions = {},
   moduleUrl?: string,
 ): DeferredHandle {
   if (incumbent) {
@@ -67,7 +77,9 @@ export function attach(
     return incumbent.attach(target, options);
   }
 
-  const opts: AttachOptions = { clientName: CLIENT, antispamId: ANTISPAM_ID, ...options };
+  const { debug: key, ...rest } = options;
+  const opts: AttachOptions = { clientName: CLIENT, antispamId: ANTISPAM_ID, ...rest };
+  const debugging = debugAttach(key, opts, moduleUrl, (message) => report(options, message));
 
   // Wire the transcription engine lazily. `transcribe` is the page's declarative
   // request; this is the engine behind it, and it is the loader's job because only the
@@ -77,7 +89,7 @@ export function attach(
     opts.transcriber = (req) => chunk('transcribe', moduleUrl).then((m) => m.runTranscription(req));
   }
 
-  return deferHandle(async (): Promise<AttachHandle> => {
+  const handle = deferHandle(async (): Promise<AttachHandle> => {
     if (needsBindings(target, options)) {
       const players = await chunk('players', moduleUrl);
       return players.attachSubtitleDb(target, opts);
@@ -85,6 +97,8 @@ export function attach(
     const engine = await chunk('engine', moduleUrl);
     return engine.attachSubtitleDb(target as HTMLVideoElement, opts);
   });
+  debugging?.(handle);
+  return handle;
 }
 
 /**

@@ -63,6 +63,7 @@ const chunks = await build({
     join(here, 'src/chunks/engine.ts'),
     join(here, 'src/chunks/players.ts'),
     join(here, 'src/chunks/transcribe.ts'),
+    join(here, 'src/chunks/debug.ts'),
   ],
   outdir: versioned,
   // Splitting is what puts core in one file that both entries import rather than in
@@ -83,7 +84,7 @@ for (const [file, meta] of Object.entries(chunks.metafile.outputs)) {
   const name = from.slice(from.lastIndexOf('/') + 1).replace(/\.ts$/, '');
   named[name] = file.slice(file.lastIndexOf('/') + 1);
 }
-for (const name of ['engine', 'players', 'transcribe']) {
+for (const name of ['engine', 'players', 'transcribe', 'debug']) {
   if (!named[name]) throw new Error(`chunk pass produced no ${name} entry`);
 }
 

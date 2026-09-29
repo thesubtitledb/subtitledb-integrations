@@ -159,14 +159,30 @@ describe('every chunk the loader can ask for exists', () => {
     }
   });
 
-  it('names all three chunks, the transcription one among them', async () => {
-    // The transcription chunk is the third entry and the last-loaded: pulled only on a
-    // synthetic select. It has to be named in the entry so the loader can ask for it.
-    expect(Object.keys(manifest.chunks).sort()).toEqual(['engine', 'players', 'transcribe']);
+  it('names all four chunks, the transcription and debugger ones among them', async () => {
+    // The transcription chunk is the last-loaded: pulled only on a synthetic select.
+    // The debugger chunk only with a debugger key. Both have to be named in the entry
+    // so the loader can ask for them.
+    expect(Object.keys(manifest.chunks).sort()).toEqual([
+      'debug',
+      'engine',
+      'players',
+      'transcribe',
+    ]);
     const files = await readdir(join(out, 'v', version));
-    expect(files).toContain(manifest.chunks.transcribe);
-    expect(iife).toContain(manifest.chunks.transcribe);
-    expect(esm).toContain(manifest.chunks.transcribe);
+    for (const name of ['transcribe', 'debug']) {
+      expect(files).toContain(manifest.chunks[name]);
+      expect(iife).toContain(manifest.chunks[name]);
+      expect(esm).toContain(manifest.chunks[name]);
+    }
+  });
+
+  it('and the debugger chunk carries none of the others: a key costs its own bytes only', async () => {
+    const debug = await readFile(join(out, 'v', version, manifest.chunks.debug), 'utf8');
+    expect(exported(debug).sort()).toEqual(['watchAttached', 'watchPage']);
+    // No import at all: it shares no runtime code with core, the engine or the
+    // bindings, so fetching it never pulls a second file.
+    expect(debug).not.toMatch(/\bimport\s*[{("'*]/);
   });
 
   it('including the shared file the two chunks both import', async () => {
@@ -270,6 +286,7 @@ describe('the manifest', () => {
  */
 const SURFACE = [
   'attach',
+  'debug',
   'get',
   'preload',
   'query',
@@ -304,6 +321,9 @@ describe('the public surface', () => {
       runInNewContext(text, page);
       const api = page.SubtitleDB as Record<string, unknown>;
       expect(Object.keys(api).sort()).toEqual(SURFACE);
+      // `debugger` is a reserved word: a page destructuring it off SubtitleDB, or off
+      // the options, has a syntax error. The name is `debug` and must stay so.
+      expect(Object.keys(api)).not.toContain('debugger');
       expect(api.version).toBe(version);
       for (const name of SURFACE.filter((n) => n !== 'version')) {
         expect(typeof api[name], name).toBe('function');
@@ -346,6 +366,16 @@ describe('the entry stays small enough to be worth splitting', () => {
       const gz = gzipSync(Buffer.from(text)).length;
       expect(gz, `${name} is ${gz} B gzipped`).toBeLessThan(6 * 1024);
     }
+  });
+
+  it('and the debugger chunk under 6 KB, since it rides along with a video', async () => {
+    const { gzipSync } = await import('node:zlib');
+    const text = await readFile(join(out, 'v', version, manifest.chunks.debug), 'utf8');
+    const gz = gzipSync(Buffer.from(text)).length;
+    // 5.6 KB at 0.7.0, nearly all of it the collector's own logic: its private
+    // members are `#` names so esbuild can shorten them, which the TypeScript
+    // `private` keyword does not allow.
+    expect(gz, `the debugger chunk is ${gz} B gzipped`).toBeLessThan(6 * 1024);
   });
 });
 

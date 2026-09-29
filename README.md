@@ -403,6 +403,7 @@ degrade), `hearingImpaired`, and `onResolved`, `onSelected`, `onDegraded`,
 ```js
 import {
   attach,
+  debug,
   preload,
   setBasePath,
   version,
@@ -412,6 +413,7 @@ import {
 | Member | Type | Does |
 |---|---|---|
 | `attach(target, options?)` | `DeferredHandle` | Mounts. Loads bindings only if the target needs them. |
+| `debug(key)` | `DebugHandle` | Reports playback on every video on the page to the key's owner. See [the debugger](docs/cdn.md#playback-debugger). |
 | `preload()` | `Promise<unknown>` | Warms the chunks early. |
 | `setBasePath(path)` | `void` | Fetch chunks from your own copy. |
 | `version` | `string` | Stamped at publish. |
@@ -450,7 +452,7 @@ and a build attestation signed by GitHub.
 The CDN serves the release files unchanged, so a file can be checked from either place:
 
 ```bash
-curl -sO https://cdn.thesubtitledb.org/v/0.6.0/subtitle-helper.js
+curl -sO https://cdn.thesubtitledb.org/v/0.7.0/subtitle-helper.js
 gh attestation verify subtitle-helper.js --repo thesubtitledb/subtitledb-integrations
 ```
 
@@ -476,6 +478,7 @@ npm install && npm run build && npm run vendor
 | `@subtitledb/html5` | Bare `<video>` and its track list |
 | `@subtitledb/artplayer` | ArtPlayer's own plugin shape |
 | `@subtitledb/transcribe` | On-device speech to text, offered when the index has nothing |
+| `@subtitledb/debug` | The playback debugger behind the script tag's `debug` |
 | `@subtitledb/loader` | The cdn.thesubtitledb.org script |
 
 ## Scripts
@@ -514,7 +517,7 @@ proves and which CI job runs it.
 
 - [docs/documentation.md](docs/documentation.md) - every export, every option
 - [docs/players.md](docs/players.md) - every player, which binding, what was run
-- [docs/cdn.md](docs/cdn.md) - the script tag, what it downloads, pinning, CSP, self-hosting
+- [docs/cdn.md](docs/cdn.md) - the script tag, what it downloads, the debugger, pinning, CSP, self-hosting
 - [examples/minimal.html](examples/minimal.html) - smallest working page
 - [examples/cdn.html](examples/cdn.html) - the same with no build step
 - [plugins/hosts](plugins/hosts/README.md) - each plugin run inside the real application

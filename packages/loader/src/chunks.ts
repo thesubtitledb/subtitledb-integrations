@@ -1,5 +1,5 @@
 /**
- * Fetching the two halves of the integration, once each.
+ * Fetching the halves of the integration, once each.
  *
  * The specifier is built at runtime from the base and a name stamped in at build
  * time. It has to be: a literal would be resolved and rewritten by whatever bundler a
@@ -15,13 +15,14 @@
 import { basePath } from './base.js';
 
 /** Filled in by build.mjs with the content-hashed names esbuild actually emitted. */
-declare const __SDB_CHUNKS__: Record<'engine' | 'players' | 'transcribe', string>;
+declare const __SDB_CHUNKS__: Record<ChunkName, string>;
 
-export type ChunkName = 'engine' | 'players' | 'transcribe';
+export type ChunkName = 'engine' | 'players' | 'transcribe' | 'debug';
 
 type Engine = typeof import('./chunks/engine.js');
 type Players = typeof import('@subtitledb/players');
 type Transcribe = typeof import('@subtitledb/transcribe');
+type Debug = typeof import('./chunks/debug.js');
 
 interface Loaded {
   engine: Engine;
@@ -30,6 +31,9 @@ interface Loaded {
   // transcription row, and it stands alone because it shares no runtime code with the
   // other two.
   transcribe: Transcribe;
+  // Only with a debugger key, and in parallel with whichever of the first two the
+  // attach needs. Like transcribe it shares no runtime code with the others.
+  debug: Debug;
 }
 
 const inFlight = new Map<ChunkName, Promise<unknown>>();

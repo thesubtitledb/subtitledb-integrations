@@ -1,0 +1,24 @@
+{
+  "name": "@subtitledb/debug",
+  "version": "0.1.0",
+  "description": "The playback debugger: watches video elements and reports startup time, stalls, errors and what was watched to the owner of a debugger key. No dependencies, and nothing runs without a key.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force"
+  }
+}
