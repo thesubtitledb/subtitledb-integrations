@@ -79,6 +79,23 @@ describe('a play', () => {
     expect(s.sm).toBe(2000);
   });
 
+  it('times the first frame in whole milliseconds, the same in the trace and the report', () => {
+    // A browser's clock steps in fractions of a millisecond. 0.7.0 wrote the raw
+    // difference into the trace ("after 15.89999999999418 ms") while the report
+    // carried 15.
+    const r = rig();
+    r.advance(0.3);
+    load(r, 60);
+    play(r, 15.6);
+    playFor(r, 5);
+    stall(r, 1200);
+    playFor(r, 5);
+    end(r);
+    const s = last(r);
+    expect(s.st).toBe(16);
+    expect(s.ev?.find((e) => e.k === 'first_frame')?.d).toBe('after 16 ms');
+  });
+
   it('counts watch time as time actually playing: not paused, stalled or seeking', () => {
     const r = rig();
     load(r);

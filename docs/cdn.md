@@ -300,7 +300,7 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.7.0/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.7.1/subtitle-helper.js"></script>
 ```
 
 Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
@@ -313,7 +313,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.7.0/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/0.7.1/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>

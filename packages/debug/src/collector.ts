@@ -402,7 +402,10 @@ export class Collector {
     this.#started = true;
     play.flags |= FLAGS.started;
     const t = this.#now();
-    play.startupMs = measured && this.#intentAt !== null ? Math.max(1, t - this.#intentAt) : 0;
+    // Whole milliseconds: the clock has finer steps, and the trace line must say
+    // the number the report carries, which is always whole.
+    play.startupMs =
+      measured && this.#intentAt !== null ? Math.max(1, Math.round(t - this.#intentAt)) : 0;
     this.record('first_frame', play.startupMs ? `after ${play.startupMs} ms` : '');
     this.#lastPos = this.video.currentTime;
     this.#onResize();
