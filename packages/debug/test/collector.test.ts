@@ -4,11 +4,12 @@
  * wrong: startup read as a stall, a seek paid for as watched, a replay folded
  * into the play before it, a pause invented by the end of the media.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetPlays } from '../src/collector.js';
 import { MAX_EVENTS } from '../src/play.js';
 import { bucket, FLAGS, type Snapshot } from '../src/snapshot.js';
 import {
+  addTrack,
   end,
   grow,
   hide,
@@ -18,9 +19,12 @@ import {
   pause,
   play,
   playFor,
+  type Rig,
+  removeTrack,
   resume,
   rig,
   seek,
+  showTrack,
   stall,
 } from './fakes.js';
 
@@ -39,6 +43,8 @@ const MONOTONIC = [
   'sm',
   'er',
   'mh',
+  'qd',
+  'ql',
   'dr',
   'fr',
   'fl',
@@ -496,5 +502,305 @@ describe('stopping', () => {
     resume(r);
     r.video.emit('ended');
     expect(r.sent).toHaveLength(n);
+  });
+});
+
+/** A rig whose key keeps every trace, answered before anything else happens. */
+async function traced(setup?: Parameters<typeof rig>[0]): Promise<Rig> {
+  const r = rig(setup);
+  r.answer.rule = 'all';
+  load(r, 600);
+  play(r);
+  await r.settle();
+  return r;
+}
+
+const lines = (r: Rig, ...kinds: string[]) =>
+  (last(r).ev ?? []).filter((e) => kinds.includes(e.k)).map((e) => `${e.k} ${e.d}`);
+
+describe('an autoplay the browser refused', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const autoplaying = () =>
+    rig((v) => {
+      v.autoplay = true;
+    });
+
+  it('is a play that never started, sent with its trace as soon as it is seen', () => {
+    const r = autoplaying();
+    load(r);
+    r.video.emit('canplay');
+    r.video.emit('canplaythrough');
+    vi.advanceTimersByTime(800);
+    expect(r.sent).toHaveLength(1);
+    const s = last(r);
+    expect(s.p).toBe(1);
+    expect((s.fl ?? 0) & FLAGS.blocked).toBe(FLAGS.blocked);
+    expect((s.fl ?? 0) & FLAGS.started).toBe(0);
+    expect(s.ev?.map((e) => e.k)).toContain('blocked');
+  });
+
+  it('and when the viewer then presses play, the same play goes on and keeps the flag', () => {
+    const r = autoplaying();
+    load(r);
+    r.video.emit('canplaythrough');
+    vi.advanceTimersByTime(800);
+    r.video.emit('canplaythrough');
+    vi.advanceTimersByTime(800);
+    play(r, 300);
+    playFor(r, 5);
+    pause(r);
+    expect(r.sent.every((s) => s.p === 1)).toBe(true);
+    expect(r.sent.filter((s) => s.ev?.some((e) => e.k === 'blocked'))).toHaveLength(1);
+    const s = last(r);
+    expect((s.fl ?? 0) & (FLAGS.blocked | FLAGS.started)).toBe(FLAGS.blocked | FLAGS.started);
+    expect(s.st).toBe(300);
+  });
+
+  it('is not an autoplay that begins, one still buffering, or a video that never asked', () => {
+    const allowed = autoplaying();
+    load(allowed);
+    allowed.video.emit('canplaythrough');
+    allowed.video.paused = false;
+    allowed.video.emit('play');
+    allowed.video.emit('playing');
+    vi.advanceTimersByTime(800);
+    expect(allowed.sent.some((s) => (s.fl ?? 0) & FLAGS.blocked)).toBe(false);
+
+    const buffering = autoplaying();
+    load(buffering);
+    buffering.video.readyState = 3;
+    buffering.video.emit('canplay');
+    vi.advanceTimersByTime(800);
+    expect(buffering.sent).toHaveLength(0);
+
+    const asked = rig();
+    load(asked);
+    asked.video.emit('canplaythrough');
+    vi.advanceTimersByTime(800);
+    expect(asked.sent).toHaveLength(0);
+  });
+});
+
+describe('what else a play does', () => {
+  it('flags a speed other than 1, and traces each change', async () => {
+    const r = await traced();
+    r.video.playbackRate = 1.5;
+    r.video.emit('ratechange');
+    playFor(r, 5);
+    r.video.playbackRate = 1;
+    r.video.emit('ratechange');
+    end(r);
+    expect((last(r).fl ?? 0) & FLAGS.rate).toBe(FLAGS.rate);
+    expect(lines(r, 'rate')).toEqual(['rate 1.5x', 'rate 1x']);
+  });
+
+  it('traces mute, fullscreen, picture in picture and casting going on and off', async () => {
+    const r = await traced();
+    const v = r.video;
+    v.muted = true;
+    v.emit('volumechange');
+    v.muted = false;
+    v.volume = 0.4;
+    v.emit('volumechange');
+    v.volume = 0.5;
+    v.emit('volumechange');
+    r.doc.fullscreenElement = v;
+    r.doc.dispatchEvent(new Event('fullscreenchange'));
+    r.doc.fullscreenElement = null;
+    r.doc.dispatchEvent(new Event('fullscreenchange'));
+    v.emit('enterpictureinpicture');
+    v.emit('leavepictureinpicture');
+    Object.assign(v, { webkitCurrentPlaybackTargetIsWireless: true });
+    v.emit('webkitcurrentplaybacktargetiswirelesschanged');
+    end(r);
+    expect(lines(r, 'volume', 'fullscreen', 'pip', 'cast')).toEqual([
+      'volume muted',
+      'volume on at 40%',
+      'fullscreen on',
+      'fullscreen off',
+      'pip on',
+      'pip off',
+      'cast on',
+    ]);
+    const all = FLAGS.muted | FLAGS.fullscreen | FLAGS.pip | FLAGS.cast;
+    expect((last(r).fl ?? 0) & all).toBe(all);
+  });
+
+  it('sets a mode that was already on when the play opened', () => {
+    const r = rig();
+    load(r);
+    r.doc.fullscreenElement = r.video;
+    r.doc.dispatchEvent(new Event('fullscreenchange'));
+    play(r);
+    expect((last(r).fl ?? 0) & FLAGS.fullscreen).toBe(FLAGS.fullscreen);
+  });
+
+  it('traces the audio language changing, where the browser lists audio tracks', async () => {
+    const en = { enabled: true, language: 'en' };
+    const fr = { enabled: false, language: 'fr' };
+    const tracks = Object.assign(new EventTarget(), { length: 2, 0: en, 1: fr });
+    const r = await traced((v) => Object.assign(v, { audioTracks: tracks }));
+    en.enabled = false;
+    fr.enabled = true;
+    tracks.dispatchEvent(new Event('change'));
+    end(r);
+    expect(lines(r, 'audio')).toEqual(['audio fr']);
+    expect(last(r).al).toBe('fr');
+  });
+
+  it('traces a burst of dropped frames, and not a trickle', async () => {
+    const r = await traced();
+    r.video.quality = { droppedVideoFrames: 10, totalVideoFrames: 150 };
+    playFor(r, 5);
+    r.video.quality = { droppedVideoFrames: 55, totalVideoFrames: 300 };
+    playFor(r, 5);
+    end(r);
+    expect(lines(r, 'frames')).toEqual(['frames 45 of 150 dropped by 0:10']);
+  });
+
+  it('counts the picture getting smaller, and the time played below the best it reached', () => {
+    const r = rig();
+    load(r, 600, 720);
+    play(r);
+    playFor(r, 5);
+    r.video.videoHeight = 1080;
+    r.video.emit('resize');
+    playFor(r, 5);
+    r.video.videoHeight = 480;
+    r.video.emit('resize');
+    playFor(r, 4);
+    pause(r);
+    r.advance(10_000);
+    resume(r);
+    playFor(r, 1);
+    r.video.videoHeight = 1080;
+    r.video.emit('resize');
+    playFor(r, 2);
+    pause(r);
+    const s = last(r);
+    expect(s.mh).toBe(1080);
+    expect(s.qd).toBe(1);
+    // 4 s before the pause and 1 s after it; the 10 s paused are not playing.
+    expect(s.ql).toBe(5000);
+  });
+
+  it('says which parts of the film were played: 64 of them, the first the lowest bit', () => {
+    const r = rig();
+    load(r, 640);
+    play(r);
+    playFor(r, 10);
+    seek(r, 320);
+    playFor(r, 10);
+    seek(r, 635);
+    playFor(r, 5);
+    pause(r);
+    // Parts 0, 32 and 63, ten seconds each.
+    expect(last(r).cv).toBe('8000000100000001');
+  });
+
+  it('says nothing about parts for a live stream', () => {
+    const r = rig();
+    load(r, Number.POSITIVE_INFINITY);
+    play(r);
+    playFor(r, 10);
+    pause(r);
+    expect(last(r).cv).toBeUndefined();
+  });
+
+  it('keeps the trace of a play that never showed a frame, under the default rule', () => {
+    const r = rig();
+    load(r);
+    r.video.paused = false;
+    r.video.emit('play');
+    r.advance(12_000);
+    hide(r);
+    const s = last(r);
+    expect((s.fl ?? 0) & FLAGS.started).toBe(0);
+    expect(s.ev?.map((e) => e.k)).toEqual(['attach', 'source', 'manifest']);
+  });
+});
+
+describe('the subtitle on screen', () => {
+  const pick = { id: 7, language: 'en', source: 'sdb' };
+
+  it('stops counting when the viewer turns SubtitleDB off in the player', () => {
+    const r = rig();
+    load(r);
+    const own = addTrack(r, 'en', 'English - 1386 lines');
+    showTrack(r, own);
+    r.collector.select(pick);
+    play(r);
+    playFor(r, 10);
+    showTrack(r, null);
+    playFor(r, 10);
+    pause(r);
+    const s = last(r);
+    expect(s.sb).toBe(10_000);
+    expect([s.ss, s.sl, s.si, s.sw]).toEqual(['sdb', 'en', 7, 1]);
+  });
+
+  it('counts a switch only once the play has started: on, off, or to another', () => {
+    const r = rig();
+    load(r);
+    const en = addTrack(r, 'en', 'English');
+    const fr = addTrack(r, 'fr', 'Francais');
+    showTrack(r, en);
+    play(r);
+    playFor(r, 5);
+    showTrack(r, fr);
+    playFor(r, 5);
+    showTrack(r, null);
+    playFor(r, 5);
+    pause(r);
+    const s = last(r);
+    expect(s.sw).toBe(2);
+    expect([s.ss, s.sl, s.si]).toEqual(['page', 'fr', undefined]);
+    expect(s.sb).toBe(10_000);
+  });
+
+  it('starts each play with nothing on screen until something is', () => {
+    const r = rig();
+    load(r, 20);
+    const own = addTrack(r, 'en');
+    showTrack(r, own);
+    r.collector.select(pick);
+    play(r);
+    playFor(r, 20);
+    end(r);
+    showTrack(r, null);
+    r.video.currentTime = 0;
+    play(r);
+    playFor(r, 5);
+    pause(r);
+    const s = last(r);
+    expect(s.p).toBe(2);
+    expect([s.ss, s.sl, s.si, s.sb]).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it('takes a pick the player draws itself as on, having no track to watch', () => {
+    const r = rig();
+    load(r);
+    r.collector.select({ id: 9, language: 'es', source: 'ai' });
+    play(r);
+    playFor(r, 5);
+    pause(r);
+    const s = last(r);
+    expect([s.ss, s.sl, s.si, s.sb]).toEqual(['ai', 'es', 9, 5000]);
+  });
+
+  it('takes a pick whose track the player removed as off', () => {
+    const r = rig();
+    load(r);
+    const own = addTrack(r, 'en');
+    showTrack(r, own);
+    r.collector.select(pick);
+    play(r);
+    playFor(r, 5);
+    removeTrack(r, own);
+    playFor(r, 5);
+    pause(r);
+    expect(last(r).sb).toBe(5000);
   });
 });

@@ -368,14 +368,16 @@ describe('the entry stays small enough to be worth splitting', () => {
     }
   });
 
-  it('and the debugger chunk under 6 KB, since it rides along with a video', async () => {
+  it('and the debugger chunk under 7 KB, since it rides along with a video', async () => {
     const { gzipSync } = await import('node:zlib');
     const text = await readFile(join(out, 'v', version, manifest.chunks.debug), 'utf8');
     const gz = gzipSync(Buffer.from(text)).length;
-    // 5.6 KB at 0.7.0, nearly all of it the collector's own logic: its private
-    // members are `#` names so esbuild can shorten them, which the TypeScript
-    // `private` keyword does not allow.
-    expect(gz, `the debugger chunk is ${gz} B gzipped`).toBeLessThan(6 * 1024);
+    // 5.6 KB at 0.7.0 and 6.6 KB at 0.8.0, which added the refused autoplay, speed,
+    // sound, fullscreen, picture-in-picture, casting and dropped-frame lines, the
+    // picture drops and the coverage. Nearly all of it is the collector's own logic:
+    // its private members are `#` names so esbuild can shorten them, which the
+    // TypeScript `private` keyword does not allow.
+    expect(gz, `the debugger chunk is ${gz} B gzipped`).toBeLessThan(7 * 1024);
   });
 });
 

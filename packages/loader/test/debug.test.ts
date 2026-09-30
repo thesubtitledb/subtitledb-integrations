@@ -167,6 +167,13 @@ describe('SubtitleDB.debug', () => {
     expect(d.pages[0]?.stopped).toBe(1);
   });
 
+  it('passes the page its hint, so every video is filed under what is playing', async () => {
+    const { debug, ANTISPAM_ID, chunk } = await fresh();
+    const hint = { imdbId: 'tt0133093' };
+    await debug(KEY, { hint }).ready;
+    expect(chunk.pages).toEqual([{ key: KEY, loadId: ANTISPAM_ID, hint, stopped: 0 }]);
+  });
+
   it('stopped before its code arrives, it never starts', async () => {
     const { debug, chunk } = await fresh();
     const h = debug(KEY);

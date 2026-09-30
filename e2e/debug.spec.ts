@@ -229,3 +229,48 @@ test('SubtitleDB.debug watches every video, including one added later', async ({
   await expect.poll(() => reports.length).toBeGreaterThan(1);
   expect(reports.every((r) => r.ev === undefined)).toBe(true);
 });
+
+test('an autoplay the browser refuses is reported as a play that never started', async ({
+  playwright,
+  baseURL,
+}) => {
+  // Chrome's own default for a page nobody has clicked: autoplay only when muted. Set
+  // here rather than left to however this browser was launched.
+  const browser = await playwright.chromium.launch({
+    args: ['--autoplay-policy=document-user-activation-required'],
+  });
+  try {
+    const context = await browser.newContext({ baseURL });
+    const { reports } = await receive(context, 'problems');
+    // Set up from the page's own script: anything Playwright evaluates in the page
+    // counts as a click, and a page that has been clicked may autoplay.
+    await context.addInitScript((key) => {
+      const start = setInterval(() => {
+        const sdb = (
+          window as never as { SubtitleDB?: { attach(t: unknown, o: unknown): unknown } }
+        ).SubtitleDB;
+        const main = document.querySelector('main');
+        if (!sdb || !main) return;
+        clearInterval(start);
+        const v = document.createElement('video');
+        v.id = 'debugged';
+        v.autoplay = true;
+        v.src = 'media/sample.webm';
+        main.append(v);
+        sdb.attach(v, { hint: { imdbId: 'tt0133093' }, languages: ['en'], debug: key });
+      }, 50);
+    }, KEY);
+    const page = await context.newPage();
+    await page.goto(`/cdn.html?cdn=${encodeURIComponent(CDN)}`);
+    await expect
+      .poll(() => reports.some((r) => ((r.fl ?? 0) & 128) === 128), { timeout: 20_000 })
+      .toBe(true);
+    const refused = reports.find((r) => ((r.fl ?? 0) & 128) === 128) as Report;
+    expect(refused.p).toBe(1);
+    expect((refused.fl ?? 0) & 1).toBe(0);
+    // A play that never started is a problem play, so its trace goes with it.
+    expect(refused.ev?.map((e) => e.k)).toContain('blocked');
+  } finally {
+    await browser.close();
+  }
+});

@@ -13,21 +13,37 @@
  * when it is not, which is worse than having none.
  */
 
-export type EventKind =
-  | 'attach'
-  | 'source'
-  | 'manifest'
-  | 'offered'
-  | 'first_frame'
-  | 'playing'
-  | 'pause'
-  | 'seek'
-  | 'stall_start'
-  | 'stall_end'
-  | 'track'
-  | 'level'
-  | 'error'
-  | 'ended';
+/**
+ * Every kind of line a trace can hold. The receiving side refuses a whole snapshot
+ * that names a kind it does not know, so a new kind is added there, and deployed,
+ * before it is added here.
+ */
+export const EVENT_KINDS = [
+  'attach',
+  'source',
+  'manifest',
+  'offered',
+  'first_frame',
+  'playing',
+  'pause',
+  'seek',
+  'stall_start',
+  'stall_end',
+  'track',
+  'level',
+  'error',
+  'ended',
+  'blocked',
+  'rate',
+  'volume',
+  'audio',
+  'fullscreen',
+  'pip',
+  'cast',
+  'frames',
+] as const;
+
+export type EventKind = (typeof EVENT_KINDS)[number];
 
 /** One line of a trace: what happened, when (ms since the element was watched), and a detail a person reads. */
 export interface TraceEvent {
@@ -67,6 +83,12 @@ export interface Snapshot {
   wa?: number;
   un?: number;
   mp?: number;
+  /**
+   * Which of 64 equal parts of the media were played, as 16 hex characters, bit 0
+   * the first part. Absent for live. The receiving side ORs a play's values rather
+   * than taking the largest: a duration that changes moves the parts.
+   */
+  cv?: string;
   /** Seeks, pauses, stalls and time stalled. */
   sk?: number;
   pu?: number;
@@ -75,6 +97,9 @@ export interface Snapshot {
   /** The highest media error code seen, the tallest frame, dropped and total frames. */
   er?: number;
   mh?: number;
+  /** Times the picture got smaller after the first frame, and ms played below the tallest it reached. */
+  qd?: number;
+  ql?: number;
   dr?: number;
   fr?: number;
   /** FLAGS, each set the first time it happens and never cleared. */
@@ -102,6 +127,10 @@ export const FLAGS = {
   cast: 16,
   muted: 32,
   autoplay: 64,
+  /** Asked to autoplay and refused by the browser: still paused at the start once it could play. */
+  blocked: 128,
+  /** Played at a speed other than 1. */
+  rate: 256,
 } as const;
 
 /** The receiving side refuses a body over 8 KB. Aim well under it. */
@@ -134,6 +163,8 @@ const MAX: Record<string, number> = {
   sm: U32,
   er: U8,
   mh: U16,
+  qd: U16,
+  ql: U32,
   dr: U32,
   fr: U32,
   fl: U16,
@@ -143,7 +174,7 @@ const MAX: Record<string, number> = {
 };
 
 /** And the longest each string may be. */
-const LEN: Record<string, number> = { k: 64, pa: 512, pl: 32, ss: 16, sl: 16, al: 16 };
+const LEN: Record<string, number> = { k: 64, pa: 512, cv: 16, pl: 32, ss: 16, sl: 16, al: 16 };
 
 /** Sent even when zero. Everything else defaults to zero or empty on arrival. */
 const REQUIRED = new Set(['v', 'k', 'l', 'p', 's', 'ps']);

@@ -180,6 +180,18 @@ describe('watchPage', () => {
     expect([a, b, c, d].some((v) => MARK in v)).toBe(false);
   });
 
+  it('files every video it watches under the context the page gave', () => {
+    const a = new FakeVideo();
+    const p = watchPage(
+      { key: KEY, loadId: UUID, context: { imdb: 133093, season: 1, episode: 2 } },
+      page([a]),
+    );
+    start(a);
+    const body = JSON.parse(posts[0] ?? '{}');
+    expect([body.im, body.se, body.ep, body.tm]).toEqual([133093, 1, 2, undefined]);
+    p.stop();
+  });
+
   it('leaves an element that is already watched to whoever watches it', () => {
     const attached = new FakeVideo();
     const w = watch(el(attached), { key: KEY, loadId: UUID });

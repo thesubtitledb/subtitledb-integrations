@@ -413,7 +413,7 @@ import {
 | Member | Type | Does |
 |---|---|---|
 | `attach(target, options?)` | `DeferredHandle` | Mounts. Loads bindings only if the target needs them. |
-| `debug(key)` | `DebugHandle` | Reports playback on every video on the page to the key's owner. See [the debugger](docs/cdn.md#playback-debugger). |
+| `debug(key, options?)` | `DebugHandle` | Reports playback on every video on the page to the key's owner, under `options.hint` when given. See [the debugger](docs/cdn.md#playback-debugger). |
 | `preload()` | `Promise<unknown>` | Warms the chunks early. |
 | `setBasePath(path)` | `void` | Fetch chunks from your own copy. |
 | `version` | `string` | Stamped at publish. |
@@ -452,7 +452,7 @@ and a build attestation signed by GitHub.
 The CDN serves the release files unchanged, so a file can be checked from either place:
 
 ```bash
-curl -sO https://cdn.thesubtitledb.org/v/0.7.2/subtitle-helper.js
+curl -sO https://cdn.thesubtitledb.org/v/0.8.0/subtitle-helper.js
 gh attestation verify subtitle-helper.js --repo thesubtitledb/subtitledb-integrations
 ```
 

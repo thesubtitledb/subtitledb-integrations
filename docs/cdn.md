@@ -86,7 +86,7 @@ page turns out to need it.
 | the shared core | on the first `attach()`, `query()` or `get()` | ~10 KB |
 | the element engine | the target is a plain `<video>`, or a query | ~0.1 KB |
 | the player bindings | the target is a player, or a player owns the element | ~6 KB |
-| the debugger | a page passes a [debugger key](#playback-debugger) | ~5.6 KB |
+| the debugger | a page passes a [debugger key](#playback-debugger) | ~6.6 KB |
 
 So a page with a bare `<video>` costs about 12 KB and never downloads the sixteen
 bindings or the resolver that picks between them. A page with a player costs about
@@ -218,6 +218,14 @@ await dbg.ready;  // rejects if the debugger's code could not load
 dbg.stop();       // a last report for each video, then nothing
 ```
 
+To say what is playing, pass a `hint` in the shape `attach` takes. Every video the
+call watches is reported under it, so a page with several titles should attach each
+one instead:
+
+```js
+SubtitleDB.debug('sdbg_...', { hint: { imdbId: 'tt0133093' } });
+```
+
 The `debug` option also reports what SubtitleDB matched and which subtitle was on, and
 `destroy()` on the handle sends the last report before it lets go of the video.
 `SubtitleDB.debug()` works on a page with no subtitles from us at all, but cannot see
@@ -232,13 +240,16 @@ option reports it through `onError` and attaches the subtitles anyway. The name 
 
 Without a key, nothing: no file, no storage and no request. With one, the debugger's
 code is fetched alongside the rest, and each play sends a short report at the first
-frame, every ten minutes of playback, on pause, and when the play ends, fails or
-changes source, the tab is hidden or the page is closed. That is about four a play.
+frame, every ten minutes of playback, on pause (unless one went in the last two
+seconds), and when the play ends, fails or changes source, the browser refuses its
+autoplay, the tab is hidden or the page is closed. That is about four a play.
 
-Each report is a `text/plain` POST to `api.thesubtitledb.org`, sent without cookies,
-so the [CSP above](#content-security-policy) already covers it. It carries running
-totals for the play, which only ever grow, so a report that arrives twice or late
-changes nothing. Fields that are zero or empty are left out.
+Each report is a `text/plain` POST to `api.thesubtitledb.org`, made with `fetch` and
+without cookies, so the [CSP above](#content-security-policy) already covers it. Where
+`fetch` is missing or refuses, the report goes by `navigator.sendBeacon`, which cannot
+leave cookies out. A report carries running totals for the play, which only ever
+grow, so one that arrives twice or late changes nothing. Fields that are zero or
+empty are left out. `cv`, `qd`, `ql`, the flags 128 and 256 and the `hint` need 0.8.0.
 
 | Field | Meaning |
 |---|---|
@@ -250,32 +261,40 @@ changes nothing. Fields that are zero or empty are left out.
 | `ps` | When the play started, in epoch seconds. |
 | `u` | Visitor id, see [What it stores](#what-it-stores). |
 | `pa` | The page's path and query string, up to 512 characters. |
-| `im`, `tm`, `se`, `ep` | IMDb number, TMDB id, season and episode. Only with the `debug` option. |
+| `im`, `tm`, `se`, `ep` | IMDb number, TMDB id, season and episode: what SubtitleDB matched with the `debug` option, or the `hint` given to `SubtitleDB.debug()`. |
 | `du`, `li` | Length in seconds. `li` is 1 for a live stream, which has none: one whose duration is infinite, or grows twice while it plays, which is how hls.js reports a live stream by default. |
 | `st` | Milliseconds from pressing play to the first frame. |
 | `wa` | Milliseconds spent playing: not paused, stalled or seeking. |
 | `un` | Distinct seconds played. A scene watched twice counts once, and a seek counts nothing. |
 | `mp` | Furthest position reached while playing, in seconds. |
+| `cv` | Which parts of the video were played: its length cut into 64 equal parts, one bit each, as 16 hex characters with the first part the lowest bit. Not sent for a live stream. |
 | `sk`, `pu` | Seeks and pauses. |
 | `sn`, `sm` | Stalls after the first frame, and milliseconds stalled. |
 | `er` | Highest media error: 1 aborted, 2 network, 3 decode, 4 source not supported. |
 | `mh` | Tallest frame, in pixels. |
+| `qd`, `ql` | Times the picture got smaller after the first frame, and milliseconds played below the tallest picture the play had reached. |
 | `dr`, `fr` | Frames dropped and frames shown during the play. |
-| `fl` | Flags, each set the first time it happens: 1 started, 2 ended, 4 fullscreen, 8 picture-in-picture, 16 cast, 32 muted, 64 autoplay. |
-| `pl` | The player SubtitleDB recognised. |
-| `ss`, `sl` | Where the subtitle on screen came from (`sdb`, `ai` for on-device transcription, `page` for a track of your own) and its language. |
-| `sb`, `sw`, `si` | Milliseconds with a subtitle on screen, subtitle changes, and the SubtitleDB subtitle id. |
+| `fl` | Flags, each set the first time it happens: 1 started, 2 ended, 4 fullscreen, 8 picture-in-picture, 16 cast, 32 muted or at volume 0, 64 autoplay, 128 autoplay refused by the browser, 256 played at a speed other than 1. |
+| `pl` | The player SubtitleDB recognised, when the video was passed to `attach`. |
+| `ss`, `sl` | Where the last subtitle on screen during the play came from (`sdb`, `ai` for on-device transcription, `page` for a track of your own) and its language. |
+| `sb`, `sw`, `si` | Milliseconds with a subtitle on screen, times it changed after the first frame (turned on, off or to another), and the SubtitleDB subtitle id. |
 | `al` | Audio language, where the browser reports one. |
 | `ev` | The play's trace, when your key keeps one. |
 
+A player that draws subtitles itself, rather than in a text track of the video, does
+not show the debugger a subtitle being turned off, so a SubtitleDB subtitle counts
+as on screen there until another is picked.
+
 The trace is the play step by step, timed from when the video was first watched: its
-source, length and size, what SubtitleDB offered, the first frame, pauses, seeks,
-stalls, quality changes, subtitle changes, errors and the end. A source is its host and
+source, length and size, what SubtitleDB offered, an autoplay the browser refused,
+the first frame, pauses, seeks, stalls, quality changes, bursts of dropped frames,
+subtitle and audio changes, speed, sound, fullscreen, picture-in-picture and casting
+going on and off, errors and the end. A source is its host and
 path only, never its query string or fragment, where signed media URLs keep their
 tokens. A trace keeps up to 150 steps and drops from the middle when it has more. It
 goes only with a report that could be the play's last, and only for the plays your
-key asks for: those that stalled or failed (the default), a percentage of plays, all
-of them, or none. You choose in the portal.
+key asks for: those that failed, stalled or never showed a frame (the default), a
+percentage of plays, all of them, or none. You choose in the portal.
 
 ### What it stores
 
@@ -300,7 +319,7 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.7.2/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.8.0/subtitle-helper.js"></script>
 ```
 
 Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
@@ -313,7 +332,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.7.2/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/0.8.0/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>

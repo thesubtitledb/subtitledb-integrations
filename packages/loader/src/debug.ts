@@ -8,7 +8,7 @@
  * Everything here is small on purpose, because it sits in the entry every page
  * downloads. The debugger itself is a chunk of its own, fetched only with a key.
  */
-import type { LoadedSubtitle, ResolveResult } from '@subtitledb/core';
+import type { LoadedSubtitle, MediaHint, ResolveResult } from '@subtitledb/core';
 import type { AttachHandle, AttachOptions } from '@subtitledb/players';
 import type { Attached } from './chunks/debug.js';
 import { chunk } from './chunks.js';
@@ -25,13 +25,22 @@ export interface DebugHandle {
   stop(): void;
 }
 
-/** `SubtitleDB.debug(key)`: every video on the page, including ones added later. */
-export function debug(key: string, moduleUrl?: string): DebugHandle {
+export interface DebugOptions {
+  /**
+   * What is playing, in the same shape `attach` takes it. Every video the call
+   * watches is filed under it, so a page with several titles should attach each.
+   */
+  hint?: MediaHint;
+}
+
+/** `SubtitleDB.debug(key, options)`: every video on the page, including ones added later. */
+export function debug(key: string, options?: DebugOptions, moduleUrl?: string): DebugHandle {
   if (!KEY.test(String(key))) throw new TypeError(BAD_KEY);
+  const hint = options?.hint;
   let stop: (() => void) | undefined;
   let stopped = false;
   const ready = chunk('debug', moduleUrl).then((m) => {
-    if (!stopped) stop = m.watchPage({ key, loadId: ANTISPAM_ID }).stop;
+    if (!stopped) stop = m.watchPage({ key, loadId: ANTISPAM_ID, hint }).stop;
   });
   // The failure is the caller's through `ready`; unread, it is not the page's problem.
   ready.catch(() => {});

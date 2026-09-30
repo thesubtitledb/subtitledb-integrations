@@ -8,10 +8,8 @@
  * Turning what SubtitleDB resolved into the debugger's terms happens here rather
  * than in the entry, so the entry pays nothing for it.
  */
-import type { LoadedSubtitle, ResolveResult } from '@subtitledb/core';
-import { watch, watchPage } from '@subtitledb/debug';
-
-export { watchPage };
+import type { LoadedSubtitle, MediaHint, ResolveResult } from '@subtitledb/core';
+import { type Context, type Stoppable, watch, watchPage as watchAll } from '@subtitledb/debug';
 
 /** One attached video, as the loader drives it. */
 export interface Attached {
@@ -20,7 +18,27 @@ export interface Attached {
   stop(): void;
 }
 
-const imdbNumber = (id: string | undefined): number => Number(id?.replace(/^tt/, '')) || 0;
+const imdbNumber = (id: unknown): number => Number(String(id ?? '').replace(/^tt/, '')) || 0;
+
+/** What a page's own hint says is playing, in the debugger's terms. */
+function contextOf(hint: MediaHint | undefined): Context | undefined {
+  if (!hint) return undefined;
+  return {
+    imdb: imdbNumber(hint.imdbId),
+    tmdb: Number(hint.tmdbId) || 0,
+    season: Number(hint.season) || 0,
+    episode: Number(hint.episode) || 0,
+  };
+}
+
+/** Every video on the page, each filed under the page's hint when it gave one. */
+export function watchPage(o: {
+  key: string;
+  loadId: string;
+  hint?: MediaHint | undefined;
+}): Stoppable {
+  return watchAll({ key: o.key, loadId: o.loadId, context: contextOf(o.hint) });
+}
 
 export function watchAttached(
   media: HTMLVideoElement,

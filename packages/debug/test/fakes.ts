@@ -30,6 +30,7 @@ export class FakeVideo extends EventTarget {
   videoHeight = 0;
   muted = false;
   volume = 1;
+  playbackRate = 1;
   autoplay = false;
   isConnected = true;
   error: { code: number; message: string } | null = null;
@@ -228,6 +229,50 @@ export function end(r: Rig): void {
 export function hide(r: Rig): void {
   r.doc.visibilityState = 'hidden';
   r.doc.dispatchEvent(new Event('visibilitychange'));
+}
+
+export interface FakeTrack {
+  kind: string;
+  mode: string;
+  label: string;
+  language: string;
+}
+
+type TrackList = Record<number, FakeTrack | undefined> & { length: number };
+
+/** A subtitle track on the element, as a player adds one. */
+export function addTrack(r: Rig, language: string, label = language): FakeTrack {
+  const list = r.video.textTracks as unknown as TrackList;
+  const t = { kind: 'subtitles', mode: 'disabled', label, language };
+  list[list.length] = t;
+  list.length++;
+  return t;
+}
+
+/** Show one track and hide the rest, or hide them all, as a player menu does. */
+export function showTrack(r: Rig, track: FakeTrack | null): void {
+  const list = r.video.textTracks as unknown as TrackList;
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    if (t) t.mode = t === track ? 'showing' : 'disabled';
+  }
+  r.video.textTracks.dispatchEvent(new Event('change'));
+}
+
+/** Take a track off the element, as a player does when it lets go of a subtitle. */
+export function removeTrack(r: Rig, track: FakeTrack): void {
+  const list = r.video.textTracks as unknown as TrackList;
+  const kept: FakeTrack[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    if (t && t !== track) kept.push(t);
+    list[i] = undefined;
+  }
+  kept.forEach((t, i) => {
+    list[i] = t;
+  });
+  list.length = kept.length;
+  r.video.textTracks.dispatchEvent(new Event('removetrack'));
 }
 
 export const last = (r: Rig): Snapshot => {

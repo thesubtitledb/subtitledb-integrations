@@ -17,6 +17,7 @@ import type { EventKind } from './snapshot.js';
 import { randomHex, visitorId } from './visitor.js';
 
 export type { Chosen, Context } from './collector.js';
+export type { Stoppable } from './page.js';
 export { OUTBOX, VISITOR } from './send.js';
 export type { EventKind, Snapshot, TraceEvent } from './snapshot.js';
 export { FLAGS } from './snapshot.js';
@@ -37,6 +38,8 @@ export interface DebugOptions {
   loadId: string;
   /** Where snapshots go. Only a test or a self-hosted receiver sets this. */
   endpoint?: string;
+  /** What is playing, when the page says: every video this watches is filed under it. */
+  context?: Context;
 }
 
 /** One watched element, as the loader drives it. */
@@ -83,7 +86,9 @@ export function watch(video: HTMLVideoElement, o: DebugOptions): Watch {
   }
   const loadId = toLoadId(o.loadId);
   if (visitor === null) visitor = visitorId();
-  return new Collector(video, { key: o.key, loadId, visitor, sender: senderFor(o, loadId) });
+  const c = new Collector(video, { key: o.key, loadId, visitor, sender: senderFor(o, loadId) });
+  if (o.context) c.context(o.context);
+  return c;
 }
 
 /** Watch every video on the page, now and as they are added. */

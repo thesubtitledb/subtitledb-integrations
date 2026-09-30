@@ -4,13 +4,20 @@
  * owner never sees, so each of those limits is held here as well as there.
  */
 import { describe, expect, it } from 'vitest';
-import { bucket, encode, MAX_BODY, type Snapshot, type TraceEvent } from '../src/snapshot.js';
+import {
+  bucket,
+  EVENT_KINDS,
+  encode,
+  MAX_BODY,
+  type Snapshot,
+  type TraceEvent,
+} from '../src/snapshot.js';
 import { KEY, LOAD } from './fakes.js';
 
 /** Every name the receiving side accepts. */
 const ACCEPTED = new Set(
   (
-    'v k l p s ps u pa im tm se ep du li st wa un mp sk pu sn sm er mh dr fr fl ' +
+    'v k l p s ps u pa im tm se ep du li st wa un mp cv sk pu sn sm er mh qd ql dr fr fl ' +
     'pl ss sl sb sw si al ev'
   ).split(' '),
 );
@@ -29,14 +36,17 @@ const full: Snapshot = {
   wa: 5_400_000,
   un: 5400,
   mp: 8160,
+  cv: 'ffffffffffffffff',
   sk: 4,
   pu: 2,
   sn: 3,
   sm: 4200,
   mh: 1080,
+  qd: 3,
+  ql: 95_000,
   dr: 12,
   fr: 324_000,
-  fl: 1 | 4 | 32,
+  fl: 1 | 4 | 32 | 256,
   pl: 'videojs',
   ss: 'sdb',
   sl: 'en',
@@ -90,6 +100,35 @@ describe('encode', () => {
     expect(body.pa).toHaveLength(512);
     expect(body.pl).toHaveLength(32);
     expect(body.sl).toHaveLength(16);
+    expect(JSON.parse(encode({ ...base, cv: 'f'.repeat(20) })).cv).toHaveLength(16);
+  });
+
+  it('names only trace kinds the receiving side knows, since one it does not refuses the report', () => {
+    // The receiving side's list, in its order. A kind goes there, and is deployed, first.
+    expect([...EVENT_KINDS]).toEqual([
+      'attach',
+      'source',
+      'manifest',
+      'offered',
+      'first_frame',
+      'playing',
+      'pause',
+      'seek',
+      'stall_start',
+      'stall_end',
+      'track',
+      'level',
+      'error',
+      'ended',
+      'blocked',
+      'rate',
+      'volume',
+      'audio',
+      'fullscreen',
+      'pip',
+      'cast',
+      'frames',
+    ]);
   });
 
   it('keeps a snapshot without a trace under 1 KB, even with the longest path', () => {

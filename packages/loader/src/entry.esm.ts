@@ -9,7 +9,7 @@
 import type { QueryOptions } from '@subtitledb/core';
 import { type LoaderAttachOptions, attach as run, preload as warm } from './attach.js';
 import { setBasePath } from './base.js';
-import { type DebugHandle, debug as watchAll } from './debug.js';
+import { type DebugHandle, type DebugOptions, debug as watchAll } from './debug.js';
 import type { DeferredHandle } from './deferred.js';
 import {
   type GotSubtitle,
@@ -29,8 +29,8 @@ export function attach(target: unknown, options?: LoaderAttachOptions): Deferred
   return run(target, options, here);
 }
 
-export function debug(key: string): DebugHandle {
-  return watchAll(key, here);
+export function debug(key: string, options?: DebugOptions): DebugHandle {
+  return watchAll(key, options, here);
 }
 
 export function preload(): Promise<unknown> {
@@ -48,6 +48,7 @@ export function get(options: QueryOptions): Promise<GotSubtitle | null> {
 export type { LoadedQuery, QueryOptions, QueryResult, QuerySubtitle } from '@subtitledb/core';
 export type {
   DebugHandle,
+  DebugOptions,
   DeferredHandle,
   GotSubtitle,
   LoaderAttachOptions,

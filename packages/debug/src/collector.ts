@@ -10,8 +10,9 @@
  *
  * At the first frame, every ten minutes of playback, on pause, and on anything that
  * could be the last chance: the play ending, an error, a new source, the tab being
- * hidden, and the page going away. On a phone a hidden tab is often discarded
- * without another event, so hidden counts as a possible end. About four per play.
+ * hidden, the page going away, and an autoplay the browser refused. On a phone a
+ * hidden tab is often discarded without another event, so hidden counts as a
+ * possible end. About four per play.
  *
  * ## What is not counted as what
  *
@@ -39,6 +40,11 @@ const MAX_PLAYS = 255;
 const PENDING = 10;
 /** Times a duration must grow, by a second or more, after the first frame to be a live window. */
 const LIVE_AFTER_GROWING = 2;
+/** How long an autoplay that could play through may sit paused at the start before it counts as refused. */
+const BLOCKED_AFTER_MS = 800;
+/** Dropped frames within one window of playback that make a line in the trace. */
+const FRAMES_BURST = 30;
+const FRAMES_WINDOW_MS = 5000;
 
 const MEDIA_ERRORS: Record<number, string> = {
   1: 'aborted',
@@ -87,10 +93,21 @@ type Quality = { droppedVideoFrames: number; totalVideoFrames: number };
 type Watched = HTMLVideoElement & {
   [MARK]?: Collector;
   getVideoPlaybackQuality?: () => Quality;
-  audioTracks?: ArrayLike<{ enabled: boolean; language: string }>;
+  audioTracks?: ArrayLike<{ enabled: boolean; language: string }> & Partial<EventTarget>;
   remote?: EventTarget;
   webkitCurrentPlaybackTargetIsWireless?: boolean;
 };
+
+/** The ways a video leaves the page's own box, each a flag and a line in the trace. */
+type Mode = 'fullscreen' | 'pip' | 'cast';
+
+/** A subtitle on screen: where it came from, its language, its SubtitleDB id, and how the trace names it. */
+interface Shown {
+  src: string;
+  lang: string;
+  id: number;
+  text: string;
+}
 
 /** `m:ss` or `h:mm:ss`. */
 export function clock(seconds: number): string {
@@ -126,26 +143,53 @@ function showingTrack(v: HTMLVideoElement): TextTrack | null {
   return null;
 }
 
+function listed(v: HTMLVideoElement, track: TextTrack): boolean {
+  const list = v.textTracks as TextTrackList | undefined;
+  for (let i = 0; i < (list?.length ?? 0); i++) if (list?.[i] === track) return true;
+  return false;
+}
+
+function audioLanguage(v: Watched): string {
+  let lang = '';
+  for (let i = 0; i < (v.audioTracks?.length ?? 0); i++) {
+    const a = v.audioTracks?.[i];
+    if (a?.enabled) lang = a.language;
+  }
+  return lang;
+}
+
 export class Collector {
   #play: Play | null = null;
   readonly #t0: number;
   #pending: TraceEvent[] = [];
   #ctx: Context = {};
   #chosen: Chosen | null = null;
+  /**
+   * The text track SubtitleDB's pick shows in, when the player shows it in one. Its
+   * mode is how a viewer turning it off can be seen. A player that draws subtitles
+   * itself has none, and its pick is taken to stay on until the next.
+   */
+  #own: TextTrack | null = null;
+  /** How the trace named what was on screen last; '' for nothing. */
+  #shown = '';
   #src = '';
-  #track = '';
   #intentAt: number | null = null;
   #started = false;
   #resumed = false;
-  #playingSince: number | null = null;
   #stallSince: number | null = null;
-  #subSince: number | null = null;
   #lastPos = 0;
   #lastSentAt = Number.NEGATIVE_INFINITY;
   #height = 0;
   /** The duration when last seen, to tell a live window moving on from a film. */
   #dur = Number.NaN;
   #base = { dropped: 0, frames: 0 };
+  /** Where the last look for a burst of dropped frames left off. */
+  #burst = { at: 0, dropped: 0, frames: 0 };
+  #blockTimer: ReturnType<typeof setTimeout> | undefined;
+  #rate: number;
+  #quiet: boolean;
+  #audio: string;
+  readonly #modes: Record<Mode, boolean> = { fullscreen: false, pip: false, cast: false };
   readonly #off: (() => void)[] = [];
   readonly #now: () => number;
   readonly #epoch: () => number;
@@ -167,7 +211,10 @@ export class Collector {
     (video as Watched)[MARK] = this;
 
     const v = video as Watched;
-    const on = (target: EventTarget | null | undefined, type: string, fn: () => void) => {
+    this.#rate = v.playbackRate;
+    this.#quiet = v.muted || v.volume === 0;
+    this.#audio = audioLanguage(v);
+    const on = (target: Partial<EventTarget> | null | undefined, type: string, fn: () => void) => {
       if (!target?.addEventListener) return;
       const safe = () => {
         try {
@@ -177,13 +224,15 @@ export class Collector {
         }
       };
       target.addEventListener(type, safe);
-      this.#off.push(() => target.removeEventListener(type, safe));
+      this.#off.push(() => target.removeEventListener?.(type, safe));
     };
 
     on(v, 'loadstart', () => this.#onSource());
     on(v, 'emptied', () => this.#close());
     on(v, 'loadedmetadata', () => this.#onMetadata());
     on(v, 'durationchange', () => this.#onDuration());
+    on(v, 'canplay', () => this.#armBlocked());
+    on(v, 'canplaythrough', () => this.#armBlocked());
     on(v, 'play', () => this.#onPlay());
     on(v, 'playing', () => this.#onPlaying());
     on(v, 'timeupdate', () => this.#onTime());
@@ -194,14 +243,20 @@ export class Collector {
     on(v, 'ended', () => this.#onEnded());
     on(v, 'error', () => this.#onError());
     on(v, 'resize', () => this.#onResize());
-    on(v, 'volumechange', () => this.#checkMuted());
-    on(v, 'enterpictureinpicture', () => this.#flag(FLAGS.pip));
-    on(v, 'webkitbeginfullscreen', () => this.#flag(FLAGS.fullscreen));
-    on(v, 'webkitcurrentplaybacktargetiswirelesschanged', () => {
-      if (v.webkitCurrentPlaybackTargetIsWireless) this.#flag(FLAGS.cast);
-    });
-    on(v.remote, 'connect', () => this.#flag(FLAGS.cast));
-    on(v.textTracks as unknown as EventTarget, 'change', () => this.#onTracks());
+    on(v, 'ratechange', () => this.#onRate());
+    on(v, 'volumechange', () => this.#onVolume());
+    on(v, 'enterpictureinpicture', () => this.#mode('pip', true));
+    on(v, 'leavepictureinpicture', () => this.#mode('pip', false));
+    on(v, 'webkitbeginfullscreen', () => this.#mode('fullscreen', true));
+    on(v, 'webkitendfullscreen', () => this.#mode('fullscreen', false));
+    on(v, 'webkitcurrentplaybacktargetiswirelesschanged', () =>
+      this.#mode('cast', !!v.webkitCurrentPlaybackTargetIsWireless),
+    );
+    on(v.remote, 'connect', () => this.#mode('cast', true));
+    on(v.remote, 'disconnect', () => this.#mode('cast', false));
+    on(v.textTracks as unknown as EventTarget, 'change', () => this.#onSubtitle());
+    on(v.textTracks as unknown as EventTarget, 'removetrack', () => this.#onSubtitle());
+    on(v.audioTracks, 'change', () => this.#onAudio());
     on(this.#doc, 'fullscreenchange', () => this.#onFullscreen());
     on(this.#doc, 'webkitfullscreenchange', () => this.#onFullscreen());
     on(this.#doc, 'visibilitychange', () => {
@@ -216,6 +271,8 @@ export class Collector {
     if (!v.paused && !v.ended && v.readyState >= 3) {
       this.#open();
       this.#firstFrame(false);
+    } else if (v.readyState >= 3) {
+      this.#armBlocked();
     }
   }
 
@@ -232,17 +289,15 @@ export class Collector {
   /** The subtitle SubtitleDB handed the player, from the loader's onSelected. */
   select(chosen: Chosen | null): void {
     this.#chosen = chosen;
-    this.record(
-      'track',
-      chosen
-        ? `SubtitleDB ${chosen.language} #${chosen.id}${chosen.source === 'ai' ? ' (AI)' : ''}`
-        : 'off',
-    );
-    this.#reconcile();
+    // The player has just shown it, so a track showing now in its language is its track.
+    const t = chosen ? showingTrack(this.video) : null;
+    this.#own = t && t.language === chosen?.language ? t : null;
+    this.#onSubtitle();
   }
 
   /** The final snapshot, then let go of the element. */
   stop(): void {
+    clearTimeout(this.#blockTimer);
     this.#close();
     for (const undo of this.#off.splice(0)) undo();
     const v = this.video as Watched;
@@ -256,6 +311,9 @@ export class Collector {
     if (!src || src === this.#src) return;
     this.#src = src;
     this.record('source', describeSource(src));
+    // A new source can be refused autoplay afresh.
+    clearTimeout(this.#blockTimer);
+    this.#blockTimer = undefined;
   }
 
   #onMetadata(): void {
@@ -281,6 +339,36 @@ export class Collector {
       if (play.grew >= LIVE_AFTER_GROWING) play.live = true;
     }
     this.#dur = d;
+  }
+
+  /**
+   * A refused autoplay fires no event at all: the element just stays paused at the
+   * start. So once it could play through, which is when an allowed autoplay begins,
+   * wait a moment and look. A play() from the page's own script that the browser
+   * refuses cannot be seen from here.
+   */
+  #armBlocked(): void {
+    if (!this.video.autoplay || this.#started || this.#blockTimer) return;
+    this.#blockTimer = setTimeout(() => {
+      this.#blockTimer = undefined;
+      try {
+        this.#checkBlocked();
+      } catch {
+        // Never into the host page.
+      }
+    }, BLOCKED_AFTER_MS);
+  }
+
+  #checkBlocked(): void {
+    const v = this.video;
+    if (this.#started || !v.paused || v.ended || v.currentTime > 0 || v.readyState < 4) return;
+    if (!this.#play) this.#open();
+    const play = this.#play;
+    if (!play || play.flags & FLAGS.blocked) return;
+    play.flags |= FLAGS.blocked;
+    this.record('blocked', 'autoplay refused');
+    // The viewer may never press play, so this could be the play's last word.
+    this.#send(true);
   }
 
   #onPlay(): void {
@@ -309,12 +397,13 @@ export class Collector {
       if (!this.#started) this.#firstFrame(true);
       else if (this.#stallSince !== null) this.#endStall();
     }
-    if (this.#playingSince !== null && pos > from && pos - from < MAX_TICK_S) {
+    if (play.watch.since !== null && pos > from && pos - from < MAX_TICK_S) {
       // Every second the playhead passed through since the last tick, so a sparse
       // tick in a background tab misses none. 10.0 exactly has only finished second
       // 9. A bigger jump is a seek, and a seek's seconds were not watched.
       for (let s = Math.floor(from); s < Math.ceil(pos); s++) play.seconds.add(s);
       play.maxPos = Math.max(play.maxPos, Math.floor(pos));
+      this.#checkFrames();
     }
     this.#lastPos = pos;
     this.#reconcile();
@@ -374,28 +463,82 @@ export class Collector {
 
   #onResize(): void {
     const h = this.video.videoHeight;
+    const play = this.#play;
     if (!h) return;
-    if (this.#play && this.#started && this.#height && h !== this.#height) {
+    if (play && this.#started && this.#height && h !== this.#height) {
       this.record('level', `${this.#height}p to ${h}p`);
+      if (h < this.#height) play.picDowns++;
     }
     this.#height = h;
-    if (this.#play) this.#play.maxHeight = Math.max(this.#play.maxHeight, h);
+    if (play) play.maxHeight = Math.max(play.maxHeight, h);
+    this.#reconcile();
   }
 
-  #onTracks(): void {
-    const t = showingTrack(this.video);
-    const id = t ? `${t.language}|${t.label}` : '';
-    if (id === this.#track) return;
-    this.#track = id;
-    if (this.#play) this.#play.subSwitches++;
-    this.record('track', t ? t.label || t.language || 'on' : 'off');
-    this.#reconcile();
+  #onRate(): void {
+    const r = this.video.playbackRate;
+    if (r === this.#rate) return;
+    this.#rate = r;
+    this.record('rate', `${Math.round(r * 100) / 100}x`);
+    if (r !== 1) this.#flag(FLAGS.rate);
+  }
+
+  #onVolume(): void {
+    const v = this.video;
+    const quiet = v.muted || v.volume === 0;
+    if (quiet !== this.#quiet) {
+      this.#quiet = quiet;
+      this.record('volume', quiet ? 'muted' : `on at ${Math.round(v.volume * 100)}%`);
+    }
+    this.#checkMuted();
+  }
+
+  #onAudio(): void {
+    const lang = audioLanguage(this.video as Watched);
+    if (lang === this.#audio) return;
+    this.#audio = lang;
+    this.record('audio', lang || 'no language');
   }
 
   #onFullscreen(): void {
     const doc = this.#doc as (Document & { webkitFullscreenElement?: Element | null }) | null;
     const el = doc?.fullscreenElement ?? doc?.webkitFullscreenElement ?? null;
-    if (el && (el === this.video || el.contains?.(this.video))) this.#flag(FLAGS.fullscreen);
+    this.#mode('fullscreen', !!el && (el === this.video || !!el.contains?.(this.video)));
+  }
+
+  #mode(mode: Mode, on: boolean): void {
+    if (this.#modes[mode] === on) return;
+    this.#modes[mode] = on;
+    this.record(mode, on ? 'on' : 'off');
+    if (on) this.#flag(FLAGS[mode]);
+  }
+
+  /**
+   * What is on screen: SubtitleDB's pick while its track shows, or while it has no
+   * track to watch; otherwise a showing track of the page's own; otherwise nothing.
+   */
+  #onScreen(): Shown | null {
+    const c = this.#chosen;
+    const own = this.#own;
+    const v = this.video;
+    if (c && (!own || (own.mode === 'showing' && listed(v, own)))) {
+      const text = `SubtitleDB ${c.language} #${c.id}${c.source === 'ai' ? ' (AI)' : ''}`;
+      return { src: c.source, lang: c.language, id: c.id, text };
+    }
+    const t = showingTrack(v);
+    return t ? { src: 'page', lang: t.language, id: 0, text: t.label || t.language || 'on' } : null;
+  }
+
+  /**
+   * The subtitle on screen may have changed. A change is a line in the trace, and a
+   * switch once the play has started: turning subtitles on, off, or to another.
+   */
+  #onSubtitle(): void {
+    const text = this.#onScreen()?.text ?? '';
+    if (text === this.#shown) return;
+    this.#shown = text;
+    if (this.#play && this.#started) this.#play.subSwitches++;
+    this.record('track', text || 'off');
+    this.#reconcile();
   }
 
   // ---- plays ------------------------------------------------------------------
@@ -416,11 +559,18 @@ export class Collector {
     // Started with no click or key press in the last moments: autoplay, whether by
     // the attribute or by the page's own script.
     if (activation ? !activation.isActive : this.video.autoplay) this.#flag(FLAGS.autoplay);
+    // Whatever was already so before this play opened is so for it too.
+    for (const mode of Object.keys(this.#modes) as Mode[]) {
+      if (this.#modes[mode]) this.#flag(FLAGS[mode]);
+    }
+    if (this.#rate !== 1) this.#flag(FLAGS.rate);
   }
 
   #firstFrame(measured: boolean): void {
     const play = this.#play;
     if (!play) return;
+    // What is on screen as the play begins is where it starts, not a switch.
+    this.#onSubtitle();
     this.#started = true;
     play.flags |= FLAGS.started;
     const t = this.#now();
@@ -431,9 +581,10 @@ export class Collector {
     this.record('first_frame', play.startupMs ? `after ${play.startupMs} ms` : '');
     this.#lastPos = this.video.currentTime;
     this.#dur = this.video.duration;
+    const q = (this.video as Watched).getVideoPlaybackQuality?.();
+    this.#burst = { at: t, dropped: q?.droppedVideoFrames ?? 0, frames: q?.totalVideoFrames ?? 0 };
     this.#onResize();
     this.#checkMuted();
-    this.#onTracks();
     this.#reconcile();
     this.#send(false, true);
   }
@@ -461,32 +612,40 @@ export class Collector {
   }
 
   /**
-   * Start or stop the watch and subtitle clocks to match the element. Called after
-   * every event, so no single event has to know which clock it affects.
+   * Start or stop the play's clocks to match the element. Called after every event,
+   * so no single event has to know which clock it affects.
    */
   #reconcile(stopAll = false): void {
     const play = this.#play;
+    if (!play) return;
     const v = this.video;
     const t = this.#now();
     const on =
-      !stopAll &&
-      play !== null &&
-      this.#started &&
-      !v.paused &&
-      !v.ended &&
-      !v.seeking &&
-      this.#stallSince === null;
-    if (on && this.#playingSince === null) this.#playingSince = t;
-    if (!on && this.#playingSince !== null) {
-      if (play) play.watchMs += t - this.#playingSince;
-      this.#playingSince = null;
+      !stopAll && this.#started && !v.paused && !v.ended && !v.seeking && this.#stallSince === null;
+    play.watch.set(on, t);
+    const shown = on ? this.#onScreen() : null;
+    play.sub.set(shown !== null, t);
+    if (shown) {
+      play.subSource = shown.src;
+      play.subLang = shown.lang;
+      play.subId = shown.id;
     }
-    const sub = on && (this.#chosen !== null || showingTrack(v) !== null);
-    if (sub && this.#subSince === null) this.#subSince = t;
-    if (!sub && this.#subSince !== null) {
-      if (play) play.subMs += t - this.#subSince;
-      this.#subSince = null;
+    play.low.set(on && this.#height > 0 && this.#height < play.maxHeight, t);
+  }
+
+  /** A burst of dropped frames: FRAMES_BURST or more within one window of playback. */
+  #checkFrames(): void {
+    const t = this.#now();
+    const b = this.#burst;
+    if (t - b.at < FRAMES_WINDOW_MS) return;
+    const q = (this.video as Watched).getVideoPlaybackQuality?.();
+    if (!q) return;
+    const n = q.droppedVideoFrames - b.dropped;
+    if (n >= FRAMES_BURST) {
+      const of = q.totalVideoFrames - b.frames;
+      this.record('frames', `${n} of ${of} dropped by ${clock(this.video.currentTime)}`);
     }
+    this.#burst = { at: t, dropped: q.droppedVideoFrames, frames: q.totalVideoFrames };
   }
 
   #flag(bit: number): void {
@@ -519,15 +678,6 @@ export class Collector {
     if (!last && !force && t - this.#lastSentAt < MIN_GAP_MS) return;
     if (!last && play.seq >= MAX_SNAPSHOTS) return;
 
-    // Fold the running clocks in without stopping them.
-    if (this.#playingSince !== null) {
-      play.watchMs += t - this.#playingSince;
-      this.#playingSince = t;
-    }
-    if (this.#subSince !== null) {
-      play.subMs += t - this.#subSince;
-      this.#subSince = t;
-    }
     const v = this.video as Watched;
     const q = v.getVideoPlaybackQuality?.();
     if (q) {
@@ -536,13 +686,7 @@ export class Collector {
     }
     const d = v.duration;
     const live = play.live || d === Number.POSITIVE_INFINITY;
-    const shown = showingTrack(v);
-    const chosen = this.#chosen;
-    let audio = '';
-    for (let i = 0; i < (v.audioTracks?.length ?? 0); i++) {
-      const a = v.audioTracks?.[i];
-      if (a?.enabled) audio = a.language;
-    }
+    const du = live || !Number.isFinite(d) ? 0 : Math.round(d);
     const where = (globalThis as { location?: Location }).location;
 
     const snap: Snapshot = {
@@ -558,28 +702,31 @@ export class Collector {
       tm: this.#ctx.tmdb ?? 0,
       se: this.#ctx.season ?? 0,
       ep: this.#ctx.episode ?? 0,
-      du: live || !Number.isFinite(d) ? 0 : Math.round(d),
+      du,
       li: live ? 1 : 0,
       st: play.startupMs,
-      wa: play.watchMs,
+      wa: play.watch.read(t),
       un: play.seconds.count,
       mp: play.maxPos,
+      cv: play.seconds.parts(du),
       sk: play.seeks,
       pu: play.pauses,
       sn: play.stalls,
       sm: play.stallMs + (this.#stallSince === null ? 0 : t - this.#stallSince),
       er: play.error,
       mh: play.maxHeight,
+      qd: play.picDowns,
+      ql: play.low.read(t),
       dr: play.dropped,
       fr: play.frames,
       fl: play.flags,
       pl: this.#ctx.player ?? '',
-      ss: chosen ? chosen.source : shown ? 'page' : '',
-      sl: chosen ? chosen.language : (shown?.language ?? ''),
-      sb: play.subMs,
+      ss: play.subSource,
+      sl: play.subLang,
+      sb: play.sub.read(t),
       sw: play.subSwitches,
-      si: chosen?.id ?? 0,
-      al: audio,
+      si: play.subId,
+      al: audioLanguage(v),
     };
     if (last && this.#o.sender.wantsTrace(play.problem, this.#o.loadId, play.no)) {
       snap.ev = play.events;
