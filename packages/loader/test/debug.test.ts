@@ -60,8 +60,12 @@ describe('the debug option', () => {
 
   it('with one, it loads beside the engine and watches the element the attach settled on', async () => {
     const { attach, engine, ANTISPAM_ID, chunk } = await fresh();
+    const { setBasePath } = await import('../src/base.js');
     const el = video();
     const handle = attach(el, { debug: KEY });
+    // Anything asked for from here on comes from a release with no debugger in it, so
+    // the debugger has to have been asked for already, beside the engine.
+    setBasePath(new URL('./fixtures/no-debug/', import.meta.url).href);
     await handle.ready;
     const d = chunk;
     await vi.waitFor(() => expect(d.calls).toHaveLength(1));
@@ -100,6 +104,28 @@ describe('the debug option', () => {
     engine.calls[0]?.options.onSelected(later);
     expect(d.calls[0]?.selected).toEqual([early, later]);
     expect(seen).toEqual([resolved, early, later]);
+  });
+
+  it("a debugger that throws never stops the page's own handlers, or its destroy", async () => {
+    const { attach, engine } = await loader(
+      new URL('./fixtures/broken-debug/', import.meta.url).href,
+    );
+    const broken = await import('./fixtures/broken-debug/debug.mjs');
+    const seen: unknown[] = [];
+    const handle = attach(video(), {
+      debug: KEY,
+      onResolved: (r) => seen.push(r),
+      onSelected: (s) => seen.push(s),
+    });
+    await handle.ready;
+    await vi.waitFor(() => expect(broken.calls).toHaveLength(1));
+    const resolved = { hint: {}, title: null, tier: 'explicit-imdb', candidates: [] };
+    const picked = { candidate: { subtitle: { id: 7, language: 'fr' }, synthetic: false } };
+    engine.calls[0]?.options.onResolved(resolved);
+    engine.calls[0]?.options.onSelected(picked);
+    expect(seen).toEqual([resolved, picked]);
+    handle.destroy();
+    expect(engine.order).toEqual(['stop', 'destroy']);
   });
 
   it('destroy sends the final snapshot before the element is taken away', async () => {

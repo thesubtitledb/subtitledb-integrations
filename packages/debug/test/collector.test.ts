@@ -5,7 +5,7 @@
  * into the play before it, a pause invented by the end of the media.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetPlays } from '../src/collector.js';
+import { describeSource, resetPlays } from '../src/collector.js';
 import { MAX_EVENTS } from '../src/play.js';
 import { bucket, FLAGS, type Snapshot } from '../src/snapshot.js';
 import {
@@ -29,6 +29,7 @@ import {
 } from './fakes.js';
 
 beforeEach(() => resetPlays());
+afterEach(() => vi.unstubAllGlobals());
 
 /** Every field that must never go down between two snapshots of one play. */
 const MONOTONIC = [
@@ -101,6 +102,34 @@ describe('a play', () => {
     const s = last(r);
     expect(s.st).toBe(16);
     expect(s.ev?.find((e) => e.k === 'first_frame')?.d).toBe('after 16 ms');
+  });
+
+  it('takes the playhead moving as the first frame and the end of a stall, where no playing comes', () => {
+    // Some engines never send playing: at the start, after a stall, or on a replay.
+    const r = rig();
+    load(r, 60);
+    r.video.paused = false;
+    r.video.emit('play');
+    r.advance(250);
+    playFor(r, 5);
+    r.video.emit('waiting');
+    r.advance(2000);
+    playFor(r, 5);
+    pause(r);
+    const s = last(r);
+    expect((s.fl ?? 0) & FLAGS.started).toBe(FLAGS.started);
+    // Each is seen at the first tick after it, 250 ms on.
+    expect([s.st, s.sn, s.sm, s.wa]).toEqual([500, 1, 2250, 9500]);
+
+    // A replay moves on from 0, far short of where the last play ended.
+    end(r);
+    r.video.currentTime = 0;
+    r.video.paused = false;
+    r.video.ended = false;
+    r.video.emit('play');
+    playFor(r, 5);
+    pause(r);
+    expect(last(r)).toMatchObject({ p: 2, st: 250, wa: 4750 });
   });
 
   it('counts watch time as time actually playing: not paused, stalled or seeking', () => {
@@ -217,6 +246,26 @@ describe('a play', () => {
     expect(r.sent.filter((s) => s.p === 2)[0]?.s).toBe(0);
   });
 
+  it('starts a new play for a new source, after the last report of the old one', () => {
+    const r = rig();
+    load(r, 600);
+    play(r);
+    playFor(r, 10);
+    // A new src mid-play: the browser empties the element, then loads the new one.
+    r.video.currentSrc = 'https://media.example.test/films/reloaded.mp4';
+    r.video.paused = true;
+    r.video.currentTime = 0;
+    r.video.emit('emptied');
+    load(r, 300);
+    play(r, 200);
+    playFor(r, 5);
+    pause(r);
+    const old = r.sent.filter((s) => s.p === 1).at(-1);
+    expect([old?.s, old?.wa, (old?.fl ?? 0) & FLAGS.ended]).toEqual([1, 10_000, 0]);
+    expect(r.sent.filter((s) => s.p === 2).map((s) => s.s)).toEqual([0, 1]);
+    expect(last(r)).toMatchObject({ p: 2, st: 200, wa: 5000, un: 5, du: 300 });
+  });
+
   it('does not count the pause the end of the media causes', () => {
     const r = rig();
     load(r, 10);
@@ -260,6 +309,20 @@ describe('a play', () => {
     play(b);
     expect(a.sent[0]?.p).toBe(1);
     expect(b.sent[0]?.p).toBe(2);
+  });
+
+  it('numbers no more than 255 plays a page, rather than file the 256th as the 255th', () => {
+    // The play number is one byte on the wire: a 256th would be clamped onto the 255th
+    // and folded into it.
+    const r = rig();
+    load(r, 10);
+    for (let i = 0; i < 256; i++) {
+      play(r);
+      end(r);
+    }
+    // A first frame and an end for each of 255 plays, and nothing for the 256th.
+    expect(r.sent).toHaveLength(510);
+    expect(r.sent.filter((s) => s.p === 255).map((s) => s.s)).toEqual([0, 1]);
   });
 
   it('sets each flag the first time it happens and never clears it', () => {
@@ -329,6 +392,20 @@ describe('snapshots', () => {
     expect(last(r).wa).toBe(5000);
   });
 
+  it('count a stall that is still going, up to the moment each goes', () => {
+    const r = rig();
+    load(r);
+    play(r);
+    playFor(r, 5);
+    r.video.emit('waiting');
+    r.advance(3000);
+    hide(r);
+    expect([last(r).sn, last(r).sm]).toEqual([1, 3000]);
+    r.advance(1000);
+    r.win.dispatchEvent(new Event('pagehide'));
+    expect([last(r).sn, last(r).sm]).toEqual([1, 4000]);
+  });
+
   it('a pause right after another snapshot waits for the next one', () => {
     const r = rig();
     load(r);
@@ -339,6 +416,23 @@ describe('snapshots', () => {
     r.advance(500);
     pause(r);
     expect(r.sent).toHaveLength(1);
+  });
+
+  it('stop at 500 a play, but for one that could be its last', () => {
+    // A viewer mashing pause cannot turn one play into thousands of posts.
+    const r = rig();
+    load(r);
+    play(r);
+    for (let i = 0; i < 600; i++) {
+      r.advance(2000);
+      pause(r);
+      resume(r);
+    }
+    expect(r.sent).toHaveLength(500);
+    hide(r);
+    expect(r.sent).toHaveLength(501);
+    // The counting goes on; only the posts stop.
+    expect([last(r).s, last(r).pu]).toEqual([500, 600]);
   });
 
   it('never lets a counter go down across a play', () => {
@@ -371,6 +465,14 @@ describe('snapshots', () => {
     expect(body).not.toContain('s3cret');
     expect(body).not.toContain('token');
     expect(last(r).ev?.find((e) => e.k === 'source')?.d).toBe(
+      'media.example.test/films/matrix.mp4',
+    );
+  });
+
+  it('name a blob or inline source by kind, and never carry a user name or password', () => {
+    expect(describeSource('blob:https://www.example.test/6f1c2b3a')).toBe('media source (blob)');
+    expect(describeSource('data:video/mp4;base64,AAAAIGZ0eXBpc29t')).toBe('inline data');
+    expect(describeSource('https://viewer:s3cret@media.example.test/films/matrix.mp4')).toBe(
       'media.example.test/films/matrix.mp4',
     );
   });
@@ -484,7 +586,13 @@ describe('traces', () => {
     end(r);
     const ev = last(r).ev ?? [];
     expect(ev.length).toBeLessThanOrEqual(MAX_EVENTS);
-    expect(ev[0]?.k).toBe('attach');
+    // The first 30 whole: the attach, source, manifest and first frame, then the first
+    // 13 pauses and resumes, 2.5 s apart.
+    const began = ['attach 0', 'source 0', 'manifest 0', 'first_frame 500'];
+    for (let i = 0; i < 13; i++) {
+      began.push(`pause ${500 + 2500 * i}`, `playing ${3000 + 2500 * i}`);
+    }
+    expect(ev.slice(0, 30).map((e) => `${e.k} ${e.t}`)).toEqual(began);
     expect(ev[ev.length - 1]?.k).toBe('ended');
   });
 });
@@ -552,6 +660,8 @@ describe('an autoplay the browser refused', () => {
     playFor(r, 5);
     pause(r);
     expect(r.sent.every((s) => s.p === 1)).toBe(true);
+    // Refused, first frame, pause: the first frame goes however soon after the last.
+    expect(r.sent.map((s) => s.s)).toEqual([0, 1, 2]);
     expect(r.sent.filter((s) => s.ev?.some((e) => e.k === 'blocked'))).toHaveLength(1);
     const s = last(r);
     expect((s.fl ?? 0) & (FLAGS.blocked | FLAGS.started)).toBe(FLAGS.blocked | FLAGS.started);
@@ -580,6 +690,16 @@ describe('an autoplay the browser refused', () => {
     asked.video.emit('canplaythrough');
     vi.advanceTimersByTime(800);
     expect(asked.sent).toHaveLength(0);
+  });
+
+  it('is seen on a video already sitting refused when it is first watched', () => {
+    const r = rig((v) => {
+      v.autoplay = true;
+      v.readyState = 4;
+    });
+    vi.advanceTimersByTime(800);
+    expect(r.sent).toHaveLength(1);
+    expect((last(r).fl ?? 0) & FLAGS.blocked).toBe(FLAGS.blocked);
   });
 });
 
@@ -628,6 +748,30 @@ describe('what else a play does', () => {
     expect((last(r).fl ?? 0) & all).toBe(all);
   });
 
+  it('sees fullscreen of the player around the video, the iPhone kind, and Remote Playback', async () => {
+    const remote = new EventTarget();
+    const r = await traced((v) => Object.assign(v, { remote }));
+    const v = r.video;
+    // A player puts its own box in fullscreen, with the video inside it.
+    r.doc.fullscreenElement = { contains: (node: unknown) => node === v };
+    r.doc.dispatchEvent(new Event('fullscreenchange'));
+    r.doc.fullscreenElement = { contains: () => false };
+    r.doc.dispatchEvent(new Event('fullscreenchange'));
+    v.emit('webkitbeginfullscreen');
+    v.emit('webkitendfullscreen');
+    remote.dispatchEvent(new Event('connect'));
+    remote.dispatchEvent(new Event('disconnect'));
+    end(r);
+    expect(lines(r, 'fullscreen', 'cast')).toEqual([
+      'fullscreen on',
+      'fullscreen off',
+      'fullscreen on',
+      'fullscreen off',
+      'cast on',
+      'cast off',
+    ]);
+  });
+
   it('sets a mode that was already on when the play opened', () => {
     const r = rig();
     load(r);
@@ -635,6 +779,38 @@ describe('what else a play does', () => {
     r.doc.dispatchEvent(new Event('fullscreenchange'));
     play(r);
     expect((last(r).fl ?? 0) & FLAGS.fullscreen).toBe(FLAGS.fullscreen);
+  });
+
+  it('flags what was already so when the play opened: muted, a speed other than 1', () => {
+    const r = rig((v) => {
+      v.muted = true;
+    });
+    load(r);
+    r.video.playbackRate = 1.5;
+    r.video.emit('ratechange');
+    play(r);
+    const both = FLAGS.muted | FLAGS.rate;
+    expect((r.sent[0]?.fl ?? 0) & both).toBe(both);
+  });
+
+  it('flags as autoplay a play begun with no click or key press, whatever began it', () => {
+    for (const [userActivation, autoplay, flagged] of [
+      // A play() from the page's own script, with no autoplay attribute.
+      [{ isActive: false }, false, FLAGS.autoplay],
+      // The attribute, but the viewer had just pressed play.
+      [{ isActive: true }, true, 0],
+      // Where the browser cannot say, the attribute alone.
+      [undefined, true, FLAGS.autoplay],
+      [undefined, false, 0],
+    ] as const) {
+      vi.stubGlobal('navigator', { userActivation });
+      const r = rig((v) => {
+        v.autoplay = autoplay;
+      });
+      load(r);
+      play(r);
+      expect((last(r).fl ?? 0) & FLAGS.autoplay).toBe(flagged);
+    }
   });
 
   it('traces the audio language changing, where the browser lists audio tracks', async () => {
@@ -782,12 +958,13 @@ describe('the subtitle on screen', () => {
   it('takes a pick the player draws itself as on, having no track to watch', () => {
     const r = rig();
     load(r);
-    r.collector.select({ id: 9, language: 'es', source: 'ai' });
+    r.collector.select({ id: -1, language: 'es', source: 'ai' });
     play(r);
     playFor(r, 5);
     pause(r);
     const s = last(r);
-    expect([s.ss, s.sl, s.si, s.sb]).toEqual(['ai', 'es', 9, 5000]);
+    // An on-device transcription has no SubtitleDB id: -1, which is not sent.
+    expect([s.ss, s.sl, s.si, s.sb]).toEqual(['ai', 'es', undefined, 5000]);
   });
 
   it('takes a pick whose track the player removed as off', () => {

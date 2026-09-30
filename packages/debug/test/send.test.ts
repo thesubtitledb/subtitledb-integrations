@@ -68,6 +68,20 @@ describe('the post', () => {
     expect(beacon).not.toHaveBeenCalled();
   });
 
+  it('nor after a post that failed or was refused: that one waits in the outbox', async () => {
+    const n = net();
+    const storage = memoryStorage();
+    const beacon = vi.fn(() => true);
+    n.state.fail = () => true;
+    new Sender({ fetch: n.fetch, beacon, storage }).send('{"s":0}', 'A:1');
+    n.state.fail = () => false;
+    n.state.ok = false;
+    new Sender({ fetch: n.fetch, beacon, storage }).send('{"s":0}', 'A:2');
+    await settle();
+    expect(beacon).not.toHaveBeenCalled();
+    expect(outbox(storage).map((e) => e.i)).toEqual(['A:1', 'A:2']);
+  });
+
   it('uses a beacon where fetch is missing, and one where it throws before sending', async () => {
     vi.stubGlobal('fetch', undefined);
     const storage = memoryStorage();

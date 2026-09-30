@@ -183,6 +183,11 @@ function compact(s: Snapshot): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, raw] of Object.entries(s)) {
     let value: unknown = raw;
+    // A page's hint can say "3" for 3. Anything but a number where the receiving side
+    // expects one gets the whole post refused, so take the number or leave it out.
+    if (name in MAX && typeof value !== 'number') {
+      value = typeof value === 'string' ? Number(value) : 0;
+    }
     if (typeof value === 'number') {
       value = Math.min(Math.max(Math.floor(value) || 0, 0), MAX[name] ?? Number.MAX_SAFE_INTEGER);
     } else if (typeof value === 'string') {

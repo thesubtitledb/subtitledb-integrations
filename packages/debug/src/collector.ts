@@ -551,6 +551,9 @@ export class Collector {
     this.#resumed = false;
     this.#intentAt = null;
     this.#lastSentAt = Number.NEGATIVE_INFINITY;
+    // Where this play starts. Left where the last one ended, a replay on an engine that
+    // never says `playing` would not be seen to start until it got that far again.
+    this.#lastPos = this.video.currentTime;
     for (const e of this.#pending.splice(0)) play.events.push(e);
     const q = (this.video as Watched).getVideoPlaybackQuality?.();
     this.#base = { dropped: q?.droppedVideoFrames ?? 0, frames: q?.totalVideoFrames ?? 0 };

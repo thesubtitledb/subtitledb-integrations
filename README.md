@@ -452,7 +452,7 @@ and a build attestation signed by GitHub.
 The CDN serves the release files unchanged, so a file can be checked from either place:
 
 ```bash
-curl -sO https://cdn.thesubtitledb.org/v/0.8.0/subtitle-helper.js
+curl -sO https://cdn.thesubtitledb.org/v/0.8.1/subtitle-helper.js
 gh attestation verify subtitle-helper.js --repo thesubtitledb/subtitledb-integrations
 ```
 

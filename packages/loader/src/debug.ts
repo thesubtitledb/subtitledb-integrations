@@ -83,12 +83,12 @@ export function debugAttach(
   const { onResolved, onSelected } = opts;
   opts.onResolved = (r) => {
     resolved = r;
-    watch?.resolved(r);
+    quietly(() => watch?.resolved(r));
     onResolved?.(r);
   };
   opts.onSelected = (s) => {
     selected = s;
-    watch?.selected(s);
+    quietly(() => watch?.selected(s));
     onSelected?.(s);
   };
 
@@ -98,7 +98,7 @@ export function debugAttach(
     handle.destroy = () => {
       // The final snapshot goes before the handle takes the element away.
       stopped = true;
-      watch?.stop();
+      quietly(() => watch?.stop());
       destroy();
     };
     const start = (h: AttachHandle) =>
@@ -112,4 +112,13 @@ export function debugAttach(
     // A failed attach has already said so through onError; a failed chunk, above.
     handle.ready.then(start).catch(() => {});
   };
+}
+
+/** A call into the debugger. If it throws, the page's own code after it still runs. */
+function quietly(call: () => void): void {
+  try {
+    call();
+  } catch {
+    // A bug in the debugger must not become a bug in the page.
+  }
 }

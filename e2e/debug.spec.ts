@@ -133,7 +133,8 @@ test('the debug option reports a play as it goes: first frame, seek, pause, hidd
   const first = reports[0] as Report;
   expect(first).toMatchObject({ v: 1, k: KEY, p: 1, s: 0 });
   expect(first.l).toMatch(/^[0-9A-F]{16}$/);
-  expect((first.fl ?? 0) & 1).toBe(1);
+  // Started, and muted from the start.
+  expect((first.fl ?? 0) & (1 | 32)).toBe(1 | 32);
   expect(Number(first.st)).toBeGreaterThan(0);
   // The sample is recorded in a browser, which writes no length into the file, so the
   // browser playing it may call its length unknown, as it does a live stream's.
@@ -162,7 +163,7 @@ test('the debug option reports a play as it goes: first frame, seek, pause, hidd
   const steps = hidden.ev ?? [];
   expect(steps[0]?.k).toBe('attach');
   expect(steps.map((e) => e.k)).toEqual(
-    expect.arrayContaining(['source', 'manifest', 'first_frame', 'seek', 'pause']),
+    expect.arrayContaining(['source', 'manifest', 'offered', 'first_frame', 'seek', 'pause']),
   );
   expect(steps.find((e) => e.k === 'source')?.d).toMatch(/^localhost:\d+\/media\/sample\.webm$/);
   // What SubtitleDB matched rides along, from the attach's own resolve.
@@ -191,10 +192,10 @@ test('SubtitleDB.debug watches every video, including one added later', async ({
   await open(page);
   const ready = await page.evaluate(async (key) => {
     const w = window as never as {
-      SubtitleDB: { debug(k: string): { ready: Promise<void> } };
+      SubtitleDB: { debug(k: string, o: unknown): { ready: Promise<void> } };
       __dbg: unknown;
     };
-    const h = w.SubtitleDB.debug(key);
+    const h = w.SubtitleDB.debug(key, { hint: { imdbId: 'tt0133093' } });
     w.__dbg = h;
     await h.ready;
     return true;
@@ -218,9 +219,8 @@ test('SubtitleDB.debug watches every video, including one added later', async ({
   );
   await page.evaluate(() => (document.getElementById('later') as HTMLVideoElement).play());
   await expect.poll(() => reports.length, { timeout: 20_000 }).toBeGreaterThan(0);
-  expect(reports[0]).toMatchObject({ k: KEY, s: 0 });
-  // Not attached through SubtitleDB, so nothing about what is playing.
-  expect(reports[0]?.im).toBeUndefined();
+  // Never attached, and filed under what the page's hint says is playing.
+  expect(reports[0]).toMatchObject({ k: KEY, s: 0, im: 133093 });
 
   // A clean play under the default rule sends no trace, even when it ends.
   await page.evaluate(() => {
@@ -228,6 +228,53 @@ test('SubtitleDB.debug watches every video, including one added later', async ({
   });
   await expect.poll(() => reports.length).toBeGreaterThan(1);
   expect(reports.every((r) => r.ev === undefined)).toBe(true);
+});
+
+test('with the script on the page twice, each video is watched once, under one load id', async ({
+  page,
+  context,
+}) => {
+  const { reports } = await receive(context, 'problems');
+  await open(page);
+  // A second copy, as on a page where a theme and a plugin both carry the snippet. It
+  // takes over the global: its attach hands on to the first copy, its debug() does not.
+  const replaced = await page.evaluate(
+    (src) =>
+      new Promise((loaded) => {
+        const w = window as never as { SubtitleDB: unknown };
+        const first = w.SubtitleDB;
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => loaded(w.SubtitleDB !== first);
+        document.head.append(s);
+      }),
+    `${CDN}/latest/subtitle-helper.js`,
+  );
+  expect(replaced).toBe(true);
+  await attachDebugged(page);
+  await page.evaluate(async (key) => {
+    const w = window as never as { SubtitleDB: { debug(k: string): { ready: Promise<void> } } };
+    await w.SubtitleDB.debug(key).ready;
+  }, KEY);
+  await page.waitForFunction(
+    (mark) => Symbol.for(mark) in (document.getElementById('player') as HTMLVideoElement),
+    MARK,
+  );
+
+  await video(page, 'await v.play();');
+  await page.evaluate(() => (document.getElementById('player') as HTMLVideoElement).play());
+  await expect.poll(() => reports.length, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => reports.length).toBeGreaterThanOrEqual(4);
+  // Two videos played, two plays. The attached one's reports name its player and the
+  // other's do not, and each video's carry the one load id of whichever copy has it.
+  expect(new Set(reports.map((r) => `${r.l}:${r.p}`)).size).toBe(2);
+  for (const one of [reports.filter((r) => r.pl), reports.filter((r) => !r.pl)]) {
+    expect(new Set(one.map((r) => r.l)).size).toBe(1);
+  }
 });
 
 test('an autoplay the browser refuses is reported as a play that never started', async ({
@@ -267,7 +314,8 @@ test('an autoplay the browser refuses is reported as a play that never started',
       .toBe(true);
     const refused = reports.find((r) => ((r.fl ?? 0) & 128) === 128) as Report;
     expect(refused.p).toBe(1);
-    expect((refused.fl ?? 0) & 1).toBe(0);
+    // Never started, and asked to play with no click on the page: autoplay.
+    expect((refused.fl ?? 0) & (1 | 64)).toBe(64);
     // A play that never started is a problem play, so its trace goes with it.
     expect(refused.ev?.map((e) => e.k)).toContain('blocked');
   } finally {

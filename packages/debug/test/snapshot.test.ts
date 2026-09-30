@@ -81,6 +81,14 @@ describe('encode', () => {
     expect(body).not.toHaveProperty('wa');
   });
 
+  it('sends a number a page gave as a string as the number, and leaves out anything else', () => {
+    // A resolve hands on the page's hint as the page wrote it: "603" for 603.
+    const given = { tm: '603', se: ' 2 ', ep: 'two', du: true, st: null, sk: '-1' };
+    const body = JSON.parse(encode({ ...base, ...given } as unknown as Snapshot));
+    expect([body.tm, body.se]).toEqual([603, 2]);
+    for (const name of ['ep', 'du', 'st', 'sk']) expect(body, name).not.toHaveProperty(name);
+  });
+
   it('leaves out what is zero or empty, but never the six fields every snapshot has', () => {
     expect(JSON.parse(encode(base))).toEqual({
       v: 1,
