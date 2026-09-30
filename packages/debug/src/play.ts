@@ -59,6 +59,10 @@ export class Play {
   flags = 0;
   subMs = 0;
   subSwitches = 0;
+  /** Times the duration grew after the first frame; see the collector's #onDuration. */
+  grew = 0;
+  /** Seen to be a live window. It stays live: a stream does not turn into a film. */
+  live = false;
   readonly events: TraceEvent[] = [];
 
   constructor(

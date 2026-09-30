@@ -37,6 +37,8 @@ const MAX_TICK_S = 2;
 const MAX_PLAYS = 255;
 /** Events kept from before the first play opens: the attach, the source, the offer. */
 const PENDING = 10;
+/** Times a duration must grow, by a second or more, after the first frame to be a live window. */
+const LIVE_AFTER_GROWING = 2;
 
 const MEDIA_ERRORS: Record<number, string> = {
   1: 'aborted',
@@ -141,6 +143,8 @@ export class Collector {
   #lastPos = 0;
   #lastSentAt = Number.NEGATIVE_INFINITY;
   #height = 0;
+  /** The duration when last seen, to tell a live window moving on from a film. */
+  #dur = Number.NaN;
   #base = { dropped: 0, frames: 0 };
   readonly #off: (() => void)[] = [];
   readonly #now: () => number;
@@ -179,6 +183,7 @@ export class Collector {
     on(v, 'loadstart', () => this.#onSource());
     on(v, 'emptied', () => this.#close());
     on(v, 'loadedmetadata', () => this.#onMetadata());
+    on(v, 'durationchange', () => this.#onDuration());
     on(v, 'play', () => this.#onPlay());
     on(v, 'playing', () => this.#onPlaying());
     on(v, 'timeupdate', () => this.#onTime());
@@ -259,6 +264,23 @@ export class Collector {
     const length = d === Number.POSITIVE_INFINITY ? 'live' : Number.isFinite(d) ? clock(d) : '?';
     this.record('manifest', `${length}, ${v.videoWidth}x${v.videoHeight}`);
     this.#height = v.videoHeight || this.#height;
+  }
+
+  /**
+   * A live stream usually says so with an infinite duration. hls.js, by default, and
+   * players built the same way give it a finite one instead: the end of the window so
+   * far, moved on at each playlist refresh. A film's duration is set before it plays
+   * and at most corrected once near the end, so one that keeps growing is live.
+   */
+  #onDuration(): void {
+    const play = this.#play;
+    const d = this.video.duration;
+    if (!play || !this.#started || !Number.isFinite(d)) return;
+    if (d >= this.#dur + 1) {
+      play.grew++;
+      if (play.grew >= LIVE_AFTER_GROWING) play.live = true;
+    }
+    this.#dur = d;
   }
 
   #onPlay(): void {
@@ -408,6 +430,7 @@ export class Collector {
       measured && this.#intentAt !== null ? Math.max(1, Math.round(t - this.#intentAt)) : 0;
     this.record('first_frame', play.startupMs ? `after ${play.startupMs} ms` : '');
     this.#lastPos = this.video.currentTime;
+    this.#dur = this.video.duration;
     this.#onResize();
     this.#checkMuted();
     this.#onTracks();
@@ -512,7 +535,7 @@ export class Collector {
       play.frames = Math.max(play.frames, q.totalVideoFrames - this.#base.frames);
     }
     const d = v.duration;
-    const live = d === Number.POSITIVE_INFINITY;
+    const live = play.live || d === Number.POSITIVE_INFINITY;
     const shown = showingTrack(v);
     const chosen = this.#chosen;
     let audio = '';

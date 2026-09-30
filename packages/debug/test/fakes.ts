@@ -210,6 +210,12 @@ export function stall(r: Rig, ms: number): void {
   r.video.emit('playing');
 }
 
+/** The duration moves on, as an MSE player's does when it appends past the old end. */
+export function grow(r: Rig, by: number): void {
+  r.video.duration += by;
+  r.video.emit('durationchange');
+}
+
 export function end(r: Rig): void {
   const v = r.video;
   v.currentTime = v.duration;

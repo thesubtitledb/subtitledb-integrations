@@ -251,7 +251,7 @@ changes nothing. Fields that are zero or empty are left out.
 | `u` | Visitor id, see [What it stores](#what-it-stores). |
 | `pa` | The page's path and query string, up to 512 characters. |
 | `im`, `tm`, `se`, `ep` | IMDb number, TMDB id, season and episode. Only with the `debug` option. |
-| `du`, `li` | Length in seconds. `li` is 1 for a live stream, which has none. |
+| `du`, `li` | Length in seconds. `li` is 1 for a live stream, which has none: one whose duration is infinite, or grows twice while it plays, which is how hls.js reports a live stream by default. |
 | `st` | Milliseconds from pressing play to the first frame. |
 | `wa` | Milliseconds spent playing: not paused, stalled or seeking. |
 | `un` | Distinct seconds played. A scene watched twice counts once, and a seek counts nothing. |
@@ -300,7 +300,7 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.7.1/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.7.2/subtitle-helper.js"></script>
 ```
 
 Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
@@ -313,7 +313,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.7.1/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/0.7.2/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>

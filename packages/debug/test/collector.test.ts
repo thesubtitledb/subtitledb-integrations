@@ -10,6 +10,7 @@ import { MAX_EVENTS } from '../src/play.js';
 import { bucket, FLAGS, type Snapshot } from '../src/snapshot.js';
 import {
   end,
+  grow,
   hide,
   LOAD,
   last,
@@ -150,6 +151,45 @@ describe('a play', () => {
     expect(s.du).toBeUndefined();
     expect(s.li).toBe(1);
     expect(s.wa).toBe(40_000);
+  });
+
+  // hls.js by default: the duration is the end of the window so far, and each playlist
+  // refresh moves it on by about a segment.
+  it('says a stream is live when its duration keeps growing while it plays', () => {
+    const r = rig();
+    load(r, 40);
+    play(r);
+    playFor(r, 10);
+    grow(r, 10);
+    pause(r);
+    expect(last(r).li).toBeUndefined();
+    resume(r);
+    playFor(r, 10);
+    grow(r, 10);
+    playFor(r, 20);
+    grow(r, 10);
+    pause(r);
+    const s = last(r);
+    expect(s.li).toBe(1);
+    expect(s.du).toBeUndefined();
+    expect(s.wa).toBe(40_000);
+  });
+
+  it('keeps a film a film when its duration is corrected, or set before it plays', () => {
+    const r = rig();
+    load(r, 590);
+    grow(r, 10);
+    grow(r, 10);
+    play(r);
+    playFor(r, 10);
+    grow(r, 0.4);
+    grow(r, 0.4);
+    playFor(r, 10);
+    grow(r, 5);
+    pause(r);
+    const s = last(r);
+    expect(s.li).toBeUndefined();
+    expect(s.du).toBe(616);
   });
 
   it('starts a replay after the end as a new play with fresh counters', () => {
