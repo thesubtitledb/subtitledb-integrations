@@ -9,7 +9,9 @@ define([], () => {
     Dashboard.alert({ message: message });
   }
 
-  return (view) => {
+  // Emby builds the controller with new, which an arrow function cannot take: the page
+  // then shows with none of its settings.
+  function SettingsPage(view) {
     view.addEventListener('viewshow', () => {
       Dashboard.showLoadingMsg();
       ApiClient.getPluginConfiguration(pluginId).then(
@@ -40,7 +42,9 @@ define([], () => {
         });
       return false;
     });
-  };
+  }
+
+  return SettingsPage;
 });
 
 // The name the browser gives this script's errors.

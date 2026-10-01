@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using SubtitleDb.Emby;
 using Xunit;
 
@@ -66,6 +67,19 @@ namespace SubtitleDb.Emby.Tests
             Assert.Matches(
                 "id=\"LookUpOnPlay\"[^>]*/>\\s*<span>Get latest subtitles on play</span>",
                 Page(main: true));
+        }
+
+        [Fact]
+        public void TheControllerIsOneEmbyCanBuildWithNew()
+        {
+            // Emby calls new on what the script returns. An arrow function throws there,
+            // and the page shows with none of its settings.
+            var script = Page(main: false);
+            // The last return before a close is define's; the earlier ones are handlers'.
+            var returned = Regex.Matches(script, @"return (\w+);\s*\}\);").Last().Groups[1].Value;
+
+            Assert.NotEmpty(returned);
+            Assert.Contains("function " + returned + "(view) {", script, StringComparison.Ordinal);
         }
 
         [Fact]
