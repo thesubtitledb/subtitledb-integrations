@@ -259,12 +259,18 @@ def stop_all(url):
         H.stop(url, player["playerid"])
 
 
-def showing(url, player):
-    props = H.rpc(url, "Player.GetProperties", {"playerid": player, "properties": [
-        "subtitleenabled", "currentsubtitle", "subtitles"]})
-    current = props.get("currentsubtitle") or {}
-    return {"on": props.get("subtitleenabled"), "lang": current.get("language"),
-            "name": current.get("name"), "streams": len(props.get("subtitles") or [])}
+def showing(url, player, seconds=10):
+    """The subtitle on screen. Kodi opens one handed to setSubtitles on its own thread
+    after the call returns, so this waits up to ``seconds`` for it to have a name."""
+    end = time.time() + seconds
+    while True:
+        props = H.rpc(url, "Player.GetProperties", {"playerid": player, "properties": [
+            "subtitleenabled", "currentsubtitle", "subtitles"]})
+        current = props.get("currentsubtitle") or {}
+        if current.get("name") or time.time() > end:
+            return {"on": props.get("subtitleenabled"), "lang": current.get("language"),
+                    "name": current.get("name"), "streams": len(props.get("subtitles") or [])}
+        time.sleep(0.5)
 
 
 def still_playing(url, player):
@@ -367,7 +373,6 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
 
     def shows(lang):
         def check(player):
-            time.sleep(2)
             sh = showing(url, player)
             return bool(sh["on"]) and sh["lang"] == lang, "| shows %s" % sh
         return check
