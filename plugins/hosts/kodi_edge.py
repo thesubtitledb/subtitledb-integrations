@@ -303,10 +303,27 @@ def still_playing(url, player):
     return now() > first
 
 
-def set_addon(url, setting, value):
+def set_addon(url, log, setting, value, seconds=30):
+    """Set one of the addon's settings and wait until script.subtitledb.set logs it saved.
+
+    Addons.ExecuteAddon returns once Kodi has started the script, not once it has run.
+    Each run saves every setting as it read them, so two at once lose one change: on
+    Kodi 19 the lookup kept the old address, or stayed off for the rest of the run.
+    """
+    said = "[script.subtitledb.set] %s=%s" % (setting, value)
+
+    def count():
+        return sum(1 for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
+                   if line.rstrip().endswith(said))
+
+    before, t0 = count(), time.time()
     H.rpc(url, "Addons.ExecuteAddon", {"addonid": "script.subtitledb.set", "wait": True,
                                        "params": {"id": setting, "value": value}})
-    time.sleep(0.5)
+    while count() <= before:
+        if time.time() > t0 + seconds:
+            raise H.Failure("script.subtitledb.set never set %s=%s" % (setting, value))
+        time.sleep(0.25)
+    print("set %s=%s in %.1fs" % (setting, value, time.time() - t0), flush=True)
 
 
 def lookups(n):
@@ -405,9 +422,9 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
     case("ok: a film loads English", film, loaded, check=shows("eng"))
 
     print("\n== the setting")
-    set_addon(url, "instant", "false")
+    set_addon(url, log, "instant", "false")
     case("off: nothing asked, nothing logged", film, silent, wait=10)
-    set_addon(url, "instant", "true")
+    set_addon(url, log, "instant", "true")
     case("back on: loads again without a restart", film, loaded)
 
     print("\n== the API down or broken")
@@ -415,9 +432,9 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
     srv.server_close()
     case("refused: nothing listening", film, failed, wait=60, check=playing)
     srv = serve()
-    set_addon(url, "api_base", "http://api.invalid")
+    set_addon(url, log, "api_base", "http://api.invalid")
     case("dns: the name does not resolve", film, failed, wait=60, check=playing)
-    set_addon(url, "api_base", FAKE)
+    set_addon(url, log, "api_base", FAKE)
 
     def hang():
         S.mode = "hang"
@@ -505,7 +522,7 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
 
     print("\n== the subtitle dialog")
     # The on-play lookup off, so what the log says is the dialog's alone.
-    set_addon(url, "instant", "false")
+    set_addon(url, log, "instant", "false")
     for label, setup, want_tb in (("API down", "down", 0), ("API sends a list", "json_list", 0),
                                   ("API sends a string title", "json_titlestr", 1)):
         tb = tracebacks(log)
@@ -534,12 +551,12 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
             if setup == "down":
                 srv = serve()
             reset()
-    set_addon(url, "instant", "true")
+    set_addon(url, log, "instant", "true")
 
     print("\n== a malformed API address")
-    set_addon(url, "api_base", "not a url")
+    set_addon(url, log, "api_base", "not a url")
     case("api_base 'not a url'", film, failed, wait=30)
-    set_addon(url, "api_base", FAKE)
+    set_addon(url, log, "api_base", FAKE)
 
     print("\n== Kodi told to quit while a lookup hangs")
     # Last, as it ends Kodi. The fake hangs on until this process ends, so what Kodi
