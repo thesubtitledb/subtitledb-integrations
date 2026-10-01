@@ -3,7 +3,7 @@
 
 """SubtitleDB provider for Bazarr.
 
-Installed as ``bazarr/libs/subliminal_patch/providers/subtitledb.py``, which is the
+Installed as ``custom_libs/subliminal_patch/providers/subtitledb.py``, which is the
 module name Bazarr registers. See README.md, or run install.py.
 
 Bazarr already knows what it is looking at: Sonarr and Radarr hand it an IMDb id,

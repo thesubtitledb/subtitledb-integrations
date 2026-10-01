@@ -10,6 +10,7 @@ import io
 import json
 import socket
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -154,6 +155,60 @@ def test_a_body_that_is_not_json_is_a_subtitledb_error():
     c = client_with([FakeResponse(b"<html>busy</html>")])
     with pytest.raises(SubtitleDbError, match="not JSON"):
         c.by_imdb("tt1")
+
+
+def test_json_that_is_not_an_object_is_a_subtitledb_error():
+    c = client_with([json_response([])])
+    with pytest.raises(SubtitleDbError, match="not an object"):
+        c.by_imdb("tt1")
+
+
+def test_an_api_address_that_is_not_one_is_said_once_and_not_retried():
+    # The Kodi addon's API address is free text, and a typo there is no reason to crash.
+    with pytest.raises(SubtitleDbError, match=r"not a web address: api.example.test"):
+        Client(api_base="api.example.test").by_title("x")
+
+
+@pytest.mark.parametrize(
+    ("body", "said"),
+    [
+        (b"", "sent nothing"),
+        (b" \r\n", "sent nothing"),
+        (b"<!DOCTYPE html><html><body>Sign in to the Wi-Fi</body></html>", "sent a web page"),
+        (b"\n<HTML><body>Error 1020</body></HTML>", "sent a web page"),
+    ],
+)
+def test_a_download_that_is_no_subtitle_is_a_subtitledb_error(body, said):
+    # A captive portal or an error page answers 200 too. Handed to a player as a
+    # subtitle it shows nothing, and the plugin would say one was loaded.
+    c = client_with([FakeResponse(body)])
+    with pytest.raises(SubtitleDbError, match=said):
+        c.download("https://api.example.test/get/1")
+
+
+def test_a_host_that_is_stopping_gets_no_new_request():
+    # Kodi kills a service still running 5 s after it asks it to stop.
+    calls: list[str] = []
+    c = client_with([json_response({"title": {}})], calls)
+    c.stopping = lambda: True
+    with pytest.raises(SubtitleDbError, match="stopped"):
+        c.by_title("x")
+    with pytest.raises(SubtitleDbError, match="stopped"):
+        c.download("https://api.example.test/get/1")
+    assert calls == []
+
+
+def test_a_stop_while_waiting_to_retry_ends_the_wait_and_the_retries():
+    calls: list[str] = []
+    err = urllib.error.HTTPError("u", 503, "busy", {"Retry-After": "8"}, io.BytesIO(b"{}"))
+    c = client_with([err, json_response({"total": 1})], calls)
+    asked: list[int] = []
+    c.stopping = lambda: asked.append(1) or len(asked) > 1  # asked to stop after the 503
+    t0 = time.monotonic()
+    with pytest.raises(SubtitleDbError, match="stopped"):
+        c.by_title("x")
+    assert len(calls) == 1
+    assert time.monotonic() - t0 < 1, "the 8 s Retry-After was waited out"
 
 
 def test_a_body_cut_short_is_retried_then_a_subtitledb_error():

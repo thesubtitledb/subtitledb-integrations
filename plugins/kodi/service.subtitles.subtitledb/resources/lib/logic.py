@@ -324,5 +324,10 @@ def filename_for(item):
     return "subtitledb-%d.%s" % (item.get("id") or 0, ext)
 
 
-def make_client(api_base=None):
-    return Client(api_base=api_base or "https://api.thesubtitledb.org", client="kodi")
+#: Kodi kills a service still running 5 s after it asks it to stop, and a request
+#: waiting on a socket cannot be interrupted, so the lookup on play waits less.
+ON_PLAY_TIMEOUT_S = 4.0
+
+
+def make_client(api_base=None, **options):
+    return Client(api_base=api_base or "https://api.thesubtitledb.org", client="kodi", **options)

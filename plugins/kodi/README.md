@@ -47,6 +47,9 @@ It skips:
 - a stream with no id
 - a file whose name gives neither a year nor a season and episode
 
+If the API is down or sends something wrong, nothing is loaded, the video plays on,
+and Kodi's log says why.
+
 ## Settings
 
 Settings -> Add-ons -> My add-ons -> Subtitles -> SubtitleDB -> Configure.

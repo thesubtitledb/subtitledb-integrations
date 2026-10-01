@@ -10,6 +10,7 @@ centre can run.
 import json
 import os
 import sys
+import traceback
 
 try:
     from urllib.parse import parse_qsl, unquote, urlencode
@@ -65,11 +66,12 @@ def temp_dir():
 def playing_file():
     """The file Kodi is playing, or "" once playback has stopped.
 
-    Kodi raises rather than answering "nothing", and playback can stop between the
-    dialog opening and the search running.
+    Kodi raises rather than answering "nothing", and logs an error as it does, so
+    isPlaying is asked first. Playback can still stop between the two.
     """
+    player = xbmc.Player()
     try:
-        return xbmc.Player().getPlayingFile()
+        return player.getPlayingFile() if player.isPlaying() else ""
     except RuntimeError:
         return ""
 
@@ -148,6 +150,10 @@ def do_search(params):
                              limit=per_language(ADDON.getSetting("per_language")), log=log)
     except SubtitleDbError as err:
         log("search failed: %s" % err, xbmc.LOGERROR)
+        notify(ADDON.getLocalizedString(32011))
+        return
+    except Exception:  # a bug of ours must not end in Kodi's script error
+        log("search failed: %s" % traceback.format_exc(), xbmc.LOGERROR)
         notify(ADDON.getLocalizedString(32011))
         return
     log("%d subtitles for %s" % (len(items), info.get("path")))

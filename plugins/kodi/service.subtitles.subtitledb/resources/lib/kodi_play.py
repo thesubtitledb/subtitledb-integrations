@@ -47,7 +47,7 @@ def stream_languages(player):
             for code in player.getAvailableSubtitleStreams() or []]
 
 
-def look_up(player):
+def look_up(player, monitor):
     addon = xbmcaddon.Addon()  # a fresh one, so a setting changed since Kodi started is read
     if not addon.getSettingBool("instant") or not player.isPlayingVideo():
         return
@@ -58,7 +58,8 @@ def look_up(player):
         seconds = player.getTotalTime()
     except RuntimeError:
         return
-    client = logic.make_client(addon.getSetting("api_base") or None)
+    client = logic.make_client(addon.getSetting("api_base") or None,
+                               timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested)
     try:
         item, said = logic.instant(
             client, kodi_side.player_info(), kodi_languages(), stream_languages(player),
@@ -90,6 +91,6 @@ def main():
             continue
         player.started = False
         try:
-            look_up(player)
+            look_up(player, monitor)
         except Exception:  # one bad lookup must not end the service
             kodi_side.log("on play: %s" % traceback.format_exc(), xbmc.LOGERROR)

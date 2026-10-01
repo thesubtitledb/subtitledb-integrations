@@ -493,6 +493,18 @@ def test_the_instant_lookup_runs_as_the_addons_service():
     assert "kodi_play.main()" in src
 
 
+def test_the_lookup_on_play_stops_inside_the_5_s_kodi_allows():
+    # Kodi kills a service still running 5 s after it asks it to stop. A request on a
+    # socket waits out its timeout, and none starts once Kodi has asked.
+    assert logic.ON_PLAY_TIMEOUT_S < 5
+    client = logic.make_client(None, timeout=logic.ON_PLAY_TIMEOUT_S, stopping=lambda: True)
+    with pytest.raises(SubtitleDbError, match="stopped"):
+        client.by_title("x")
+    play = (HERE / "service.subtitles.subtitledb" / "resources" / "lib" / "kodi_play.py"
+            ).read_text(encoding="utf-8")
+    assert "timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested" in play
+
+
 # -- the zip ----------------------------------------------------------------
 
 

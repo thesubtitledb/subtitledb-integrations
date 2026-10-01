@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.subtitledb.set" name="SubtitleDB test setting" version="1.0.0" provider-name="test">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.script" library="default.py"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Sets one SubtitleDB setting, as the settings screen would.</summary>
+    <platform>all</platform>
+  </extension>
+</addon>

@@ -124,6 +124,25 @@ def test_a_server_error_is_not_swallowed_as_a_miss():
         find(c, Hint(imdb_id="tt1"), Options(formats=["srt"]))
 
 
+@pytest.mark.parametrize(
+    "answer",
+    [
+        movie([sub(1, id="x")]),
+        movie([sub(1, cues="many")]),
+        movie([sub(1, season="one", episode=1)]),
+        movie(["a row"]),
+        {"title": {"name": "X"}, "subtitles": ["a page"]},
+    ],
+)
+def test_an_answer_that_cannot_be_read_is_a_subtitledb_error_not_a_miss(answer):
+    # Callers catch SubtitleDbError alone: anything else would crash the media server
+    # the plugin runs in, where the viewer should read that the search failed.
+    c = FakeClient(by_imdb=answer, by_title=movie([sub(2)]))
+    with pytest.raises(SubtitleDbError, match="cannot be read"):
+        find(c, Hint(imdb_id="tt1", title="X", season=1, episode=1), Options(formats=["srt"]))
+    assert [name for name, _, _ in c.calls] == ["by_imdb"]
+
+
 def test_an_episode_drills_by_title_on_the_season_and_episode_numbers():
     # No imdb id, so the title rung resolves the series server-side and drills straight
     # to the episode; the returned page is the episode block's own subtitles.

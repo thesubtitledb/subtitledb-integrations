@@ -81,7 +81,8 @@ def uninstall(root: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("root", type=Path, help="the Bazarr install, the directory holding libs/")
+    parser.add_argument("root", type=Path,
+                        help="the Bazarr install, the directory holding custom_libs/")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
