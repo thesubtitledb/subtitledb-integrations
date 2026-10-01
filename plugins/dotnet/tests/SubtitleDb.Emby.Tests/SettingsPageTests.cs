@@ -34,7 +34,7 @@ namespace SubtitleDb.Emby.Tests
             Assert.Equal(Plugin.ScriptPage, script.Name);
             Assert.Contains("data-controller=\"__plugin/" + Plugin.ScriptPage + "\"", Page(main: true),
                 StringComparison.Ordinal);
-            Assert.Contains("define([], function () {", Page(main: false), StringComparison.Ordinal);
+            Assert.Contains("define([], () => {", Page(main: false), StringComparison.Ordinal);
         }
 
         [Fact]
