@@ -26,6 +26,8 @@ SAVED = re.compile(r"settings saved", re.IGNORECASE)
 #: In the stack of an error the page's script threw: the script names itself with a
 #: sourceURL comment. Jellyfin 10.11 and 12 throw errors of their own on any page.
 OURS = re.compile(r"subtitledb", re.IGNORECASE)
+#: The session's token, which Emby's web app puts in the query of its requests.
+TOKEN = re.compile(r"((?:token|api_key)=)[^&]*", re.IGNORECASE)
 
 
 def same_id(a, b):
@@ -83,6 +85,10 @@ def sign_in(page, server):
 
 def open_page(page, server, name):
     route = "#!/" if server.kind == "emby" else "#/"
+    if server.kind == "emby":
+        # Emby 4.8 stayed on its home page when sent here from it: load the page whole,
+        # as a bookmark does.
+        page.goto("about:blank")
     page.goto("%s/web/index.html%sconfigurationpage?name=%s" % (server.base, route, name))
     # Filled from the server: the address is never empty.
     page.wait_for_function(
@@ -129,6 +135,8 @@ def run(kind, url, shot=None) -> int:
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         page.on("pageerror", lambda err: errors.append(err.stack or err.message))
         page.on("console", lambda msg: msg.type == "error" and noise.append(msg.text))
+        page.on("response", lambda r: r.status >= 400 and noise.append(
+            "%d from %s" % (r.status, TOKEN.sub(r"\1-", r.url))))
         step = "sign in"
         try:
             sign_in(page, server)
