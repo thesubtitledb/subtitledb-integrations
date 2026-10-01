@@ -4,8 +4,9 @@
     <title>SubtitleDB</title>
 </head>
 <body>
-<div id="SubtitleDbConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
-     data-controller="__plugin/subtitledb.js">
+<!-- No data-controller: Jellyfin imports the script one names before it shows the page,
+     and stops there when the plugin does not serve it. The script below runs instead. -->
+<div id="SubtitleDbConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
     <div data-role="content">
         <div class="content-primary">
             <form id="SubtitleDbConfigForm">
@@ -25,11 +26,11 @@
                 <div class="checkboxContainer checkboxContainer-withDescription">
                     <label class="emby-checkbox-label">
                         <input id="LookUpOnPlay" name="LookUpOnPlay" type="checkbox" is="emby-checkbox" />
-                        <span>Look up subtitles when a video starts</span>
+                        <span>Get latest subtitles on play</span>
                     </label>
                     <div class="fieldDescription checkboxFieldDescription">
                         Follows the library's subtitle download settings, and saves even when the
-                        video has subtitles. It is listed from the next play.
+                        video has subtitles. A new subtitle is listed from the next play.
                     </div>
                 </div>
                 <div class="inputContainer">
@@ -58,6 +59,11 @@
     <script type="text/javascript">
         var SubtitleDbConfig = { pluginUniqueId: 'e8067282-ad64-415a-b9ed-9057e6679483' };
 
+        function subtitleDbFailed(message) {
+            Dashboard.hideLoadingMsg();
+            Dashboard.alert({ message: message });
+        }
+
         document.querySelector('#SubtitleDbConfigPage')
             .addEventListener('pageshow', () => {
                 Dashboard.showLoadingMsg();
@@ -66,7 +72,7 @@
                     document.querySelector('#PerLanguage').value = config.PerLanguage;
                     document.querySelector('#LookUpOnPlay').checked = config.LookUpOnPlay;
                     Dashboard.hideLoadingMsg();
-                });
+                }, () => subtitleDbFailed('The settings could not be loaded.'));
             });
 
         document.querySelector('#SubtitleDbConfigForm')
@@ -77,9 +83,9 @@
                     config.ApiBase = document.querySelector('#ApiBase').value;
                     config.PerLanguage = parseInt(document.querySelector('#PerLanguage').value, 10);
                     config.LookUpOnPlay = document.querySelector('#LookUpOnPlay').checked;
-                    ApiClient.updatePluginConfiguration(SubtitleDbConfig.pluginUniqueId, config)
-                        .then(Dashboard.processPluginConfigurationUpdateResult);
-                });
+                    return ApiClient.updatePluginConfiguration(SubtitleDbConfig.pluginUniqueId, config);
+                }).then(Dashboard.processPluginConfigurationUpdateResult,
+                    () => subtitleDbFailed('The settings could not be saved.'));
                 return false;
             });
     </script>

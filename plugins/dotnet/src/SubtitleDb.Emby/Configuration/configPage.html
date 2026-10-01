@@ -1,0 +1,50 @@
+<div id="SubtitleDbConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox"
+     data-controller="__plugin/subtitledb.js">
+    <div data-role="content">
+        <div class="content-primary">
+            <form class="subtitleDbConfigForm">
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">SubtitleDB</h2>
+                    <p>
+                        Subtitles from the SubtitleDB open index. There is no account, no key and
+                        no quota, so there is nothing to sign up for and nothing to paste here.
+                    </p>
+                    <p>
+                        Turn it on under Settings, Subtitles, and set the languages you want there:
+                        this plugin answers in whichever language Emby asks for.
+                    </p>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label>
+                        <input id="LookUpOnPlay" name="LookUpOnPlay" type="checkbox" is="emby-checkbox" />
+                        <span>Get latest subtitles on play</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Follows the library's subtitle download settings, and saves even when the
+                        video has subtitles. A new subtitle is listed from the next play.
+                    </div>
+                </div>
+                <div class="inputContainer">
+                    <input id="PerLanguage" name="PerLanguage" type="number" is="emby-input"
+                           label="Subtitles per language" min="100" max="2000" required />
+                    <div class="fieldDescription">
+                        The most to offer for each language. Past 100, each further 100 is one more request.
+                    </div>
+                </div>
+                <div class="inputContainer">
+                    <input id="ApiBase" name="ApiBase" type="url" is="emby-input"
+                           label="API address" required />
+                    <div class="fieldDescription">
+                        Leave this alone unless you run your own mirror of the API.
+                    </div>
+                </div>
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

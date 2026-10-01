@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
@@ -10,7 +11,7 @@ namespace SubtitleDb.Emby
     /// <summary>
     /// There is no account and no key. The settings are the API address, for anyone
     /// running their own mirror, how many subtitles to offer per language, and the
-    /// lookup when a video starts; Emby keeps them in
+    /// lookup when a video starts. The plugin's page sets them and Emby keeps them in
     /// plugins/configurations/SubtitleDb.Emby.xml. The languages are Emby's, from its
     /// subtitle settings, and repeating them here would only let the two disagree.
     /// </summary>
@@ -24,8 +25,10 @@ namespace SubtitleDb.Emby
     }
 
     /// <summary>The plugin Emby lists, so it can be updated and removed like any other.</summary>
-    public class Plugin : BasePlugin<PluginConfiguration>
+    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
+        /// <summary>The name the settings page's data-controller loads the script by.</summary>
+        internal const string ScriptPage = "subtitledb.js";
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
             : base(applicationPaths, xmlSerializer)
         {
@@ -45,5 +48,24 @@ namespace SubtitleDb.Emby
 
         public override string Description =>
             "Subtitles from the SubtitleDB open index. No account, no key, no quota.";
+
+        /// <summary>
+        /// The settings page Emby opens from the plugin's entry, and its script. Emby
+        /// counts every page as the plugin's settings page unless told otherwise.
+        /// </summary>
+        public IEnumerable<PluginPageInfo> GetPages()
+        {
+            var resource = GetType().Namespace + ".Configuration.configPage.";
+            return new[]
+            {
+                new PluginPageInfo { Name = "subtitledb", EmbeddedResourcePath = resource + "html" },
+                new PluginPageInfo
+                {
+                    Name = ScriptPage,
+                    EmbeddedResourcePath = resource + "js",
+                    IsMainConfigPage = false,
+                },
+            };
+        }
     }
 }

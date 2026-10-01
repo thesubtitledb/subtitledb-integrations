@@ -187,13 +187,33 @@ namespace SubtitleDb.Jellyfin.Tests
                 && d.ImplementationType == typeof(SubtitleDbSubtitleProvider));
         }
 
+        private static string SettingsPage() =>
+            new System.IO.StreamReader(typeof(Plugin).Assembly.GetManifestResourceStream(
+                "SubtitleDb.Jellyfin.Configuration.configPage.html")!).ReadToEnd();
+
+        [Fact]
+        public void TheSettingsPageAsksForNoScriptThePluginDoesNotServe()
+        {
+            // Jellyfin imports the script a data-controller names before it shows the
+            // page, and stops there when the plugin does not serve it, leaving an empty
+            // form. The plugin serves the page alone, whose own script fills it.
+            Assert.DoesNotContain("data-controller=", SettingsPage(), System.StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void TheLookupOnPlayIsCalledGetLatestSubtitlesOnPlay()
+        {
+            Assert.Matches(
+                "id=\"LookUpOnPlay\"[^>]*/>\\s*<span>Get latest subtitles on play</span>",
+                SettingsPage());
+        }
+
         [Fact]
         public void TheSettingsPageReadsAndWritesEverySetting()
         {
             // A setting the page never fills is saved back empty, and one it never
             // writes is a setting nobody can change.
-            var page = new System.IO.StreamReader(typeof(Plugin).Assembly.GetManifestResourceStream(
-                "SubtitleDb.Jellyfin.Configuration.configPage.html")!).ReadToEnd();
+            var page = SettingsPage();
             foreach (var property in typeof(Configuration.PluginConfiguration).GetProperties())
             {
                 if (property.DeclaringType != typeof(Configuration.PluginConfiguration))

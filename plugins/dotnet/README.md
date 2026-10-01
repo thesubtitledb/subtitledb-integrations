@@ -28,14 +28,13 @@ list: the host asks one language at a time.
 
 ## Settings
 
-| Setting | In Emby's file | Default |
-|---|---|---|
-| Subtitles per language, the most offered for each, 100 to 2000 | `PerLanguage` | 500 |
-| Look up subtitles when a video starts, see [On play](#on-play) | `LookUpOnPlay` | on |
+| Setting | Default |
+|---|---|
+| Get latest subtitles on play, see [On play](#on-play) | on |
+| Subtitles per language, the most offered for each, 100 to 2000 | 500 |
 
-Jellyfin has them on the plugin's page, Dashboard -> Plugins -> SubtitleDB. Emby has no
-page: stop the server, change `plugins/configurations/SubtitleDb.Emby.xml`, and start it
-again.
+Both are on the plugin's page: Dashboard -> Plugins -> SubtitleDB in Jellyfin, Settings
+-> Plugins -> SubtitleDB in Emby.
 
 ## On play
 
@@ -111,7 +110,7 @@ second DLL appears in `dist/emby`.
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 153 tests
+dotnet test SubtitleDb.sln     # 158 tests
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 
