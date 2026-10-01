@@ -1,83 +1,76 @@
 # SubtitleDB for Kodi
 
-`service.subtitles.subtitledb`. A subtitle module for Kodi 19 and later, on the
-SubtitleDB open index. No account, no key, no quota.
+`service.subtitles.subtitledb`, a subtitle module for Kodi 19 and later.
 
 ## Install
 
 Download `service.subtitles.subtitledb-<version>.zip` from the newest `kodi-v`
 [release](https://github.com/thesubtitledb/subtitledb-integrations/releases), then in
-Kodi: Settings -> Add-ons -> Install from zip file -> pick it. `python3 build.py`
-builds the same zip into `dist/`.
+Kodi: Settings -> Add-ons -> Install from zip file. `python3 build.py` builds the same
+zip into `dist/`.
 
-Then turn it on where subtitles are chosen: Settings -> Player -> Language ->
-Subtitle services -> Default TV show service / Default movie service.
+Enable it under Settings -> Player -> Language -> Subtitle services -> Default TV show
+service / Default movie service.
 
-`python3 build.py --repo` also writes `addons.xml` and `addons.xml.md5`, which are
-the two files a Kodi repository is. Serve those beside the zip and Kodi can install
-and update from it.
+`python3 build.py --repo` also writes `addons.xml` and `addons.xml.md5`, the two files
+a Kodi repository is. Serve them beside the zip and Kodi can install and update from it.
 
 ## What it uses
 
-| Kodi knows | The addon does |
+| Kodi knows | The addon |
 |---|---|
-| `VideoPlayer.IMDBNumber` | asks for that title directly |
+| `VideoPlayer.IMDBNumber`, or the IMDb id by name | asks for that title |
+| the show's IMDb id, in a library | asks by it, drilled to the season and episode, before the name |
 | `VideoPlayer.TVshowtitle`, `Season`, `Episode` | searches the series, keeps only that episode |
-| `VideoPlayer.Title` on an episode | uses it to choose between episodes |
+| `VideoPlayer.Title` on an episode | chooses between episodes |
 | the file that is playing | prefers a subtitle recorded against the same release |
 | the languages configured for subtitles | one request per language |
 
-The list shows the language on the left and, on the right, the release name where
-there is one and the line count where there is not. Most of the corpus has no
-release name, so thirty English candidates would otherwise read "English" thirty
-times over and picking one would be a lottery.
-
-The star rating is the only other thing Kodi draws. It carries whether the subtitle
-was recorded against the file being played, rather than a number invented to fill it.
+The list shows the language on the left and, on the right, the release name, or the
+line count when there is none. The star rating marks a subtitle recorded against the
+file being played.
 
 ## When a video starts
 
-The addon also runs as a service. When a video starts, it takes the languages set
-under Settings -> Player -> Language -> Languages to download subtitles for, and
-loads the best match in the first of them that has one, without opening the
-dialog. A notification names the language. It asks again only for the next
-language when one has nothing, and not at all when there is nothing to load.
+The addon also runs as a service. As a video starts, it takes the languages under
+Settings -> Player -> Language -> Languages to download subtitles for, and loads the
+best match in the first that has one, without opening the dialog. A notification names
+the language. It asks for the next language only when one has nothing, and not at all
+when there is nothing to load.
 
-It leaves alone:
+It skips:
 
-- a video that already has subtitles in one of those languages, or a subtitle
-  stream with no language, which is most often a file put beside the video
-- anything Kodi knows to be under five minutes, such as a trailer
+- a video with subtitles in one of those languages, or with a subtitle stream with no
+  language (usually a file beside the video)
+- anything Kodi knows is under five minutes, such as a trailer
 - live TV
-- a stream with no id, whose title is whatever the site called it
+- a stream with no id
 - a file whose name gives neither a year nor a season and episode
 
 ## Settings
 
 Settings -> Add-ons -> My add-ons -> Subtitles -> SubtitleDB -> Configure.
 
-**Load subtitles when a video starts** is on unless turned off.
+| Setting | Default |
+|---|---|
+| Load subtitles when a video starts | on |
+| Subtitles per language (the most listed for each) | 500, from 100 to 2000 |
+| API address | ours; change it only to point at your own copy of the API |
 
-**Subtitles per language** is the most listed for each language: 500 unless changed,
-anything from 100 to 2000. The API sends 100 a request, so a title with 147 English
-subtitles takes two.
+## Kodi quirks
 
-## Kodi's own quirks, handled
-
-- **A stack** is several files playing as one. The first one is the one whose name
-  means anything.
-- **A file inside an archive** has its real name url-encoded in the path.
-- **`IMDBNumber` on a TV episode** is sometimes a TVDB id. Sent as an IMDb id it
-  would resolve to somebody else's film, so anything that is not `tt` followed by
-  digits is dropped.
-- **The info labels keep their last value.** A show title left over from the last
-  thing played does not turn a film into an episode: that needs a season and an
-  episode number too.
-- **A file played from outside the library** has no id and no year, and its title is
-  the file's own name, which matches no title. The addon reads the title and year, or
-  the show, season and episode, off the name instead.
-- **The extension decides the parser.** A subtitle saved as `.srt` that is really
-  ASS renders as a screen of tag soup, so the stored format is what it is saved as.
+- A stack plays several files as one; the first file's name is the one used.
+- A file inside an archive has its real name url-encoded in the path.
+- `IMDBNumber` is the item's default id, which Kodi's TMDB and TVDB scrapers make
+  their own, so only `tt` followed by digits is taken from it. The IMDb id read by name
+  is taken even as a bare number.
+- Info labels keep their last value: a show title left over does not make a film an
+  episode without a season and episode number too.
+- A file played from outside the library has no id or year, and its file name as
+  title. The addon reads the title and year, or the show, season and episode, off the
+  name instead.
+- Kodi picks the parser by extension, so a subtitle is saved with the extension of its
+  stored format.
 
 ## Tests
 
@@ -85,17 +78,12 @@ subtitles takes two.
 python3 -m pytest
 ```
 
-Only the two entry points, `service.py` and `on_play.py` (a few lines each), and
-`resources/lib/kodi_side.py` and `kodi_play.py` import Kodi's modules. They decide
-nothing that `resources/lib/logic.py` does not, so the decisions are tested here and
-Kodi's own API is left to Kodi. The ranking rules are covered once, for every
-plugin, in `plugins/python/tests`.
-
-The Live hosts workflow installs the addon into Kodi 19 and the current Kodi, plays
-the samples, checks the subtitle loaded as each one starts, and searches through it:
-see [`plugins/hosts`](../hosts/README.md).
+Only the entry points `service.py` and `on_play.py`, and `resources/lib/kodi_side.py`
+and `kodi_play.py`, import Kodi's modules. They decide nothing that
+`resources/lib/logic.py` does not, so the decisions are tested here. Ranking is tested
+in `plugins/python/tests`. In a real Kodi: [`plugins/hosts`](../hosts/README.md).
 
 ## License
 
-MIT, as `addon.xml` declares. The text is in [`plugins/LICENSE`](../LICENSE), and
-`build.py` puts it in the zip as `LICENSE.txt`.
+MIT, as `addon.xml` declares. The text is in [`plugins/LICENSE`](../LICENSE); `build.py`
+puts it in the zip as `LICENSE.txt`.
