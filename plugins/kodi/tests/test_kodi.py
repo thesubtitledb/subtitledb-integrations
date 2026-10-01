@@ -1,8 +1,8 @@
 """The Kodi addon: the decisions, and the zip.
 
-Only service.py and resources/lib/kodi_side.py import Kodi's modules, and they do
-nothing this module does not, so the logic is tested here and the Kodi side is left
-to Kodi.
+Only the two entry points and resources/lib/kodi_side.py and kodi_play.py import
+Kodi's modules, and they do nothing this module does not, so the logic is tested
+here and the Kodi side is left to Kodi and the live hosts run.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ sys.path.insert(0, str(HERE))
 
 import build  # noqa: E402
 import logic  # noqa: E402
+from subtitledb import SubtitleDbError  # noqa: E402
 from subtitledb.match import Candidate  # noqa: E402
 
 
@@ -228,11 +229,12 @@ def test_every_string_the_addon_shows_is_in_strings_po():
     addon = HERE / "service.subtitles.subtitledb"
     strings = (addon / "resources" / "language" / "resource.language.en_gb" / "strings.po"
                ).read_text(encoding="utf-8")
-    side = (addon / "resources" / "lib" / "kodi_side.py").read_text(encoding="utf-8")
-    ids = re.findall(r"getLocalizedString\((\d+)\)", side)
-    assert ids
-    for i in ids:
-        assert 'msgctxt "#%s"' % i in strings
+    for module in ("kodi_side.py", "kodi_play.py"):
+        side = (addon / "resources" / "lib" / module).read_text(encoding="utf-8")
+        ids = re.findall(r"getLocalizedString\((\d+)\)", side)
+        assert ids, module
+        for i in ids:
+            assert 'msgctxt "#%s"' % i in strings, (module, i)
 
 
 def test_a_subtitle_recorded_against_this_release_is_the_one_marked_in_sync():
@@ -252,6 +254,18 @@ def test_a_subtitle_recorded_against_this_release_is_the_one_marked_in_sync():
 def test_the_file_keeps_the_extension_kodi_will_parse_it_by(fmt, want):
     # A subtitle saved as .srt that is really ASS renders as a screen of tag soup.
     assert logic.filename_for({"id": 1, "format": fmt}) == want
+
+
+@pytest.mark.parametrize(("code", "want"), [
+    ("en", "subtitledb-7.en.srt"),
+    ("pb", "subtitledb-7.pb.srt"),
+    # The code comes from the API and lands in a path.
+    ("../x", "subtitledb-7.srt"),
+    ("", "subtitledb-7.srt"),
+])
+def test_a_file_handed_to_the_player_names_its_language_for_the_subtitle_menu(code, want):
+    item = {"id": 7, "format": "srt", "language_code": code}
+    assert logic.filename_for(item) == want
 
 
 def test_a_search_asks_in_the_languages_kodi_named_them():
@@ -320,6 +334,163 @@ def test_the_log_says_which_title_the_search_was_answered_for():
     logic.search(FakeClient(), {"path": "/tv/Friends.S01E01.mkv", "tvshow": "Friends",
                                 "season": 1, "episode": 1}, ["English"], log=logged.append)
     assert logged == ["resolved to Matlock (2024) tt26591147 via title, 1 candidates"]
+
+
+# -- the instant lookup, when a video starts ----------------------------------
+
+
+MATRIX = {"name": "The Matrix", "year": 1999, "imdb": "tt0133093"}
+
+
+class Lookups:
+    """A client that answers by-imdb by language, and keeps what it was asked."""
+
+    def __init__(self, rows=None, title=MATRIX):
+        self.rows = rows or {}
+        self.title = title
+        self.asked = []
+
+    def by_imdb(self, imdb, **kw):
+        self.asked.append(kw.get("lang"))
+        if not self.title:
+            raise SubtitleDbError("no title", 404)
+        items = list(self.rows.get(kw.get("lang"), []))
+        return {"title": self.title, "subtitles": {"items": items, "total": len(items)}}
+
+
+FILM = {"path": "/films/The.Matrix.1999.1080p.BluRay.x264.mkv", "imdb": "tt0133093",
+        "title": "The Matrix", "year": "1999"}
+
+
+@pytest.mark.parametrize("hint", [
+    logic.Hint(imdb_id="tt0133093"),
+    logic.Hint(tmdb_id=603),
+    logic.Hint(series_imdb_id="tt0108778", season=1, episode=1),
+])
+def test_an_id_is_enough_to_load_a_subtitle_unasked(hint):
+    assert logic.worth_looking_up(hint, "/films/x.mkv", 7200)
+    # Even for a stream: an add-on that knows the id has said what it is playing.
+    assert logic.worth_looking_up(hint, "https://cdn.example/v/1.m3u8", 7200)
+
+
+def test_a_title_alone_needs_a_year_or_an_episode_and_must_come_from_a_file():
+    film = logic.Hint(title="Solaris", year=2002)
+    episode = logic.Hint(title="Friends", season=1, episode=1)
+    assert logic.worth_looking_up(film, "smb://nas/films/Solaris.2002.mkv")
+    assert logic.worth_looking_up(episode, "/tv/Friends.S01E01.mkv")
+    assert not logic.worth_looking_up(logic.Hint(title="Solaris"), "/films/Solaris.mkv")
+    assert not logic.worth_looking_up(logic.Hint(title="Friends", season=1), "/tv/x.mkv")
+    assert not logic.worth_looking_up(logic.Hint(), "/films/x.mkv")
+    # A stream's title is whatever the site called it.
+    for path in ("https://video.example/watch?v=1", "plugin://plugin.video.x/play/1"):
+        assert not logic.worth_looking_up(film, path)
+
+
+def test_a_trailer_or_a_clip_is_left_alone():
+    hint = logic.Hint(imdb_id="tt0133093")
+    assert not logic.worth_looking_up(hint, "/films/x-trailer.mkv", 150)
+    assert logic.worth_looking_up(hint, "/films/x.mkv", logic.SHORTEST)
+    # Kodi does not always know the length when playback starts.
+    assert logic.worth_looking_up(hint, "/films/x.mkv", 0)
+
+
+@pytest.mark.parametrize(("streams", "want"), [
+    (["English"], True),
+    (["french", "ENGLISH"], True),
+    # A stream nobody named: most often a file the viewer put beside the video.
+    ([""], True),
+    (["Undetermined"], True),
+    (["French"], False),
+    ([], False),
+])
+def test_a_video_that_already_has_subtitles_the_viewer_may_want_is_left_alone(streams, want):
+    assert logic.covered(streams, ["English", "Spanish"]) is want
+
+
+def test_the_first_language_with_a_match_is_loaded_and_the_rest_are_not_asked():
+    client = Lookups({"en": [row(id=7, language="en")], "es": [row(id=8, language="es")]})
+    item, said = logic.instant(client, FILM, ["Portuguese (Brazil)", "English", "Spanish"], [])
+    assert (item["id"], item["language_code"]) == (7, "en")
+    assert client.asked == ["pb", "en"]
+    assert said == "The Matrix (1999) tt0133093 via explicit-imdb, 1 candidates"
+
+
+def test_the_one_loaded_is_the_best_of_the_list_not_the_first_the_api_sent():
+    rows = [row(id=1, language="en", release_name="Other.Film.2004.DVDRip"),
+            row(id=2, language="en", release_name="The.Matrix.1999.1080p.BluRay.x264")]
+    item, _ = logic.instant(Lookups({"en": rows}), FILM, ["English"], [])
+    assert (item["id"], item["sync"]) == (2, True)
+
+
+def test_a_title_the_index_does_not_have_is_asked_about_once():
+    client = Lookups(title={})
+    item, said = logic.instant(client, {"path": "/films/x.mkv", "imdb": "tt9999999"},
+                               ["English", "Spanish", "French"], [])
+    assert item is None
+    assert said == "no title for it: nothing via manual"
+    assert client.asked == ["en"]
+
+
+def test_a_title_with_nothing_in_any_language_says_so():
+    item, said = logic.instant(Lookups(), FILM, ["English", "Spanish"], [])
+    assert (item, said) == (None, "no subtitles in English, Spanish")
+
+
+@pytest.mark.parametrize(("languages", "streams", "info", "why"), [
+    ([], [], FILM, "no subtitle languages are set in Kodi"),
+    (["English"], ["English"], FILM, "the video already has subtitles"),
+    (["English"], [], {"path": "https://video.example/1", "title": "Clip"},
+     "not enough is known about the video"),
+])
+def test_nothing_is_asked_when_there_is_nothing_to_load(languages, streams, info, why):
+    class Refuses:
+        def __getattr__(self, name):
+            raise AssertionError("the API was asked")
+
+    assert logic.instant(Refuses(), info, languages, streams) == (None, why)
+
+
+def test_a_language_with_no_code_is_skipped_rather_than_asked_unfiltered():
+    # An empty language list asks for every language, and the viewer would get one
+    # they cannot read.
+    client = Lookups({"en": [row(id=7, language="en")]})
+    item, _ = logic.instant(client, FILM, ["Klingonese", "English"], [])
+    assert item["id"] == 7
+    assert client.asked == ["en"]
+
+
+def test_a_clip_is_not_looked_up_however_well_it_is_named():
+    client = Lookups({"en": [row(id=7, language="en")]})
+    assert logic.instant(client, FILM, ["English"], [], seconds=95) == (
+        None, "not enough is known about the video")
+    assert client.asked == []
+
+
+def test_the_instant_lookup_is_on_unless_the_viewer_turns_it_off():
+    import xml.etree.ElementTree as ET
+
+    addon = HERE / "service.subtitles.subtitledb"
+    tree = ET.parse(addon / "resources" / "settings.xml")  # noqa: S314 - the addon's own file
+    setting = tree.find(".//setting[@id='instant']")
+    assert setting is not None
+    assert setting.get("type") == "boolean"
+    assert setting.findtext("default") == "true"
+    strings = (addon / "resources" / "language" / "resource.language.en_gb" / "strings.po"
+               ).read_text(encoding="utf-8")
+    for key in ("label", "help"):
+        assert 'msgctxt "#%s"' % setting.get(key) in strings
+    play = (addon / "resources" / "lib" / "kodi_play.py").read_text(encoding="utf-8")
+    assert 'getSettingBool("instant")' in play
+
+
+def test_the_instant_lookup_runs_as_the_addons_service():
+    addon = HERE / "service.subtitles.subtitledb"
+    xml = (addon / "addon.xml").read_text(encoding="utf-8")
+    assert re.findall(r'<extension point="xbmc.service" library="([^"]+)"', xml) == ["on_play.py"]
+    src = (addon / "on_play.py").read_text(encoding="utf-8")
+    code = [ln for ln in src.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    assert len(code) <= 15
+    assert "kodi_play.main()" in src
 
 
 # -- the zip ----------------------------------------------------------------

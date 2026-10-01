@@ -35,9 +35,28 @@ times over and picking one would be a lottery.
 The star rating is the only other thing Kodi draws. It carries whether the subtitle
 was recorded against the file being played, rather than a number invented to fill it.
 
+## When a video starts
+
+The addon also runs as a service. When a video starts, it takes the languages set
+under Settings -> Player -> Language -> Languages to download subtitles for, and
+loads the best match in the first of them that has one, without opening the
+dialog. A notification names the language. It asks again only for the next
+language when one has nothing, and not at all when there is nothing to load.
+
+It leaves alone:
+
+- a video that already has subtitles in one of those languages, or a subtitle
+  stream with no language, which is most often a file put beside the video
+- anything Kodi knows to be under five minutes, such as a trailer
+- live TV
+- a stream with no id, whose title is whatever the site called it
+- a file whose name gives neither a year nor a season and episode
+
 ## Settings
 
 Settings -> Add-ons -> My add-ons -> Subtitles -> SubtitleDB -> Configure.
+
+**Load subtitles when a video starts** is on unless turned off.
 
 **Subtitles per language** is the most listed for each language: 500 unless changed,
 anything from 100 to 2000. The API sends 100 a request, so a title with 147 English
@@ -66,13 +85,15 @@ subtitles takes two.
 python3 -m pytest
 ```
 
-Only `service.py` (the entry point, a few lines) and `resources/lib/kodi_side.py`
-import Kodi's modules, and they do nothing `resources/lib/logic.py` does not, so the
-decisions are tested here and Kodi's own API is left to Kodi. The ranking rules are covered once, for every plugin, in
-`plugins/python/tests`.
+Only the two entry points, `service.py` and `on_play.py` (a few lines each), and
+`resources/lib/kodi_side.py` and `kodi_play.py` import Kodi's modules. They decide
+nothing that `resources/lib/logic.py` does not, so the decisions are tested here and
+Kodi's own API is left to Kodi. The ranking rules are covered once, for every
+plugin, in `plugins/python/tests`.
 
 The Live hosts workflow installs the addon into Kodi 19 and the current Kodi, plays
-the samples and searches through it: see [`plugins/hosts`](../hosts/README.md).
+the samples, checks the subtitle loaded as each one starts, and searches through it:
+see [`plugins/hosts`](../hosts/README.md).
 
 ## License
 

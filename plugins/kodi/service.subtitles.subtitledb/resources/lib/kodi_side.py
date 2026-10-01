@@ -31,7 +31,8 @@ PROFILE = ADDON.getAddonInfo("profile")
 import logic  # noqa: E402
 from subtitledb import SubtitleDbError, per_language  # noqa: E402
 
-HANDLE = int(sys.argv[1])
+#: The listing Kodi opened the addon to fill. The service in kodi_play.py has none.
+HANDLE = int(sys.argv[1]) if len(sys.argv) > 1 else -1
 
 
 def log(message, level=xbmc.LOGDEBUG):
@@ -163,15 +164,20 @@ def do_download(params):
         notify(ADDON.getLocalizedString(32012))
         return
 
+    path = save(item, content)
+    entry = xbmcgui.ListItem(label=path)
+    xbmcplugin.addDirectoryItem(handle=HANDLE, url=path, listitem=entry, isFolder=False)
+
+
+def save(item, content):
+    """Write a downloaded subtitle where Kodi can open it, and say where."""
     path = os.path.join(temp_dir(), logic.filename_for(item))
     handle = xbmcvfs.File(path, "wb")
     try:
         handle.write(bytearray(content))
     finally:
         handle.close()
-
-    entry = xbmcgui.ListItem(label=path)
-    xbmcplugin.addDirectoryItem(handle=HANDLE, url=path, listitem=entry, isFolder=False)
+    return path
 
 
 def main():

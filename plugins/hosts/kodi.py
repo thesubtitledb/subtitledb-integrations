@@ -10,7 +10,13 @@ media folders and read the NFO files beside the videos, which is how it knows th
 ids: the route a user who keeps a library takes. The order matters, since a file
 Kodi has in its library is played with the library's details even by path.
 
-For each, this runs the addon the way Kodi's subtitle dialog does (the plugin://
+As each video starts, the addon looks a subtitle up by itself. Nothing here turns
+that on, so it runs only because it is on out of the box. For a title the index
+holds it must load one in English, the language Kodi asks for until told otherwise,
+for the sample's own title by the route expected, and Kodi must be showing it. For
+the title the index has nothing for it must load nothing and say so.
+
+Then this runs the addon the way Kodi's subtitle dialog does (the plugin://
 search URL, then the download URL the search listed), once per language the sample
 is asked for, and checks that the addon resolved the sample's own title by the
 route expected, listed only the language asked, as many as its settings allow and
@@ -48,6 +54,14 @@ KODI_NAMES = {"en": "English", "es": "Spanish", "pb": "Portuguese (Brazil)"}
 BY_NAME = ("title",)
 #: A download link the API answers with an error: there is no subtitle 0.
 REFUSED = "https://api.thesubtitledb.org/get/0"
+#: The addon's service logs STARTED once it is running, then one ON_PLAY line for
+#: each video it saw start, once it has decided what to load.
+STARTED = "lookup on play started"
+ON_PLAY = "on play: "
+LOADED = re.compile(r"^loaded (\S+), (.+?), for ")
+#: The subtitle language Kodi asks for until told otherwise, as its settings and its
+#: player name it.
+DEFAULT_LANGUAGE = ("English", "eng")
 
 
 def by_library(sample: media.Sample) -> tuple[str, ...]:
@@ -141,13 +155,77 @@ def resolved_line(log):
     return lines[-1].split("resolved to", 1)[1].strip() if lines else "nothing logged"
 
 
-def check_video(url, item, video, sample, log, tiers):
+def on_play(log):
+    """What the lookup on play decided for each video it saw start, oldest first."""
+    return [line.split(ON_PLAY, 1)[1] for entry in addon_log(log) for line in entry
+            if ON_PLAY in line]
+
+
+def wait_started(log, seconds=60):
+    """Kodi starts the addon's service when the addon is enabled. A video that starts
+    before the service is running goes unseen."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if any(STARTED in line for entry in addon_log(log) for line in entry):
+            return
+        time.sleep(1)
+    raise Failure("the addon's service never started")
+
+
+def check_instant(url, player, video, sample, log, tiers, seen, subs, seconds=90):
+    """What the addon did by itself as the video started: the log's ON_PLAY lines
+    past the first `seen`, and the subtitle Kodi is showing."""
+    end = time.time() + seconds
+    while len(on_play(log)) <= seen:
+        if time.time() > end:
+            raise Failure("on play the addon logged nothing in %d s for %s" % (seconds, video.name))
+        time.sleep(1)
+    said = on_play(log)[seen]
+    print("  on play: %s" % said)
+    loaded = LOADED.match(said)
+    if not sample.known:
+        if loaded or not said.startswith("nothing loaded"):
+            raise Failure("on play, for a title the index does not have: %s" % said)
+        return
+    if not loaded:
+        raise Failure("on play the addon loaded nothing for %s: %s" % (video.name, said))
+    via = VIA.search(said)
+    if sample.imdb not in said or not via or via.group(1) not in tiers:
+        raise Failure("on play the addon %s, expected %s via %s" % (
+            said, sample.imdb, " or ".join(tiers)))
+    name, language = loaded.groups()
+    if language != DEFAULT_LANGUAGE[0]:
+        raise Failure("on play the addon loaded %s, and Kodi asks for %s" % (
+            language, DEFAULT_LANGUAGE[0]))
+    saved = subs / name
+    if not saved.is_file() or not looks_like_subtitles(saved):
+        raise Failure("on play the addon saved %s, which is not a subtitle file" % name)
+    # The player takes the file on its own thread, a moment after it is handed over.
+    showing, end = {}, time.time() + 15
+    while time.time() < end:
+        showing = rpc(url, "Player.GetProperties", {
+            "playerid": player, "properties": ["subtitleenabled", "currentsubtitle"]})
+        current = showing.get("currentsubtitle") or {}
+        if showing.get("subtitleenabled") and current.get("language") == DEFAULT_LANGUAGE[1]:
+            print("  Kodi shows %s" % current)
+            return
+        time.sleep(1)
+    raise Failure("on play the addon loaded %s, and Kodi shows %s" % (name, showing))
+
+
+def check_video(url, item, video, sample, log, tiers, subs):
+    """`subs` is where the addon's service saves what it loads on play, or None when
+    the service is not running."""
+    seen = len(on_play(log))
     player = play(url, item, video)
     try:
         known = rpc(url, "Player.GetItem", {"playerid": player, "properties": [
             "title", "year", "showtitle", "season", "episode", "imdbnumber", "uniqueid",
             "tvshowid"]})["item"]
         print("  Kodi knows %s" % {k: v for k, v in known.items() if v not in ("", 0, -1, None)})
+        # Before the searches below, which log the same lines and empty the same folder.
+        if subs:
+            check_instant(url, player, video, sample, log, tiers, seen, subs)
         for code in sample.languages:
             language = KODI_NAMES[code]
             started = time.time()
@@ -245,7 +323,9 @@ def scan_library(url, userdata, root, samples, seconds=300):
 def set_count(userdata: pathlib.Path):
     """The addon's settings file, the way Kodi writes one, holding the count per
     language every host is set to. Kodi reads it the first time the addon asks for a
-    setting, which is after enable_addon, so writing it first is in time."""
+    setting, which is after enable_addon, so writing it first is in time. Every other
+    setting keeps its default, so the lookup on play runs because it is on out of the
+    box."""
     folder = userdata / "addon_data" / ADDON
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "settings.xml").write_text(
@@ -286,6 +366,15 @@ def main(argv=None) -> int:
     print("addon %s enabled" % enable_addon(args.url))
 
     failures = []
+    subs = userdata / "addon_data" / ADDON / "subs"
+    try:
+        wait_started(args.log)
+        print("the lookup on play is running")
+    except Failure as err:
+        print("  FAIL %s" % err)
+        failures.append(str(err))
+        subs = None
+
     # Playback can stop between the subtitle dialog opening and the search running.
     try:
         idle = rpc(args.url, "Files.GetDirectory",
@@ -315,7 +404,7 @@ def main(argv=None) -> int:
     for sample, video in samples:
         print("%s:" % video.name)
         try:
-            check_video(args.url, {"file": str(video)}, video, sample, args.log, BY_NAME)
+            check_video(args.url, {"file": str(video)}, video, sample, args.log, BY_NAME, subs)
         except Failure as err:
             print("  FAIL %s" % err)
             failures.append(str(err))
@@ -332,7 +421,8 @@ def main(argv=None) -> int:
             continue
         print("%s %s:" % (video.name, ids[sample]))
         try:
-            check_video(args.url, ids[sample], video, sample, args.log, by_library(sample))
+            check_video(args.url, ids[sample], video, sample, args.log, by_library(sample),
+                        subs)
         except Failure as err:
             print("  FAIL %s" % err)
             failures.append(str(err))
