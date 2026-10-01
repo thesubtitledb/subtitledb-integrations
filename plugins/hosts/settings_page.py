@@ -44,22 +44,33 @@ def page_name(server, plugin):
     return ours[0]
 
 
+def press(page, server, label):
+    """Click what ``label`` names. Emby's sign-in cards act on a click on their tile and
+    ignore one on the name under it, so there it is the tile above the name, or the
+    middle of the card when the name's element is the whole card."""
+    if server.kind != "emby":
+        label.click()
+        return
+    box = label.bounding_box()
+    y = box["y"] - 40 if box["height"] < 60 else box["y"] + box["height"] / 2
+    page.mouse.click(box["x"] + box["width"] / 2, y)
+
+
 def sign_in(page, server):
     """Through the sign-in page, whether it shows the users or asks for a name."""
     page.goto(server.base + "/web/index.html")
     password = page.locator("input[type=password]:visible")
-    # A button in Jellyfin, a card beside the users' in Emby, its text next to an icon:
-    # the smallest element that holds the words.
+    # A button in Jellyfin, a card beside the users' in Emby.
     manual = page.get_by_text(re.compile(r"manual login", re.IGNORECASE)).filter(visible=True)
-    user = page.get_by_text(M.USER, exact=True)
+    user = page.get_by_text(M.USER, exact=True).filter(visible=True)
     end = time.time() + 90
     while not password.count():
         if time.time() > end:
             raise M.Failure("no sign-in form")
         if manual.count():
-            manual.first.click()
-        elif user.count() and user.first.is_visible():
-            user.first.click()
+            press(page, server, manual.first)
+        elif user.count():
+            press(page, server, user.first)
         page.wait_for_timeout(1000)
     name = page.locator("input:visible:not([type=password]):not([type=checkbox])")
     if name.count():

@@ -246,10 +246,16 @@ namespace SubtitleDb.Tests
         {
             var handler = new SilentHandler();
             var client = new SubtitleDbClient(new HttpClient(handler), "https://api.example.test");
-            using (var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(50)))
+            using (var cancel = new CancellationTokenSource())
             {
-                await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                    () => client.ByImdbAsync("tt1", null, null, null, 100, 0, cancel.Token));
+                var call = client.ByImdbAsync("tt1", null, null, null, 100, 0, cancel.Token);
+
+                // Cancelled once the request is out. A fixed delay can run out before
+                // it is sent on a loaded machine, and then nothing was ever asked.
+                Assert.Same(handler.Entered.Task, await Task.WhenAny(
+                    handler.Entered.Task, Task.Delay(TimeSpan.FromSeconds(10))));
+                cancel.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
             }
 
             Assert.Equal(1, handler.Calls);
@@ -317,11 +323,16 @@ namespace SubtitleDb.Tests
 
             public int Calls => _calls;
 
+            /// <summary>Done when the first request arrives.</summary>
+            public TaskCompletionSource<bool> Entered { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             protected override async Task<HttpResponseMessage> SendAsync(
                 HttpRequestMessage request,
                 CancellationToken cancellationToken)
             {
                 Interlocked.Increment(ref _calls);
+                Entered.TrySetResult(true);
                 await Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
                 throw new InvalidOperationException("unreachable");
             }
