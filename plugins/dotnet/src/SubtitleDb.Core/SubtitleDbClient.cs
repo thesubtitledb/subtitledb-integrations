@@ -89,6 +89,13 @@ namespace SubtitleDb.Core
 
         public int Retries { get; set; } = 2;
 
+        /// <summary>
+        /// The longest one request may take, first byte to last. The hosts' own clients
+        /// wait far longer (Jellyfin's 100 s), and a search that hangs that long looks
+        /// like a server that has stopped.
+        /// </summary>
+        public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(15);
+
         /// <summary>Delay between attempts. A test sets it to zero.</summary>
         public Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = (d, ct) => Task.Delay(d, ct);
 
@@ -185,7 +192,42 @@ namespace SubtitleDb.Core
                 throw new SubtitleDbException("refusing to download from " + url);
             }
 
-            var next = new Uri(url);
+            byte[] bytes;
+            try
+            {
+                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    timeout.CancelAfter(Timeout);
+                    bytes = await FetchAsync(new Uri(url), timeout.Token).ConfigureAwait(false);
+                }
+            }
+            catch (HttpRequestException err)
+            {
+                throw new SubtitleDbException("cannot download " + url + ": " + err.Message);
+            }
+            catch (IOException err)
+            {
+                // The connection broke off while the body was being read.
+                throw new SubtitleDbException("cannot download " + url + ": " + err.Message);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new SubtitleDbException("cannot download " + url + ": timed out");
+            }
+
+            var refused = NotASubtitle(bytes);
+            if (refused != null)
+            {
+                // A captive portal or an error page can answer 200 as well. Saved as a
+                // subtitle it shows nothing, and the host would say it worked.
+                throw new SubtitleDbException(url + " sent " + refused + ", not a subtitle");
+            }
+
+            return bytes;
+        }
+
+        private async Task<byte[]> FetchAsync(Uri next, CancellationToken cancellationToken)
+        {
             var http = _downloads ?? NoRedirects.Value;
             for (var hop = 0; hop <= MaxRedirects; hop++)
             {
@@ -228,6 +270,32 @@ namespace SubtitleDb.Core
             }
 
             throw new SubtitleDbException("download redirected more than " + MaxRedirects + " times");
+        }
+
+        /// <summary>
+        /// "nothing" for a body that is empty or blank, "a web page" for HTML, and null
+        /// for anything else.
+        /// </summary>
+        internal static string? NotASubtitle(byte[] bytes)
+        {
+            var start = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
+            while (start < bytes.Length && (bytes[start] == ' ' || (bytes[start] >= 9 && bytes[start] <= 13)))
+            {
+                start++;
+            }
+
+            if (start == bytes.Length)
+            {
+                return "nothing";
+            }
+
+            var head = System.Text.Encoding.ASCII
+                .GetString(bytes, start, Math.Min(15, bytes.Length - start))
+                .ToLowerInvariant();
+            return head.StartsWith("<!doctype html", StringComparison.Ordinal)
+                || head.StartsWith("<html", StringComparison.Ordinal)
+                ? "a web page"
+                : null;
         }
 
         private static Dictionary<string, string?> PageParameters(string? language, int limit, int offset)
@@ -275,12 +343,15 @@ namespace SubtitleDb.Core
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 HttpResponseMessage? response = null;
+                var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 try
                 {
+                    timeout.CancelAfter(Timeout);
                     using (var request = new HttpRequestMessage(HttpMethod.Get, url))
                     {
                         request.Headers.TryAddWithoutValidation("Accept", "application/json");
-                        response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                        // The body is read inside this call, so the timeout covers it too.
+                        response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
                     }
 
                     if (response.IsSuccessStatusCode)
@@ -319,6 +390,16 @@ namespace SubtitleDb.Core
                         await Delay(Backoff(attempt, null), cancellationToken).ConfigureAwait(false);
                     }
                 }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // Ours or the host client's timeout. Either is an API that did not
+                    // answer, which is worth another try, not a stack trace.
+                    last = new SubtitleDbException("cannot reach " + ApiBase + ": timed out");
+                    if (attempt < Retries)
+                    {
+                        await Delay(Backoff(attempt, null), cancellationToken).ConfigureAwait(false);
+                    }
+                }
                 catch (JsonException err)
                 {
                     throw new SubtitleDbException("the API sent something that is not JSON: " + err.Message);
@@ -326,6 +407,7 @@ namespace SubtitleDb.Core
                 finally
                 {
                     response?.Dispose();
+                    timeout.Dispose();
                 }
             }
 

@@ -22,6 +22,16 @@
                         want there: this plugin answers in whichever language Jellyfin asks for.
                     </p>
                 </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="LookUpOnPlay" name="LookUpOnPlay" type="checkbox" is="emby-checkbox" />
+                        <span>Look up subtitles when a video starts</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Follows the library's subtitle download settings, and saves even when the
+                        video has subtitles. It is listed from the next play.
+                    </div>
+                </div>
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="PerLanguage">Subtitles per language</label>
                     <input id="PerLanguage" name="PerLanguage" type="number" is="emby-input"
@@ -54,6 +64,7 @@
                 ApiClient.getPluginConfiguration(SubtitleDbConfig.pluginUniqueId).then((config) => {
                     document.querySelector('#ApiBase').value = config.ApiBase;
                     document.querySelector('#PerLanguage').value = config.PerLanguage;
+                    document.querySelector('#LookUpOnPlay').checked = config.LookUpOnPlay;
                     Dashboard.hideLoadingMsg();
                 });
             });
@@ -65,6 +76,7 @@
                 ApiClient.getPluginConfiguration(SubtitleDbConfig.pluginUniqueId).then((config) => {
                     config.ApiBase = document.querySelector('#ApiBase').value;
                     config.PerLanguage = parseInt(document.querySelector('#PerLanguage').value, 10);
+                    config.LookUpOnPlay = document.querySelector('#LookUpOnPlay').checked;
                     ApiClient.updatePluginConfiguration(SubtitleDbConfig.pluginUniqueId, config)
                         .then(Dashboard.processPluginConfigurationUpdateResult);
                 });

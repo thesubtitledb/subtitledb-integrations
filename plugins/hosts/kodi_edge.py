@@ -90,6 +90,10 @@ S = types.SimpleNamespace(
     requests=[],      # (time, path) of every API request
     release=threading.Event(),  # frees handlers that hang
     media=pathlib.Path("."),
+    release_name="",  # the release the first row of every lookup was made for
+    body=None,        # what every download sends instead of its own subtitle
+    names={},         # title per subtitle id, for by-subid and to tell who asked
+    served=[],        # (subtitle id, bytes) of every download answered
 )
 
 #: A 200 that is not what the addon asked for, by mode.
@@ -155,17 +159,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if S.mode in BROKEN:
             return self.send(200, BROKEN[S.mode],
                              "text/html" if S.mode == "html200" else "application/json")
+        # The address the caller reached the fake by, so a download stays on the host
+        # it asked: a server in a container reaches it by another name than Kodi does.
+        base = "http://" + (self.headers.get("Host") or "127.0.0.1:%d" % PORT)
+        if url.path.startswith("/v1/by-subid/"):
+            rid = int(url.path.rsplit("/", 1)[1])
+            name = S.names.get(rid // 10, "The Matrix")
+            return self.send(200, json.dumps({
+                "title": {"name": name, "year": 1999, "kind": "movie"},
+                "subtitle": self.row(base, rid // 10, rid % 10, "en")}))
         name = q.get("q") or "The Matrix"
         sid = sid_for(name)
+        S.names[sid] = name
         lang = q.get("lang") or "en"
         rows = []
         if lang in S.langs:
-            rows = [{"id": sid * 10 + i, "language": lang, "format": "srt", "cues": 900 - i,
-                     "downloads": 10, "release_name": "", "hearing_impaired": False,
-                     "download_url": "%s/get/%d" % (FAKE, sid * 10 + i)} for i in range(3)]
+            rows = [self.row(base, sid, i, lang) for i in range(3)]
         return self.send(200, json.dumps({
             "title": {"name": name, "year": 1999, "imdb": "tt%07d" % sid, "kind": "movie"},
             "subtitles": {"items": rows, "total": len(rows)}}))
+
+    @staticmethod
+    def row(base, sid, i, lang):
+        return {"id": sid * 10 + i, "language": lang, "format": "srt", "cues": 900 - i,
+                "downloads": 10, "release_name": S.release_name if i == 0 else "",
+                "hearing_impaired": False, "download_url": "%s/get/%d" % (base, sid * 10 + i)}
 
     def download(self, sid):
         if S.dl == "404":
@@ -179,7 +197,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if S.dl == "hang":
             S.release.wait(600)
             return None
-        return self.send(200, SRT % sid, "application/x-subrip")
+        body = (SRT % sid).encode("utf-8") if S.body is None else S.body
+        S.served.append((sid, body))
+        return self.send(200, body, "application/x-subrip")
 
     def serve_media(self, rel):
         """A video over HTTP, with the byte ranges Kodi seeks by."""
@@ -207,8 +227,8 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
 
 
-def serve():
-    srv = Server(("127.0.0.1", PORT), Handler)
+def serve(host="127.0.0.1"):
+    srv = Server((host, PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
 

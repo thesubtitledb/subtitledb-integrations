@@ -56,6 +56,12 @@ namespace SubtitleDb.Emby
             SubtitleSearchRequest request,
             CancellationToken cancellationToken)
         {
+            if (request.IsForced == true)
+            {
+                // The index does not mark forced subtitles, so it has none to give.
+                return new RemoteSubtitleInfo[0];
+            }
+
             var options = OptionsFrom(request);
             var hint = HintFrom(request);
 
@@ -84,9 +90,9 @@ namespace SubtitleDb.Emby
             }
             catch (SubtitleDbException err)
             {
-                // A provider that throws here is one Emby stops asking. Nothing found
-                // is the honest answer to "the index did not have it".
-                _logger.ErrorException("SubtitleDB: search failed", err);
+                // An API that is down or slow is not an error in Emby, so one line and
+                // no stack trace. Nothing found is the honest answer.
+                _logger.Warn("SubtitleDB: search failed for {0}: {1}", request.MediaPath ?? string.Empty, err.Message);
                 return new RemoteSubtitleInfo[0];
             }
         }

@@ -14,7 +14,7 @@ or all.
 | Job | Host | Installed from | The check |
 |---|---|---|---|
 | api | none | | `baseline.py`: for every sample, route a host takes and language asked, that the API answers with the right title, by the rung meant for that route |
-| jellyfin | 10.10.7, 10.11.11, 12.1 | the official container | the plugin installed from the server's catalog, out of a repository built as a release's is and served from the runner, or any repository URL given to the run; then the server's subtitle search and download calls, once per language, and that every row offered is one the index holds for the sample's own film or episode |
+| jellyfin | 10.10.7, 10.11.11, 12.1 | the official container | the plugin installed from the server's catalog, out of a repository built as a release's is and served from the runner, or any repository URL given to the run; then the server's subtitle search and download calls, once per language, and that every row offered is one the index holds for the sample's own film or episode; then, against `mediaserver_edge.py`'s fake API, each way the API or a download can fail, and the lookup as a film starts playing |
 | emby | 4.8.11.0, 4.9.5.0, 4.10.0.40 | the official container | the same calls and checks, Emby's side |
 | kodi | Ubuntu 22.04's Kodi 19, Flathub's (21.x) | apt, flatpak, under Xvfb | the subtitle the addon loads by itself as each video starts (that setting at its default) and that Kodi shows it; then, over JSON-RPC, the plugin:// search and download URLs Kodi's subtitle dialog opens, for each file played by path alone and then from the library, and the title and rung the addon logs; and that a download the API refuses ends the listing with the failure logged; then, restarted against `kodi_edge.py`'s fake API, each way the API can fail, the videos the addon must leave alone, and quitting mid-lookup |
 | bazarr | Bazarr 1.6.1 with Radarr 6.4.4 and Sonarr 4.0.20 | the linuxserver containers, then `install.py` | Bazarr's manual search and download after it syncs films from Radarr and shows from Sonarr, and that the provider claimed the title for every row and offered every language of the profile |
@@ -70,6 +70,7 @@ says so and no more anywhere else, so a changed index fails there, not in a host
 | `mediaserver.py` | drives Jellyfin or Emby over its HTTP API, from the setup wizard to the download |
 | `kodi.py` | drives Kodi over JSON-RPC, sets the library up in its database, and prints the addon's lines from `kodi.log` |
 | `kodi_edge.py` | the edge videos, and a fake API that answers each request however a case needs: down, hanging, rate limited, an error page, malformed JSON, a broken download |
+| `mediaserver_edge.py` | the Jellyfin and Emby plugins against that fake API: the subtitle dialog under each failure, and the lookup on play with each library rule and the setting |
 | `bazarr.py` | drives Radarr, Sonarr and Bazarr over their HTTP APIs |
 | `vlc/sdb_live.lua` | a VLC interface script that loads the extension, stands in for its window, and presses its buttons |
 | `vlc/run.sh` | one VLC per sample video with that script, on Linux or Windows |

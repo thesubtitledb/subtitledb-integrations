@@ -16,5 +16,8 @@ namespace SubtitleDb.Jellyfin.Configuration
 
         /// <summary>The most subtitles to read and offer for each language.</summary>
         public int PerLanguage { get; set; } = MatchOptions.PerLanguage;
+
+        /// <summary>Look a video up when it starts playing, and save the best match.</summary>
+        public bool LookUpOnPlay { get; set; } = true;
     }
 }

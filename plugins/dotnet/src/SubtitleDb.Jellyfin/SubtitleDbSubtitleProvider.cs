@@ -100,9 +100,9 @@ namespace SubtitleDb.Jellyfin
             }
             catch (SubtitleDbException err)
             {
-                // A provider that throws here is one Jellyfin stops asking. Nothing
-                // found is the honest answer to "the index did not have it".
-                _logger.LogWarning(err, "SubtitleDB: search failed for {Path}", request.MediaPath);
+                // A provider that throws here is one Jellyfin logs as an error with a
+                // stack trace. An API that is down or slow is neither, so one line.
+                _logger.LogWarning("SubtitleDB: search failed for {Path}: {Message}", request.MediaPath, err.Message);
                 return Array.Empty<RemoteSubtitleInfo>();
             }
         }

@@ -9,16 +9,18 @@ namespace SubtitleDb.Emby
 {
     /// <summary>
     /// There is no account and no key. The settings are the API address, for anyone
-    /// running their own mirror, and how many subtitles to offer per language; Emby
-    /// keeps them in plugins/configurations/SubtitleDb.Emby.xml. The languages are Emby's,
-    /// from the user's subtitle settings, and repeating them here would only let the
-    /// two disagree.
+    /// running their own mirror, how many subtitles to offer per language, and the
+    /// lookup when a video starts; Emby keeps them in
+    /// plugins/configurations/SubtitleDb.Emby.xml. The languages are Emby's, from its
+    /// subtitle settings, and repeating them here would only let the two disagree.
     /// </summary>
     public class PluginConfiguration : BasePluginConfiguration
     {
         public string ApiBase { get; set; } = SubtitleDbClient.DefaultApiBase;
 
         public int PerLanguage { get; set; } = MatchOptions.PerLanguage;
+
+        public bool LookUpOnPlay { get; set; } = true;
     }
 
     /// <summary>The plugin Emby lists, so it can be updated and removed like any other.</summary>

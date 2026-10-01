@@ -28,10 +28,31 @@ list: the host asks one language at a time.
 
 ## Settings
 
-Subtitles per language, the most offered for each: 500 unless changed, 100 to 2000.
-Jellyfin has it on the plugin's page, Dashboard -> Plugins -> SubtitleDB. Emby has no
-page: stop the server, set `PerLanguage` in `plugins/configurations/SubtitleDb.Emby.xml`,
-and start it again.
+| Setting | In Emby's file | Default |
+|---|---|---|
+| Subtitles per language, the most offered for each, 100 to 2000 | `PerLanguage` | 500 |
+| Look up subtitles when a video starts, see [On play](#on-play) | `LookUpOnPlay` | on |
+
+Jellyfin has them on the plugin's page, Dashboard -> Plugins -> SubtitleDB. Emby has no
+page: stop the server, change `plugins/configurations/SubtitleDb.Emby.xml`, and start it
+again.
+
+## On play
+
+When a film or an episode starts, the plugin asks SubtitleDB for it and saves the best
+match beside it, also when the video has subtitles already. The library's subtitle
+download settings decide the rest:
+
+- Download languages: asked in order, and the first with a match is saved. With none
+  set, nothing is asked.
+- "Only download subtitles that are a perfect match", on by default: only a subtitle
+  recorded against that release is saved. Untick it to get the best match.
+- SubtitleDB unticked as a subtitle downloader: nothing is asked.
+
+A video is asked for once in 10 minutes, and a subtitle already beside it is not saved
+again. Players read the subtitle list as playback starts, so the new one is listed from
+the next play. It uses only the host's own calls: the playback event, its subtitle search
+and save, and the library refresh its subtitle dialog runs after a save.
 
 ## What it uses
 
@@ -55,6 +76,10 @@ comment.
 
 The bytes reach the host as the API stores them, typed by the row's format, not the file
 name. The host converts the character set; the plugin does not.
+
+Each request waits 15 seconds. One that times out, cannot connect or gets a server error
+is tried twice more; then the search lists nothing from SubtitleDB and the host logs one
+warning. A download that is empty or a web page is refused, not saved.
 
 ## Build
 
@@ -86,7 +111,7 @@ second DLL appears in `dist/emby`.
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 118 tests
+dotnet test SubtitleDb.sln     # 153 tests
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 

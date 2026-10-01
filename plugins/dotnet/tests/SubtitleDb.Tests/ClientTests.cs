@@ -205,6 +205,139 @@ namespace SubtitleDb.Tests
             Assert.Equal(6, handler.Calls.Count);
         }
 
+        [Fact]
+        public async Task AnApiThatNeverAnswersIsAskedAgainAndThenSaysSo()
+        {
+            var handler = new SilentHandler();
+            var client = new SubtitleDbClient(new HttpClient(handler), "https://api.example.test")
+            {
+                Delay = (_, __) => Task.CompletedTask,
+                Timeout = TimeSpan.FromMilliseconds(50),
+            };
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => client.ByImdbAsync("tt1", null, null, null, 100, 0, CancellationToken.None));
+
+            Assert.Equal("cannot reach https://api.example.test: timed out", err.Message);
+            Assert.Equal(3, handler.Calls);
+        }
+
+        [Fact]
+        public async Task TheHostClientsOwnTimeoutIsTheSameAnswer()
+        {
+            // HttpClient.Timeout ends a request with TaskCanceledException, which is not
+            // an HttpRequestException, and reached Jellyfin's log as a stack trace.
+            var handler = new SilentHandler();
+            var client = new SubtitleDbClient(
+                new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(50) }, "https://api.example.test")
+            {
+                Delay = (_, __) => Task.CompletedTask,
+            };
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => client.ByImdbAsync("tt1", null, null, null, 100, 0, CancellationToken.None));
+
+            Assert.Contains("timed out", err.Message, StringComparison.Ordinal);
+            Assert.Equal(3, handler.Calls);
+        }
+
+        [Fact]
+        public async Task ACallerThatCancelsGetsACancellationNotAnError()
+        {
+            var handler = new SilentHandler();
+            var client = new SubtitleDbClient(new HttpClient(handler), "https://api.example.test");
+            using (var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(50)))
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => client.ByImdbAsync("tt1", null, null, null, 100, 0, cancel.Token));
+            }
+
+            Assert.Equal(1, handler.Calls);
+        }
+
+        [Theory]
+        [InlineData("<!DOCTYPE html><html><body>Blocked</body></html>", "a web page")]
+        [InlineData(" \n<HTML><body>Maintenance</body></HTML>", "a web page")]
+        [InlineData("", "nothing")]
+        [InlineData(" \r\n\t", "nothing")]
+        [InlineData("\uFEFF<!doctype html><title>Sign in</title>", "a web page")]
+        public async Task ADownloadThatIsNotASubtitleIsRefused(string body, string sent)
+        {
+            // A captive portal or an error page answering 200 was saved as the subtitle.
+            var handler = new StubHandler().On("/get/1", body);
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.Equal("https://api.example.test/get/1 sent " + sent + ", not a subtitle", err.Message);
+        }
+
+        [Fact]
+        public async Task ASubtitleWithTagsInItIsStillASubtitle()
+        {
+            var handler = new StubHandler().On("/get/1", "1\n00:00:01,000 --> 00:00:02,000\n<i>hi</i>\n");
+
+            var bytes = await Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None);
+
+            Assert.NotEmpty(bytes);
+        }
+
+        [Fact]
+        public async Task ADownloadThatNeverAnswersSaysSo()
+        {
+            var handler = new SilentHandler();
+            var client = new SubtitleDbClient(
+                new HttpClient(handler), "https://api.example.test", downloads: new HttpClient(handler))
+            {
+                Timeout = TimeSpan.FromMilliseconds(50),
+            };
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => client.DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.Equal("cannot download https://api.example.test/get/1: timed out", err.Message);
+        }
+
+        [Fact]
+        public async Task ADownloadThatCannotConnectIsTheOneExceptionCallersCatch()
+        {
+            var refused = new HttpClient(new RefusingHandler());
+            var client = new SubtitleDbClient(refused, "https://api.example.test", downloads: refused);
+
+            var err = await Assert.ThrowsAsync<SubtitleDbException>(
+                () => client.DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
+
+            Assert.StartsWith("cannot download https://api.example.test/get/1: ", err.Message, StringComparison.Ordinal);
+        }
+
+        /// <summary>Never answers: waits until the request is cancelled.</summary>
+        private sealed class SilentHandler : HttpMessageHandler
+        {
+            private int _calls;
+
+            public int Calls => _calls;
+
+            protected override async Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref _calls);
+                await Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException("unreachable");
+            }
+        }
+
+        /// <summary>A connection that is refused.</summary>
+        private sealed class RefusingHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                throw new HttpRequestException("Connection refused");
+            }
+        }
+
         /// <summary>Fails the first <c>n</c> attempts with a 500, then answers.</summary>
         private sealed class RetryHandler : HttpMessageHandler
         {

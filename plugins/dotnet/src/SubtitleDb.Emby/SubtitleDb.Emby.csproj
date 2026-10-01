@@ -27,6 +27,10 @@
          FileNotFoundException. 4.9 and later, on .NET 8, bind a 6.0.0.0 request to
          their newer copy. -->
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
+    <!-- To compile against Emby's MediaBrowser.Model, which was built on this one;
+         System.Text.Json brings 4.5.4 and the compiler refuses the older copy. The
+         server has its own at run time, so nothing is shipped. -->
+    <PackageReference Include="System.Memory" Version="4.5.5" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

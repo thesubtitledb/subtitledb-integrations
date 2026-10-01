@@ -12,6 +12,9 @@
          own assemblies out of the published plugin folder, where they would shadow
          the server's copies. -->
     <PackageReference Include="Jellyfin.Controller" Version="10.10.7" PrivateAssets="all" />
+    <!-- IHostedService, for the lookup on play. The server runs on this framework, so
+         nothing from it is copied into the plugin folder. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
