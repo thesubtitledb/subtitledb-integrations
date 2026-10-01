@@ -6,8 +6,9 @@
 Signs in as mediaserver.py's user and opens the page the server lists for the plugin.
 The page must show what the server holds, with every field labelled. Unticking "Get
 latest subtitles on play" and saving must reach the server and say it saved, and so
-must ticking it again. An error thrown on the page fails it. Writes what the browser showed to
-[screenshot] when it fails. Needs playwright and its Chromium.
+must ticking it again. An error thrown by the page's script fails it, told from the
+server's own by the name the script gives itself; the server's own are printed. Writes
+what the browser showed to [screenshot] when it fails. Needs playwright and its Chromium.
 """
 
 from __future__ import annotations
@@ -22,6 +23,9 @@ from playwright.sync_api import sync_playwright
 LABEL = "Get latest subtitles on play"
 FIELDS = (LABEL, "Subtitles per language", "API address")
 SAVED = re.compile(r"settings saved", re.IGNORECASE)
+#: In the stack of an error the page's script threw: the script names itself with a
+#: sourceURL comment. Jellyfin 10.11 and 12 throw errors of their own on any page.
+OURS = re.compile(r"subtitledb", re.IGNORECASE)
 
 
 def same_id(a, b):
@@ -44,7 +48,9 @@ def sign_in(page, server):
     """Through the sign-in page, whether it shows the users or asks for a name."""
     page.goto(server.base + "/web/index.html")
     password = page.locator("input[type=password]:visible")
-    manual = page.locator("button:visible", has_text=re.compile("manual", re.IGNORECASE))
+    # A button in Jellyfin, a card like the users' in Emby 4.8.
+    manual = page.get_by_text(re.compile(r"^\s*manual login\s*$", re.IGNORECASE)).filter(
+        visible=True)
     user = page.get_by_text(M.USER, exact=True)
     end = time.time() + 90
     while not password.count():
@@ -55,7 +61,7 @@ def sign_in(page, server):
         elif user.count() and user.first.is_visible():
             user.first.click()
         page.wait_for_timeout(1000)
-    name = page.locator("input[type=text]:visible")
+    name = page.locator("input:visible:not([type=password]):not([type=checkbox])")
     if name.count():
         name.first.fill(M.USER)
     password.first.fill(M.PASSWORD)
@@ -110,7 +116,7 @@ def run(kind, url, shot=None) -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900})
-        page.on("pageerror", lambda err: errors.append(str(err)))
+        page.on("pageerror", lambda err: errors.append(err.stack or err.message))
         page.on("console", lambda msg: msg.type == "error" and noise.append(msg.text))
         step = "sign in"
         try:
@@ -134,8 +140,12 @@ def run(kind, url, shot=None) -> int:
             step = "tick and save"
             save_with(page, server, path, True)
             print("PASS  ticked it again and saved")
-            if errors:
-                raise M.Failure("the page threw %s" % errors)
+            for line in errors:
+                if not OURS.search(line):
+                    print("  the server's web app threw: %s" % line.splitlines()[0][:300])
+            ours = [line for line in errors if OURS.search(line)]
+            if ours:
+                raise M.Failure("the page's script threw %s" % ours)
         except Exception as err:  # what the browser showed is the whole report
             print("FAIL  %s: %s" % (step, err))
             print("  at %s" % page.url)

@@ -110,7 +110,7 @@ second DLL appears in `dist/emby`.
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 158 tests
+dotnet test SubtitleDb.sln     # 160 tests
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 

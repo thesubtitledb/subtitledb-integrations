@@ -44,7 +44,8 @@ LEAKED = ("TaskCanceledException", "OperationCanceledException", "HttpRequestExc
           "TypeLoadException", "InvalidCastException")
 
 #: One film per case, as a folder and a file name: a lookup on play asks once per
-#: video in ten minutes, so no case can reuse another's film.
+#: video in ten minutes, so no case can reuse another's film. Jellyfin files a name
+#: ending in -other, -sample, -trailer, -extra and the like as an extra, not a film.
 FILMS = {
     "dialog": ("The Matrix (1999)", "The.Matrix.1999.1080p.BluRay.x264-GROUP"),
     "plain": ("Heat (1995)", "Heat.1995.1080p.BluRay.x264-PLAIN"),
@@ -57,7 +58,7 @@ FILMS = {
     "foreign": ("Tootsie (1982)", "Tootsie.1982.1080p.BluRay.x264-AWAY"),
     "hang": ("Platoon (1986)", "Platoon.1986.1080p.BluRay.x264-HANG"),
     "search": ("Network (1976)", "Network.1976.1080p.BluRay.x264-DOWN"),
-    "perfect other": ("Fargo (1996)", "Fargo.1996.1080p.BluRay.x264-OTHER"),
+    "perfect other": ("Fargo (1996)", "Fargo.1996.1080p.BluRay.x264-DIFF"),
     "perfect same": ("Seven (1995)", "Seven.1995.1080p.BluRay.x264-SAME"),
     "no languages": ("Vertigo (1958)", "Vertigo.1958.1080p.BluRay.x264-NOLANG"),
     "not ticked": ("Rocky (1976)", "Rocky.1976.1080p.BluRay.x264-UNTICKED"),

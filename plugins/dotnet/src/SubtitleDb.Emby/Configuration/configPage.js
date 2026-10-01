@@ -39,3 +39,6 @@ define([], function () {
         });
     };
 });
+
+// The name the browser gives this script's errors.
+//# sourceURL=subtitledb.js

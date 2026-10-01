@@ -67,5 +67,12 @@ namespace SubtitleDb.Emby.Tests
                 "id=\"LookUpOnPlay\"[^>]*/>\\s*<span>Get latest subtitles on play</span>",
                 Page(main: true));
         }
+
+        [Fact]
+        public void TheScriptNamesItselfForTheBrowserCheck()
+        {
+            // settings_page.py tells this script's errors from Emby's own by that name.
+            Assert.Matches("//# sourceURL=subtitledb\\S*\\.js", Page(main: false));
+        }
     }
 }

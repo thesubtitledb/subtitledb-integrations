@@ -209,6 +209,14 @@ namespace SubtitleDb.Jellyfin.Tests
         }
 
         [Fact]
+        public void TheSettingsScriptNamesItselfForTheBrowserCheck()
+        {
+            // settings_page.py tells this script's errors from Jellyfin's own by that
+            // name. Jellyfin 10.11 and 12 throw errors of their own on any page.
+            Assert.Matches("//# sourceURL=subtitledb\\S*\\.js", SettingsPage());
+        }
+
+        [Fact]
         public void TheSettingsPageReadsAndWritesEverySetting()
         {
             // A setting the page never fills is saved back empty, and one it never
