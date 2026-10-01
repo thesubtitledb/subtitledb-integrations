@@ -46,6 +46,12 @@ export interface ClientOptions {
    */
   client?: string;
   /**
+   * Sent as `client` on the subtitle download in place of `client`: the name the API
+   * records the download under. It keeps a closed list for our own integrations and
+   * records any other name as `other`. Defaults to `client`.
+   */
+  downloadClient?: string;
+  /**
    * A per-page-load correlation id, sent as `antispam_id` on every request including
    * the subtitle download. It ties a page's searches to its downloads server-side so
    * a burst of downloads with no matching searches reads as a scraper. Not a visitor
@@ -147,6 +153,7 @@ export class SubtitleDbClient {
   private readonly timeoutMs: number;
   private readonly retries: number;
   private readonly client: string | undefined;
+  private readonly downloadClient: string | undefined;
   private readonly antispamId: string | undefined;
 
   constructor(opts: ClientOptions = {}) {
@@ -165,6 +172,7 @@ export class SubtitleDbClient {
     this.timeoutMs = opts.timeoutMs ?? 10_000;
     this.retries = opts.retries ?? 2;
     this.client = opts.client;
+    this.downloadClient = opts.downloadClient ?? opts.client;
     this.antispamId = opts.antispamId;
   }
 
@@ -352,18 +360,20 @@ export class SubtitleDbClient {
   }
 
   /**
-   * Append the antispam id to a URL this client did not build.
+   * Append the download's client name and the antispam id to a URL this client did not
+   * build.
    *
    * `url()` handles the /v1 requests; the subtitle download goes to download_url, which
    * points at the /get/ redirect on the API host but is handed to us whole, so it gets
-   * the parameter here instead. A download_url that will not parse as a URL is left
-   * alone rather than dropped: the download still matters more than the correlation.
+   * the parameters here instead. A download_url that will not parse as a URL is left
+   * alone rather than dropped: the download still matters more than the attribution.
    */
-  private withAntispam(raw: string): string {
-    if (!this.antispamId) return raw;
+  private forDownload(raw: string): string {
+    if (!this.downloadClient && !this.antispamId) return raw;
     try {
       const u = new URL(raw);
-      u.searchParams.set('antispam_id', this.antispamId);
+      if (this.downloadClient) u.searchParams.set('client', this.downloadClient);
+      if (this.antispamId) u.searchParams.set('antispam_id', this.antispamId);
       return u.toString();
     } catch {
       return raw;
@@ -371,11 +381,12 @@ export class SubtitleDbClient {
   }
 
   /**
-   * The address fetchSubtitleText fetches: download_url with the antispam id on it. For
-   * a caller that downloads the file itself, so that download still ties to its search.
+   * The address fetchSubtitleText fetches: download_url with the client name and the
+   * antispam id on it. For a caller that downloads the file itself, so that download
+   * is still put down to the integration and tied to its search.
    */
   downloadUrl(sub: Pick<BundleSubtitle, 'download_url'>): string {
-    return this.withAntispam(sub.download_url);
+    return this.forDownload(sub.download_url);
   }
 
   /**
@@ -388,9 +399,14 @@ export class SubtitleDbClient {
    * fuse. It has already moved once: /d/ and /dl/ were removed and /get/:id is the only
    * byte path.
    *
-   * Returns the stored format untouched. Bytes are decoded as UTF-8 unless `encoding`
-   * asks otherwise: the corpus holds Windows-1251, Windows-1252 and UTF-16 files that
-   * `res.text()` would turn to mojibake, and a caller that knows better can say so.
+   * Returns the stored format untouched. Bytes are decoded as UTF-8, which is what the
+   * API sends: its ingest decodes every file to UTF-8 before storing it, and a row's
+   * `encoding` is the charset the file arrived in, not the one sent. `encoding` here is
+   * for a deployment that sends something else.
+   *
+   * Only the API's own hosts are read from, and a web page or an empty body is refused:
+   * a captive portal answers 200 as well, and handed to a player as a subtitle it shows
+   * an empty track while everything says it worked.
    */
   async fetchSubtitleText(
     sub: Pick<BundleSubtitle, 'download_url' | 'format'>,
@@ -418,17 +434,49 @@ export class SubtitleDbClient {
         url,
       });
     }
-    if (opts.encoding) {
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      return { text: decodeBytes(bytes, opts.encoding), format: sub.format };
+    // A browser follows the redirect before this code sees it, so where it ended is
+    // checked after. An empty res.url is a fetch that does not report one.
+    if (res.url && !ours(res.url, this.apiBase)) {
+      throw new SubtitleDbError({
+        message: `subtitle download ended off the API's hosts, at ${new URL(res.url).host}`,
+        code: 'download_failed',
+        url,
+      });
     }
-    return { text: await res.text(), format: sub.format };
+    const text = opts.encoding
+      ? decodeBytes(new Uint8Array(await res.arrayBuffer()), opts.encoding)
+      : await res.text();
+    const head = text.trimStart().slice(0, 14).toLowerCase();
+    if (!head || head.startsWith('<!doctype html') || head.startsWith('<html')) {
+      throw new SubtitleDbError({
+        message: `the download was ${head ? 'a web page' : 'empty'}, not a subtitle`,
+        code: 'download_failed',
+        url,
+      });
+    }
+    return { text, format: sub.format };
   }
 
   /** Absolute URL for a TMDB artwork path, proxied through our own host. */
   posterUrl(path: string | null | undefined, size = 'w342'): string | null {
     if (!path) return null;
     return `${this.apiBase}/p/${size}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+}
+
+/**
+ * True for the API's host and the files host its /get/ redirect goes to, nothing else:
+ * api.thesubtitledb.org sends a download on to files.thesubtitledb.org.
+ */
+function ours(raw: string, apiBase: string): boolean {
+  try {
+    const host = new URL(raw).hostname;
+    const base = new URL(apiBase).hostname;
+    if (host === base) return true;
+    const root = base.split('.').slice(-2).join('.');
+    return host === root || host.endsWith(`.${root}`);
+  } catch {
+    return false;
   }
 }
 

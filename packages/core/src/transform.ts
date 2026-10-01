@@ -31,9 +31,9 @@ function normaliseNewlines(s: string): string {
 /**
  * Decode subtitle bytes to text.
  *
- * The API serves whatever a subtitle was stored as, and a large part of the corpus is
- * not UTF-8: Windows-1251 for Cyrillic, Windows-1252 for Western European, and a run
- * of UTF-16 files. `res.text()` always assumes UTF-8, so those arrive as mojibake. A
+ * The API sends UTF-8: its ingest decodes every file before storing it. A file from
+ * anywhere else may be Windows-1251 for Cyrillic, Windows-1252 for Western European,
+ * or UTF-16, and `res.text()` always assumes UTF-8, so those arrive as mojibake. A
  * caller that knows, or wants us to guess, passes `encoding`.
  *
  * `'auto'` sniffs a byte-order mark, then falls back to a NUL-density check that

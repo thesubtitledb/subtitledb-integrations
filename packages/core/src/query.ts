@@ -48,6 +48,8 @@ export interface QueryOptions extends QueryConvert {
   antispamId?: string;
   apiBase?: string;
   clientName?: string;
+  /** The name a download is recorded under; see ClientOptions.downloadClient. */
+  downloadClient?: string;
   fetch?: ClientOptions['fetch'];
 }
 
@@ -139,6 +141,7 @@ export async function query(opts: QueryOptions): Promise<QueryResult> {
     ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
     ...(opts.apiBase !== undefined ? { apiBase: opts.apiBase } : {}),
     ...(opts.clientName !== undefined ? { clientName: opts.clientName } : {}),
+    ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
     ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
   });
 

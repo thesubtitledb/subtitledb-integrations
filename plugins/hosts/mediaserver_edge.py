@@ -14,9 +14,11 @@ which the server sees as /media/edge. It reads the newest file in <log dir>. The
 - a film that starts playing gets SubtitleDB's subtitle saved beside it in the
   library's download language, also when it has subtitles of its own, and the server
   lists it; when that same file is there already, nothing is saved;
+- a subtitle saved on play is downloaded once, on both hosts;
 - under the library's perfect-match rule only a subtitle made for that release is
   saved, and nothing is asked when the lookup on play is off, the library has no
-  download languages, or SubtitleDB is not ticked for it;
+  download languages, SubtitleDB is not ticked for it, or the film's audio is in the
+  download language and the library skips a subtitle for that;
 - a lookup on play that fails logs one line and saves nothing.
 
 Exits 1 if any case failed.
@@ -63,6 +65,7 @@ FILMS = {
     "no languages": ("Vertigo (1958)", "Vertigo.1958.1080p.BluRay.x264-NOLANG"),
     "not ticked": ("Rocky (1976)", "Rocky.1976.1080p.BluRay.x264-UNTICKED"),
     "off": ("Psycho (1960)", "Psycho.1960.1080p.BluRay.x264-OFF"),
+    "audio": ("Chinatown (1974)", "Chinatown.1974.1080p.BluRay.x264-AUDIO"),
 }
 
 #: Why a download fails, as the plugin says it.
@@ -75,7 +78,8 @@ RESULTS: list[tuple[str, bool]] = []
 
 def make(root: pathlib.Path):
     for key, (folder, stem) in FILMS.items():
-        F.video(root / folder / (stem + ".mkv"), 30, "eng" if key == "embedded" else None)
+        F.video(root / folder / (stem + ".mkv"), 30, "eng" if key == "embedded" else None,
+                "eng" if key == "audio" else None)
     folder, stem = FILMS["external"]
     (root / folder / (stem + ".en.srt")).write_text(THEIRS, encoding="utf-8")
     folder, stem = FILMS["held"]
@@ -381,6 +385,11 @@ class Edge:
             problems.append("not named for English")
         if not self.log.wait_for("started playing, saved SubtitleDB's", 15):
             problems.append("no 'saved' line from the lookup")
+        # Emby saves by asking the provider for the subtitle again; the plugin hands
+        # back the bytes it fetched rather than downloading the file a second time.
+        fetched = len(downloads(asked_for(key, since)))
+        if fetched != 1:
+            problems.append("downloaded %d times" % fetched)
         listed, end = False, time.time() + 60
         while not listed and time.time() < end:
             listed = any((s.get("Path") or "").endswith("/" + path.name)
@@ -398,7 +407,6 @@ class Edge:
             time.sleep(0.5)
         fetched = len(downloads(asked_for(key, since)))
         new = self.new_file(key, before, 10)
-        # Emby is handed an id to save, not bytes, so it would fetch a second time.
         return fetched == 1 and not new, "fetched %d, saved %s" % (
             fetched, [p.name for p in new])
 
@@ -493,6 +501,10 @@ def run(kind, url, root: pathlib.Path, logs: pathlib.Path, api_base: str) -> int
     edge.set_library(DisabledSubtitleFetchers=["SubtitleDB"])
     edge.play("not ticked", "unasked", "SubtitleDB not ticked for the library")
     edge.set_library(DisabledSubtitleFetchers=[])
+
+    edge.set_library(SkipSubtitlesIfAudioTrackMatches=True)
+    edge.play("audio", "unasked", "the audio is in the download language, which the library skips")
+    edge.set_library(SkipSubtitlesIfAudioTrackMatches=False)
 
     server.configure(edge.plugin, LookUpOnPlay=False)
     edge.play("off", "unasked", "the lookup on play turned off")

@@ -24,6 +24,9 @@ from dataclasses import dataclass
 
 DEFAULT_API_BASE = "https://api.thesubtitledb.org"
 
+#: This library's version, which Bazarr ships as its own. pyproject.toml carries it too.
+VERSION = "0.3.3"
+
 RETRY_BASE_S = 0.3
 MAX_BACKOFF_S = 8.0
 
@@ -67,17 +70,24 @@ class _OurHostsOnly(urllib.request.HTTPRedirectHandler):
 @dataclass
 class Client:
     api_base: str = DEFAULT_API_BASE
-    #: Sent as a query parameter, not a header: identifies the plugin in our logs.
+    #: Sent as a query parameter, not a header: identifies the plugin in our logs,
+    #: on every lookup and on every download.
     client: str = "subtitledb-plugin"
     timeout: float = 15.0
     retries: int = 2
-    user_agent: str = "subtitledb-plugin/0.1 (+https://thesubtitledb.org)"
+    #: The plugin's version, for the User-Agent. This library's when not given.
+    version: str = VERSION
+    #: "subtitledb-<client>/<version> (+https://thesubtitledb.org)" when not given.
+    user_agent: str = ""
     #: For a host that gives a plugin seconds to stop, as Kodi does on quit: True once
     #: it has asked. No request starts after that, and a wait to retry ends early.
     stopping: Callable[[], bool] | None = None
 
     def __post_init__(self) -> None:
         self.api_base = self.api_base.rstrip("/")
+        if not self.user_agent:
+            self.user_agent = "subtitledb-%s/%s (+https://thesubtitledb.org)" % (
+                self.client, self.version or VERSION)
 
     # ---- requests ---------------------------------------------------------
 
@@ -195,7 +205,7 @@ class Client:
             raise SubtitleDbError("refusing to download from %s" % url)
         self._go_on()
         try:
-            with self._open(url, "*/*") as res:
+            with self._open(self.with_client(url), "*/*") as res:
                 content = _read(res)
         except urllib.error.HTTPError as err:
             raise SubtitleDbError("HTTP %d from %s" % (err.code, url), err.code) from err
@@ -208,6 +218,14 @@ class Client:
             sent = "a web page" if head else "nothing"
             raise SubtitleDbError("%s sent %s, not a subtitle" % (url, sent))
         return content
+
+    def with_client(self, url: str) -> str:
+        """``url`` with the plugin's name in its query, as every lookup carries it, so a
+        download can be put down to the plugin that made it."""
+        parts = urllib.parse.urlsplit(url)
+        query = urllib.parse.urlencode({"client": self.client})
+        return urllib.parse.urlunsplit(
+            parts._replace(query="%s&%s" % (parts.query, query) if parts.query else query))
 
 
 def _read(res) -> bytes:

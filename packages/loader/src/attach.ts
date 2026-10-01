@@ -78,7 +78,13 @@ export function attach(
   }
 
   const { debug: key, ...rest } = options;
-  const opts: AttachOptions = { clientName: CLIENT, antispamId: ANTISPAM_ID, ...rest };
+  // A page may name itself on lookups. A download through the loader is the loader's.
+  const opts: AttachOptions = {
+    clientName: CLIENT,
+    antispamId: ANTISPAM_ID,
+    ...rest,
+    downloadClient: CLIENT,
+  };
   const debugging = debugAttach(key, opts, moduleUrl, (message) => report(options, message));
 
   // Wire the transcription engine lazily. `transcribe` is the page's declarative

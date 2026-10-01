@@ -104,6 +104,26 @@ describe('query', () => {
     expect(first.url).toBe(dl.url);
   });
 
+  it('names the download for its integration, apart from the name on the lookups', async () => {
+    const { fetch, calls } = stubFetch(routes());
+    const res = await query({
+      hint: { imdbId: 'tt0133093' },
+      clientName: 'mine',
+      downloadClient: 'loader',
+      fetch,
+    });
+    const first = res.results[0];
+    if (!first) throw new Error('expected a result');
+    await first.load();
+
+    const search = calls.find((c) => c.url.includes('/by-imdb/'));
+    const dl = calls.find((c) => DOWNLOAD.test(c.url));
+    if (!search || !dl) throw new Error('expected both a search and a download call');
+    expect(new URL(search.url).searchParams.get('client')).toBe('mine');
+    expect(new URL(dl.url).searchParams.get('client')).toBe('loader');
+    expect(first.url).toBe(dl.url);
+  });
+
   it('sends no antispam id when none was given', async () => {
     const { fetch, calls } = stubFetch(routes());
     const res = await query({ hint: { imdbId: 'tt0133093' }, fetch });

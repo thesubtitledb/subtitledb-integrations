@@ -273,7 +273,7 @@ namespace SubtitleDb.Jellyfin
             return new SubtitleDbClient(
                 _http.CreateClient(NamedClient.Default),
                 string.IsNullOrWhiteSpace(apiBase) ? SubtitleDbClient.DefaultApiBase : apiBase,
-                "subtitledb-jellyfin");
+                "jellyfin");
         }
     }
 }

@@ -48,11 +48,14 @@ def ffmpeg(*args):
         check=True)
 
 
-def video(path: pathlib.Path, seconds: int, sub_lang: str | None = None):
+def video(path: pathlib.Path, seconds: int, sub_lang: str | None = None,
+          audio_lang: str | None = None):
     path.parent.mkdir(parents=True, exist_ok=True)
     args = ["-f", "lavfi", "-i", "color=c=black:s=320x240:r=1",
             "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono"]
     maps = ["-map", "0:v", "-map", "1:a"]
+    if audio_lang is not None:
+        maps += ["-metadata:s:a:0", "language=" + audio_lang]
     srt = path.with_suffix(".tmp.srt")
     if sub_lang is not None:
         srt.write_text(SRT % 1, encoding="utf-8")

@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import subtitledb_provider as provider
-from conftest import GUESSES, Episode, Language, Movie
+from conftest import GUESSES, Episode, Language, Movie, ServiceUnavailable, TooManyRequests
 from subtitledb.client import SubtitleDbError
 from subtitledb.match import Hint
 
@@ -63,9 +63,10 @@ def breaking_bad(**kw):
 
 
 class FakeClient:
-    def __init__(self, page=None, error=None):
+    def __init__(self, page=None, error=None, download_error=None):
         self.page = page if page is not None else bundle([])
         self.error = error
+        self.download_error = download_error
         self.calls = []
         self.downloaded = []
 
@@ -87,12 +88,14 @@ class FakeClient:
 
     def download(self, url):
         self.downloaded.append(url)
+        if self.download_error:
+            raise self.download_error
         return b"1\n00:00:01,000 --> 00:00:02,000\nhello\n"
 
 
-def make(page=None, error=None):
+def make(page=None, error=None, download_error=None):
     p = provider.SubtitleDbProvider()
-    p.client = FakeClient(page, error)
+    p.client = FakeClient(page, error, download_error)
     return p
 
 
@@ -185,11 +188,25 @@ def test_a_format_bazarr_cannot_use_never_reaches_it():
     assert p.list_subtitles(Movie(imdb_id="tt1"), [Language("eng")]) == []
 
 
-def test_an_api_failure_returns_nothing_rather_than_taking_the_search_down():
-    # Bazarr runs providers in one pass. Ours being unreachable is not a reason for
-    # the others' results to be lost.
-    p = make(error=SubtitleDbError("upstream", 502))
+def test_a_refusal_about_one_title_returns_nothing():
+    p = make(error=SubtitleDbError("forbidden", 403))
     assert p.list_subtitles(Movie(imdb_id="tt1"), [Language("eng")]) == []
+
+
+def test_an_api_that_is_limiting_us_has_bazarr_rest_the_provider():
+    # Bazarr counts these and stops asking for an hour, rather than have every file
+    # of a library scan ask again.
+    p = make(error=SubtitleDbError("slow down", 429))
+    with pytest.raises(TooManyRequests):
+        p.list_subtitles(Movie(imdb_id="tt1"), [Language("eng")])
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, None])
+def test_an_api_that_is_down_or_out_of_reach_has_bazarr_rest_the_provider(status):
+    # None is a connection that failed or timed out, after the client's own retries.
+    p = make(error=SubtitleDbError("upstream", status))
+    with pytest.raises(ServiceUnavailable):
+        p.list_subtitles(Movie(imdb_id="tt1"), [Language("eng")])
 
 
 def test_download_puts_the_bytes_on_the_subtitle():
@@ -198,6 +215,22 @@ def test_download_puts_the_bytes_on_the_subtitle():
     p.download_subtitle(sub)
     assert sub.content.startswith(b"1\n")
     assert p.client.downloaded == ["https://api.thesubtitledb.org/get/1"]
+
+
+def test_a_subtitle_that_is_gone_is_left_without_content_for_bazarr_to_skip():
+    p = make(bundle([row(1)]), download_error=SubtitleDbError("HTTP 404", 404))
+    sub = p.list_subtitles(Movie(imdb_id="tt17009710"), [Language("eng")])[0]
+    p.download_subtitle(sub)
+    assert sub.content is None
+
+
+@pytest.mark.parametrize(("status", "raised"), [
+    (429, TooManyRequests), (503, ServiceUnavailable), (None, ServiceUnavailable)])
+def test_a_download_the_api_limits_or_cannot_serve_rests_the_provider(status, raised):
+    p = make(bundle([row(1)]), download_error=SubtitleDbError("no", status))
+    sub = p.list_subtitles(Movie(imdb_id="tt17009710"), [Language("eng")])[0]
+    with pytest.raises(raised):
+        p.download_subtitle(sub)
 
 
 # -- what we claim to have matched ------------------------------------------

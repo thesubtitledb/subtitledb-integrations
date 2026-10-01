@@ -59,9 +59,12 @@ function wire(r: QuerySubtitle): WiredSubtitle {
   };
 }
 
-/** Stamp in the loader's client name and per-page-load antispam id, unless the caller set them. */
+/**
+ * Stamp in the loader's client name and per-page-load antispam id, unless the caller set
+ * them. A download is named for the loader whatever the caller set.
+ */
 function withIds(opts: QueryOptions): QueryOptions {
-  return { clientName: CLIENT, antispamId: ANTISPAM_ID, ...opts };
+  return { clientName: CLIENT, antispamId: ANTISPAM_ID, ...opts, downloadClient: CLIENT };
 }
 
 /**

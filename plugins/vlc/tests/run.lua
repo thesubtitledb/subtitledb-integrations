@@ -5,7 +5,8 @@
 
  subtitledb.lua is loaded with `vlc` absent, which is the point: everything that
  decides anything has to work without a media player, and the parts that do not
- are the ones VLC itself is responsible for.
+ are the ones VLC itself is responsible for. The window's own tests put a stand-in
+ `vlc` in place for their run and take it away after.
 
  The shared cases in plugins/shared/match-cases.json are read with the extension's
  own JSON decoder, so the fixture file is also the decoder's hardest test.
@@ -494,12 +495,190 @@ end)
 
 test("the file gives VLC the entry points it looks for", function()
   for _, name in ipairs({ "descriptor", "activate", "deactivate", "close", "menu",
-                          "trigger_menu", "meta_changed" }) do
+                          "trigger_menu", "meta_changed", "input_changed" }) do
     ok(type(_G[name]) == "function", name .. " is missing")
   end
   local d = descriptor()
   equal(d.title, "SubtitleDB")
-  ok(d.capabilities ~= nil, "no capabilities declared")
+  local listens = false
+  for _, capability in ipairs(d.capabilities or {}) do
+    listens = listens or capability == "input-listener"
+  end
+  ok(listens, "input_changed is only called for an input-listener")
+end)
+
+-- ------------------------------------------------------------- the downloads
+
+test("a download names this extension, wherever the address already has a query", function()
+  equal(S.with_client("https://api.thesubtitledb.org/get/7"),
+        "https://api.thesubtitledb.org/get/7?client=vlc")
+  equal(S.with_client("https://api.thesubtitledb.org/get/7?ext=srt"),
+        "https://api.thesubtitledb.org/get/7?ext=srt&client=vlc")
+  equal(S.with_client("https://api.thesubtitledb.org/get/7#top"),
+        "https://api.thesubtitledb.org/get/7?client=vlc#top")
+end)
+
+test("only the API's own hosts are downloaded from", function()
+  ok(S.ours("https://api.thesubtitledb.org/get/7"), "the API host")
+  ok(S.ours("https://files.thesubtitledb.org/x.srt"), "the files host")
+  ok(S.ours("https://API.thesubtitledb.org:443/get/7"), "case and port")
+  for _, url in ipairs({ "https://evil.example/x.srt", "https://thesubtitledb.org.evil.example/x",
+                         "https://evilthesubtitledb.org/x", "https://api.thesubtitledb.org@evil.example/x",
+                         "file:///etc/passwd", "", nil }) do
+    ok(not S.ours(url), "took " .. tostring(url))
+  end
+end)
+
+test("a web page or an empty body is not a subtitle", function()
+  equal(S.not_a_subtitle("<!DOCTYPE html><html><body>Sign in</body></html>"), "a web page")
+  equal(S.not_a_subtitle("\n  <HTML><head>"), "a web page")
+  equal(S.not_a_subtitle(""), "an empty file")
+  equal(S.not_a_subtitle(" \r\n"), "an empty file")
+  equal(S.not_a_subtitle("\239\187\1911\n00:00:01,000 --> 00:00:02,000\nhi\n"), nil)
+  equal(S.not_a_subtitle("1\n00:00:01,000 --> 00:00:02,000\n<i>hi</i>\n"), nil)
+  equal(S.not_a_subtitle("WEBVTT\n"), nil)
+  equal(S.not_a_subtitle("[Script Info]\n"), nil)
+end)
+
+--- Enough of VLC for the window: widgets keep what is put in them, and the item
+--- playing can be swapped for the next one in the playlist.
+local function fake_vlc(uri)
+  local state = { uri = uri, widgets = {}, files = {}, loaded = {} }
+  local Widget = {}
+  Widget.__index = Widget
+  function Widget:set_text(text) self.text = text end
+  function Widget:get_text() return self.text end
+  function Widget:clear() self.values = {} end
+  function Widget:add_value(label, id) self.values[#self.values + 1] = { label = label, id = id } end
+  function Widget:set_value(value) self.value = value end
+  function Widget:get_value() return self.value or 1 end
+  function Widget:get_selection() return self.selection end
+  local function add(kind)
+    return function(_, text)
+      local widget = setmetatable({ kind = kind, text = text, first = text, values = {} }, Widget)
+      state.widgets[#state.widgets + 1] = widget
+      return widget
+    end
+  end
+  local Dialog = { add_label = add("label"), add_text_input = add("input"),
+                   add_button = add("button"), add_dropdown = add("dropdown"),
+                   add_list = add("list"), delete = function() end }
+  Dialog.__index = Dialog
+  local function file(path)
+    return { write = function(_, body) state.files[path] = body end, close = function() end }
+  end
+  state.vlc = {
+    dialog = function() state.widgets = {} return setmetatable({}, Dialog) end,
+    input = {
+      item = function()
+        if not state.uri then return nil end
+        return { uri = function() return state.uri end, metas = function() return {} end }
+      end,
+      add_subtitle = function(path) state.loaded[#state.loaded + 1] = path end,
+    },
+    config = { userdatadir = function() return "/cfg" end },
+    io = { open = function(path, mode)
+      if mode == "wb" then return file(path) end
+      return nil
+    end },
+    msg = { info = function() end },
+  }
+  function state.find(kind, nth)
+    local seen = 0
+    for _, widget in ipairs(state.widgets) do
+      if widget.kind == kind then
+        seen = seen + 1
+        if seen == (nth or 1) then return widget end
+      end
+    end
+  end
+  function state.message()
+    for _, widget in ipairs(state.widgets) do
+      if widget.kind == "label" and widget.first == "Ready" then return widget.text end
+    end
+  end
+  return state
+end
+
+local SUBTITLE = "1\n00:00:01,000 --> 00:00:02,000\nhello\n"
+
+--- A fetch that answers every lookup with one row and every download with `body`.
+local function serving(asked, body, url)
+  return function(address)
+    asked[#asked + 1] = address
+    if address:find("/get/", 1, true) or address:find("evil", 1, true) then return body end
+    return '{"title":{"name":"Show"},"subtitles":{"total":1,"items":[{"id":5,"language":"en",'
+      .. '"format":"srt","cues":900,"season":1,"episode":1,"download_url":"'
+      .. (url or "https://api.thesubtitledb.org/get/5") .. '"}]}}'
+  end
+end
+
+--- The window open on `uri`, one search run, and its first row picked.
+local function searched(uri, body, url)
+  local state = fake_vlc(uri)
+  vlc = state.vlc
+  state.asked = {}
+  S.fetch = serving(state.asked, body or SUBTITLE, url)
+  activate()
+  search_this_file()
+  local list = state.find("list")
+  list.selection = { [1] = list.values[1] and list.values[1].label }
+  return state
+end
+
+--- A test of the window. The stand-in VLC goes away after it, failed or not.
+local function window_test(name, body)
+  local saved = S.fetch
+  test(name, body)
+  S.fetch, vlc = saved, nil
+end
+
+window_test("the next item in the playlist clears the results and fills the form in again", function()
+  local state = searched("file:///tv/Show.S01E01.mkv")
+  equal(#state.find("list").values, 1, "the search listed nothing")
+  state.uri = "file:///tv/Show.S01E02.mkv"
+  input_changed()
+  equal(#state.find("list").values, 0, "the last item's results are still listed")
+  equal(state.find("input", 1).text, "Show")
+  equal(state.find("input", 3).text, "2", "the episode")
+  download_selected()
+  equal(state.message(), "Pick one first")
+  equal(next(state.files), nil, "a file was written")
+end)
+
+window_test("a download goes beside the file it was searched for, and only plays there", function()
+  -- With the window left open into the next episode, it once saved the first
+  -- episode's subtitle as the second's and loaded it into the second.
+  local state = searched("file:///tv/Show.S01E01.mkv")
+  state.uri = "file:///tv/Show.S01E02.mkv"
+  download_selected()
+  equal(state.files["/tv/Show.S01E01.en.srt"], SUBTITLE)
+  equal(state.files["/tv/Show.S01E02.en.srt"], nil)
+  equal(#state.loaded, 0, "loaded into another video")
+  equal(state.message(), "Saved: /tv/Show.S01E01.en.srt")
+end)
+
+window_test("a download asks with the client and loads into the video it is for", function()
+  local state = searched("file:///tv/Show.S01E01.mkv")
+  download_selected()
+  equal(state.asked[#state.asked], "https://api.thesubtitledb.org/get/5?client=vlc")
+  equal(state.loaded[1], "/tv/Show.S01E01.en.srt")
+  equal(state.message(), "Saved and loaded: /tv/Show.S01E01.en.srt")
+end)
+
+window_test("a web page sent as a subtitle is not saved", function()
+  local state = searched("file:///tv/Show.S01E01.mkv", "<!DOCTYPE html><html>Log in</html>")
+  download_selected()
+  equal(next(state.files), nil, "the page was written beside the video")
+  equal(state.message(), "The download was a web page, not a subtitle")
+end)
+
+window_test("an address off the API's hosts is not asked at all", function()
+  local state = searched("file:///tv/Show.S01E01.mkv", SUBTITLE, "https://evil.example/5.srt")
+  local before = #state.asked
+  download_selected()
+  equal(#state.asked, before, "the address was fetched")
+  equal(state.message(), "Not a SubtitleDB address: https://evil.example/5.srt")
 end)
 
 test("it stays inside the Lua VLC actually embeds", function()

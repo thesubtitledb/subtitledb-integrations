@@ -68,7 +68,7 @@ namespace SubtitleDb.Core
 
         /// <param name="http">The host's client, for the API.</param>
         /// <param name="apiBase">The API, when a test points somewhere else.</param>
-        /// <param name="client">The plugin's name, for our logs.</param>
+        /// <param name="client">The plugin's name, for our logs: jellyfin or emby.</param>
         /// <param name="downloads">A client that does not follow redirects, when a test needs one.</param>
         public SubtitleDbClient(
             HttpClient http,
@@ -86,6 +86,9 @@ namespace SubtitleDb.Core
 
         /// <summary>Sent as a query parameter, not a header: names the plugin in our logs.</summary>
         public string ClientName { get; }
+
+        /// <summary>The User-Agent a download is made with: the plugin and its version.</summary>
+        public string UserAgent => UserAgentFor(ClientName);
 
         public int Retries { get; set; } = 2;
 
@@ -198,7 +201,7 @@ namespace SubtitleDb.Core
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
                     timeout.CancelAfter(Timeout);
-                    bytes = await FetchAsync(new Uri(url), timeout.Token).ConfigureAwait(false);
+                    bytes = await FetchAsync(new Uri(WithClient(url)), timeout.Token).ConfigureAwait(false);
                 }
             }
             catch (HttpRequestException err)
@@ -234,7 +237,7 @@ namespace SubtitleDb.Core
                 using (var request = new HttpRequestMessage(HttpMethod.Get, next))
                 {
                     request.Headers.TryAddWithoutValidation("Accept", "*/*");
-                    request.Headers.TryAddWithoutValidation("User-Agent", ClientName + " (+https://thesubtitledb.org)");
+                    request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
                     using (var response = await http
                         .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                         .ConfigureAwait(false))
@@ -296,6 +299,35 @@ namespace SubtitleDb.Core
                 || head.StartsWith("<html", StringComparison.Ordinal)
                 ? "a web page"
                 : null;
+        }
+
+        /// <summary>
+        /// "subtitledb-jellyfin/0.4.2 (+https://thesubtitledb.org)": the plugin, and the
+        /// version every assembly in this build carries.
+        /// </summary>
+        public static string UserAgentFor(string client)
+        {
+            var v = typeof(SubtitleDbClient).Assembly.GetName().Version;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "subtitledb-{0}/{1}.{2}.{3} (+https://thesubtitledb.org)",
+                client,
+                v?.Major ?? 0,
+                v?.Minor ?? 0,
+                Math.Max(v?.Build ?? 0, 0));
+        }
+
+        /// <summary>
+        /// The download_url with the plugin's name on it, as a lookup carries it, so a
+        /// download can be put down to the plugin that made it.
+        /// </summary>
+        internal string WithClient(string url)
+        {
+            var hash = url.IndexOf('#');
+            var head = hash < 0 ? url : url.Substring(0, hash);
+            var tail = hash < 0 ? string.Empty : url.Substring(hash);
+            var separator = head.IndexOf('?') < 0 ? "?" : "&";
+            return head + separator + "client=" + Uri.EscapeDataString(ClientName) + tail;
         }
 
         private static Dictionary<string, string?> PageParameters(string? language, int limit, int offset)

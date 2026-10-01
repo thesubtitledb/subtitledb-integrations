@@ -19,6 +19,8 @@ export interface SessionOptions {
   client?: SubtitleDbClient;
   apiBase?: string;
   clientName?: string;
+  /** The name a download is recorded under; see ClientOptions.downloadClient. */
+  downloadClient?: string;
   fetch?: ClientOptions['fetch'];
   /**
    * A per-page-load correlation id, forwarded to the client as `antispam_id` on every
@@ -159,6 +161,7 @@ export class SubtitleSession {
       createClient({
         ...(opts.apiBase !== undefined ? { apiBase: opts.apiBase } : {}),
         ...(opts.clientName !== undefined ? { client: opts.clientName } : {}),
+        ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
         ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
         ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
       });

@@ -6,7 +6,10 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
+    <!-- What changed in this version, in a sentence or two. Jellyfin shows it in the
+         plugin catalog beside the update; change it with the version. -->
+    <PackageReleaseNotes>A subtitle is no longer saved on play in the language the audio is already in, when the library is set to skip it. Emby downloads a subtitle once when it saves one on play.</PackageReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>

@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
+using System.Reflection;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
@@ -93,9 +96,41 @@ namespace SubtitleDb.Jellyfin.Tests
         }
 
         [Fact]
+        public void TheAudioLanguageIsTheDefaultAudioStreams()
+        {
+            var sources = DispatchProxy.Create<IMediaSourceManager, Streams>();
+            ((Streams)(object)sources).Answer = new List<MediaStream>
+            {
+                new MediaStream { Type = MediaStreamType.Video },
+                new MediaStream { Type = MediaStreamType.Audio, Language = "ger" },
+                new MediaStream { Type = MediaStreamType.Audio, Language = "eng", IsDefault = true },
+                new MediaStream { Type = MediaStreamType.Subtitle, Language = "fre", IsDefault = true },
+            };
+
+            Assert.Equal("eng", PlaybackLookup.Spoken(sources, Guid.NewGuid()));
+        }
+
+        [Fact]
+        public void AJellyfinThatAnswersNoStreamsGivesNoAudioLanguage()
+        {
+            Assert.Null(PlaybackLookup.Spoken(DispatchProxy.Create<IMediaSourceManager, Streams>(), Guid.NewGuid()));
+        }
+
+        [Fact]
         public void TheLookupIsOnUnlessTurnedOff()
         {
             Assert.True(new Configuration.PluginConfiguration().LookUpOnPlay);
+        }
+
+        /// <summary>A media source manager whose GetMediaStreams answers <see cref="Answer"/>.</summary>
+        public class Streams : DispatchProxy
+        {
+            public List<MediaStream>? Answer { get; set; }
+
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                return targetMethod?.Name == "GetMediaStreams" ? Answer : null;
+            }
         }
 
         private sealed class ServiceList

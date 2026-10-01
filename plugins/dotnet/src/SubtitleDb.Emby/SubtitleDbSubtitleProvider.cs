@@ -115,8 +115,10 @@ namespace SubtitleDb.Emby
             }
 
             // The published URL, not one rebuilt from the id: it redirects to wherever
-            // the file lives today, and that address is not ours to keep.
-            var bytes = await client.DownloadAsync(row.DownloadUrl!, cancellationToken).ConfigureAwait(false);
+            // the file lives today, and that address is not ours to keep. Unless the
+            // lookup on play fetched it a moment ago and is saving it now.
+            var bytes = Prefetched.Take(id)
+                ?? await client.DownloadAsync(row.DownloadUrl!, cancellationToken).ConfigureAwait(false);
 
             return new SubtitleResponse
             {
@@ -254,8 +256,7 @@ namespace SubtitleDb.Emby
         {
             var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(20);
-            http.DefaultRequestHeaders.TryAddWithoutValidation(
-                "User-Agent", "subtitledb-emby/0.1 (+https://thesubtitledb.org)");
+            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", SubtitleDbClient.UserAgentFor("emby"));
             return http;
         }
 
@@ -265,7 +266,7 @@ namespace SubtitleDb.Emby
             return new SubtitleDbClient(
                 Shared,
                 string.IsNullOrWhiteSpace(apiBase) ? SubtitleDbClient.DefaultApiBase : apiBase,
-                "subtitledb-emby");
+                "emby");
         }
     }
 }

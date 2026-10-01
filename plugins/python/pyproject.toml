@@ -1,6 +1,6 @@
 [project]
 name = "subtitledb"
-version = "0.3.2"
+version = "0.3.3"
 description = "SubtitleDB client shared by the Bazarr provider and the Kodi addon"
 license = "MIT"
 requires-python = ">=3.9"

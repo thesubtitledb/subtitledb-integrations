@@ -40,6 +40,7 @@ namespace SubtitleDb.Jellyfin
         private readonly ILibraryManager _library;
         private readonly IProviderManager _providers;
         private readonly IFileSystem _fileSystem;
+        private readonly IMediaSourceManager _mediaSources;
         private readonly ILogger<PlaybackLookup> _logger;
         private readonly OnPlay _onPlay = new OnPlay();
         private readonly CancellationTokenSource _stopping = new CancellationTokenSource();
@@ -50,6 +51,7 @@ namespace SubtitleDb.Jellyfin
             ILibraryManager library,
             IProviderManager providers,
             IFileSystem fileSystem,
+            IMediaSourceManager mediaSources,
             ILogger<PlaybackLookup> logger)
         {
             _sessions = sessions;
@@ -57,6 +59,7 @@ namespace SubtitleDb.Jellyfin
             _library = library;
             _providers = providers;
             _fileSystem = fileSystem;
+            _mediaSources = mediaSources;
             _logger = logger;
         }
 
@@ -141,6 +144,22 @@ namespace SubtitleDb.Jellyfin
             return string.Equals(provider, "SubtitleDB", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>The language of the audio <paramref name="item"/> starts in, or null.</summary>
+        /// <remarks>
+        /// Called by name: what GetMediaStreams returns is not the same type in every
+        /// Jellyfin this runs on, and a call compiled against one fails on the next.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static string? Spoken(IMediaSourceManager sources, Guid item)
+        {
+            var streams = typeof(IMediaSourceManager)
+                .GetMethod("GetMediaStreams", new[] { typeof(Guid) })
+                ?.Invoke(sources, new object[] { item }) as IEnumerable<MediaStream>;
+            return OnPlay.Spoken(streams?
+                .Where(s => s.Type == MediaStreamType.Audio)
+                .Select(s => ((string?)s.Language, s.IsDefault)));
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void Subscribe()
         {
@@ -220,6 +239,20 @@ namespace SubtitleDb.Jellyfin
             }
 
             var providers = _subtitles.GetSupportedProviders(video).Select(p => p.Name).ToList();
+            string? spoken = null;
+            if (options.SkipSubtitlesIfAudioTrackMatches)
+            {
+                try
+                {
+                    spoken = Spoken(_mediaSources, video.Id);
+                }
+                catch (Exception err)
+                {
+                    // Every language is asked, as when the setting is off.
+                    _logger.LogDebug(err, "SubtitleDB: cannot tell what language {Path} is in", video.Path);
+                }
+            }
+
             var asked = string.Empty;
             SubtitleResponse? fetched = null;
             return await OnPlay.RunAsync(
@@ -262,7 +295,8 @@ namespace SubtitleDb.Jellyfin
                         new MetadataRefreshOptions(new DirectoryService(_fileSystem)),
                         RefreshPriority.High);
                 },
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                spoken).ConfigureAwait(false);
         }
     }
 }

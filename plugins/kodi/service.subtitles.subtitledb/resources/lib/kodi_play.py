@@ -59,7 +59,8 @@ def look_up(player, monitor):
     except RuntimeError:
         return
     client = logic.make_client(addon.getSetting("api_base") or None,
-                               timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested)
+                               timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested,
+                               version=addon.getAddonInfo("version"))
     try:
         item, said = logic.instant(
             client, kodi_side.player_info(), kodi_languages(), stream_languages(player),

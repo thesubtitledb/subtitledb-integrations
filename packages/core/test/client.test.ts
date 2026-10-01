@@ -209,6 +209,73 @@ describe('SubtitleDbClient', () => {
     expect(c.downloadUrl(sub)).toBe(calls[0]?.url);
   });
 
+  it('names the download with downloadClient, else with client', async () => {
+    const { fetch, calls } = stubFetch([{ match: /files\.example\.test/, text: '1\nhi\n' }]);
+    const sub = { download_url: 'https://files.example.test/get/99?ext=srt', format: 'srt' };
+    await new SubtitleDbClient({
+      fetch,
+      client: 'mine',
+      downloadClient: 'loader',
+    }).fetchSubtitleText(sub);
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.searchParams.get('client')).toBe('loader');
+    expect(url.searchParams.get('ext')).toBe('srt');
+    expect(
+      new URL(new SubtitleDbClient({ client: 'web' }).downloadUrl(sub)).searchParams.get('client'),
+    ).toBe('web');
+  });
+
+  /** A fetch whose response says it ended at `url`, as a browser's does after a redirect. */
+  function landing(url: string, body: string): typeof fetch {
+    return (async () => {
+      const res = new Response(body, { status: 200 });
+      Object.defineProperty(res, 'url', { value: url });
+      return res;
+    }) as unknown as typeof fetch;
+  }
+
+  it('reads a download that ended on the files host the API redirects to', async () => {
+    const c = new SubtitleDbClient({
+      fetch: landing('https://files.thesubtitledb.org/a/5.srt', '1\nhi\n'),
+    });
+    const got = await c.fetchSubtitleText({
+      download_url: 'https://api.thesubtitledb.org/get/5',
+      format: 'srt',
+    });
+    expect(got.text).toBe('1\nhi\n');
+  });
+
+  it('refuses a download that ended anywhere else', async () => {
+    for (const host of [
+      'https://evil.example/5.srt',
+      'https://thesubtitledb.org.evil.example/5.srt',
+    ]) {
+      const c = new SubtitleDbClient({ fetch: landing(host, '1\nhi\n') });
+      const err = await c
+        .fetchSubtitleText({ download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' })
+        .catch((e) => e);
+      expect(err, host).toBeInstanceOf(SubtitleDbError);
+      expect(err.code).toBe('download_failed');
+    }
+  });
+
+  it('refuses a web page or an empty body sent as the subtitle', async () => {
+    // A captive portal answers 200. Handed to a player, the page shows as an empty track.
+    for (const body of [
+      '<!DOCTYPE html><html><body>Sign in</body></html>',
+      '\n <HTML>',
+      '',
+      ' \n',
+    ]) {
+      const { fetch } = stubFetch([{ match: /get/, text: body }]);
+      const err = await new SubtitleDbClient({ fetch })
+        .fetchSubtitleText({ download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' })
+        .catch((e) => e);
+      expect(err, JSON.stringify(body)).toBeInstanceOf(SubtitleDbError);
+      expect(err.code).toBe('download_failed');
+    }
+  });
+
   it('leaves a download_url that is not a URL alone rather than dropping it', () => {
     const c = new SubtitleDbClient({ antispamId: 'aid-123' });
     expect(c.downloadUrl({ download_url: 'not a url' })).toBe('not a url');
@@ -219,7 +286,7 @@ describe('SubtitleDbClient', () => {
 
   it('decodes the download with the requested charset, sniffing a BOM for auto', async () => {
     // "hi" as UTF-16LE with a byte-order mark. res.text() would read this as UTF-8 and
-    // produce mojibake; the encoding option is what a corpus full of non-UTF-8 needs.
+    // produce mojibake; the encoding option is for a deployment that sends such bytes.
     const bytes = new Uint8Array([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00]);
     const impl = (async () => new Response(bytes, { status: 200 })) as unknown as typeof fetch;
     const c = new SubtitleDbClient({ fetch: impl });

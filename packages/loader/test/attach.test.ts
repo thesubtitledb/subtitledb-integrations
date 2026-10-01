@@ -112,17 +112,24 @@ describe('attach fetches the smaller half when it can', () => {
 });
 
 describe('what the chunk is handed', () => {
-  it('a client name naming the release, so the API logs can tell CDN traffic apart', async () => {
+  it('the name the API knows the loader by, on lookups and downloads', async () => {
     const { attach, engine } = await fresh();
     await attach(video(), {}).ready;
-    expect(engine.calls[0].options.clientName).toBe('cdn/0.0.0-test');
+    expect(engine.calls[0].options.clientName).toBe('loader');
+    expect(engine.calls[0].options.downloadClient).toBe('loader');
   });
 
-  it('and the page can override it, along with everything else', async () => {
+  it('and the page can override it on lookups, along with everything else', async () => {
     const { attach, engine } = await fresh();
     await attach(video(), { clientName: 'mine', languages: ['fr'] }).ready;
     expect(engine.calls[0].options.clientName).toBe('mine');
     expect(engine.calls[0].options.languages).toEqual(['fr']);
+  });
+
+  it('but a download through the loader always names the loader', async () => {
+    const { attach, engine } = await fresh();
+    await attach(video(), { clientName: 'mine', downloadClient: 'mine' }).ready;
+    expect(engine.calls[0].options.downloadClient).toBe('loader');
   });
 });
 

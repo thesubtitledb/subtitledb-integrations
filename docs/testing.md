@@ -22,7 +22,7 @@ The `python` job also runs `ruff check .` over every Python tree, `python3
 tools/gen-languages.py --check` in `plugins/dotnet` (the C# language tables are generated
 from the Python ones and checked in) and `python3 build.py` in `plugins/kodi`.
 
-The `build` job runs `scripts/release-files.sh`, which builds every file a release
+The `build` job runs `scripts/release.sh build`, which builds every file a release
 publishes into `release/<tag>/` with its `SHA256SUMS`, and keeps them as the run's
 `release` artifact. On main the `release` job publishes each tag that does not exist
 yet: see [Releases](../README.md#releases).

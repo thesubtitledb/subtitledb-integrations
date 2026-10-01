@@ -24,7 +24,7 @@
 SubtitleDb = {}
 local S = SubtitleDb
 
-S.VERSION = "0.3.0"
+S.VERSION = "0.3.1"
 S.API_BASE = "https://api.thesubtitledb.org"
 S.FORMATS = { srt = true, ass = true, ssa = true, sub = true, vtt = true }
 
@@ -518,6 +518,48 @@ function S.build_url(path, params)
   return S.API_BASE .. path .. "?" .. table.concat(parts, "&")
 end
 
+--- A download URL with the client on it, as every lookup carries it, so a download
+--- can be put down to this extension.
+function S.with_client(url)
+  local head, tail = string.match(url, "^([^#]*)(.*)$")
+  local separator = string.find(head, "?", 1, true) and "&" or "?"
+  return head .. separator .. "client=vlc" .. tail
+end
+
+--- The host of an http or https URL, lower case, or nil.
+function S.host(url)
+  local host = string.match(url or "", "^[hH][tT][tT][pP][sS]?://([^/?#]+)")
+  if not host then return nil end
+  host = string.gsub(host, "^.*@", "")
+  host = string.gsub(host, ":%d*$", "")
+  if host == "" then return nil end
+  return string.lower(host)
+end
+
+--- True for the API's host and the files host it redirects to, nothing else. VLC
+--- follows a redirect before this file sees it, so the address a download starts
+--- from is the one that can be checked.
+function S.ours(url)
+  local host, base = S.host(url), S.host(S.API_BASE)
+  if not host or not base then return false end
+  if host == base then return true end
+  local root = string.match(base, "([^%.]+%.[^%.]+)$")
+  return root ~= nil and (host == root or string.sub(host, -(#root + 1)) == "." .. root)
+end
+
+--- nil when a downloaded body can be a subtitle, else what it is instead. A captive
+--- portal or an error page answers 200 as well, and written beside the video it
+--- loads as an empty track while the window says it worked.
+function S.not_a_subtitle(body)
+  local start = string.find(body or "", "[^%s\239\187\191]")
+  if not start then return "an empty file" end
+  local head = string.lower(string.sub(body, start, start + 13))
+  if head == "<!doctype html" or string.sub(head, 1, 5) == "<html" then
+    return "a web page"
+  end
+  return nil
+end
+
 S.NO_ANSWER = "no answer from "
 
 --- Read a URL whole. Replaced in tests; in VLC this is the only network call.
@@ -681,6 +723,13 @@ end
 -- ===========================================================================
 
 local dlg, widgets, results, config = nil, {}, {}, nil
+-- The item the form was filled in for, and the one the results were found for.
+local shown, searched = nil, nil
+
+local function current_uri()
+  local item = vlc.input.item()
+  return item and item:uri() or nil
+end
 
 function descriptor()
   return {
@@ -772,6 +821,24 @@ end
 
 function meta_changed() end
 
+--- VLC calls this when the playlist moves on. The results are the last item's, and
+--- saved beside this one they would be another episode's subtitle, so they go and
+--- the form is filled in again for what is playing now.
+function input_changed()
+  local uri = current_uri()
+  if uri == shown then return end
+  shown, searched, results = uri, nil, {}
+  if not (dlg and widgets.list) then return end
+  local guess = current_guess()
+  widgets.title:set_text(guess.title or "")
+  widgets.season:set_text(guess.season and tostring(guess.season) or "")
+  widgets.episode:set_text(guess.episode and tostring(guess.episode) or "")
+  widgets.year:set_text(guess.year and tostring(guess.year) or "")
+  widgets.imdb:set_text("")
+  widgets.list:clear()
+  widgets.message:set_text("Ready")
+end
+
 function close_dlg()
   if dlg then
     dlg:delete()
@@ -790,6 +857,7 @@ function show_main()
   dlg = vlc.dialog("SubtitleDB")
 
   local guess = current_guess()
+  shown = current_uri()
 
   dlg:add_label("Title:", 1, 1, 1, 1)
   widgets.title = dlg:add_text_input(guess.title or "", 2, 1, 4, 1)
@@ -913,7 +981,7 @@ local function run_search(hint)
     results = {}
     return
   end
-  results = found
+  results, searched = found, current_uri()
   widgets.list:clear()
   for i, candidate in ipairs(results) do
     widgets.list:add_value(S.label(candidate), i)
@@ -985,16 +1053,25 @@ function download_selected()
   if not candidate then message("Pick one first") return end
   local url = S.get(candidate.row, "download_url")
   if not url then message("That subtitle has no file") return end
+  if not S.ours(url) then
+    message("Not a SubtitleDB address: " .. url)
+    return
+  end
 
   message("Downloading...")
-  local body, err = S.fetch(url)
+  local body, err = S.fetch(S.with_client(url))
   if not body or body == "" then
     message(err or "The file did not download")
     return
   end
+  local wrong = S.not_a_subtitle(body)
+  if wrong then
+    message("The download was " .. wrong .. ", not a subtitle")
+    return
+  end
 
-  local item = vlc.input.item()
-  local target = S.target_path(item and item:uri() or nil, candidate,
+  -- Beside the file the search was for. VLC may have moved on to another since.
+  local target = S.target_path(searched, candidate,
                                config.save_next_to_video, vlc.config.userdatadir())
   if not config.overwrite then
     local existing = S.open_file(target, "r")
@@ -1012,7 +1089,7 @@ function download_selected()
   file:write(body)
   file:close()
 
-  if S.load_subtitle(vlc, target) then
+  if current_uri() == searched and S.load_subtitle(vlc, target) then
     message("Saved and loaded: " .. target)
   else
     message("Saved: " .. target)

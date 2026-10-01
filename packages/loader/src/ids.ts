@@ -2,15 +2,15 @@
  * The two identifiers every call from this loader carries.
  *
  * Both are query parameters rather than headers, so no request pays for a CORS
- * preflight, and both name the page or the release, never the visitor.
+ * preflight, and both name the loader or the page load, never the visitor.
  */
-declare const __SDB_VERSION__: string;
 
 /**
- * Names CDN traffic in the API logs, so a page served the loader from the CDN is
- * distinguishable from one that bundled the packages itself. Identifies the release.
+ * Names the loader on every lookup and every download, so the API can tell its traffic
+ * from a page that bundled the packages itself. The API records a download under one
+ * of a closed list of names, one per integration, and this is the loader's.
  */
-export const CLIENT = `cdn/${__SDB_VERSION__}`;
+export const CLIENT = 'loader';
 
 /**
  * One id per page load, minted when this module is first imported. It rides every API

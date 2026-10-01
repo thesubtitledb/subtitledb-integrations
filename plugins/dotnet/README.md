@@ -36,9 +36,10 @@ list: the host asks one language at a time.
 |---|---|
 | Get latest subtitles on play, see [On play](#on-play) | on |
 | Subtitles per language, the most offered for each, 100 to 2000 | 500 |
+| API address | `https://api.thesubtitledb.org` |
 
-Both are on the plugin's page: Dashboard -> Plugins -> SubtitleDB in Jellyfin, Settings
--> Plugins -> SubtitleDB in Emby.
+All three are on the plugin's page: Dashboard -> Plugins -> SubtitleDB in Jellyfin,
+Settings -> Plugins -> SubtitleDB in Emby.
 
 ## On play
 
@@ -51,6 +52,8 @@ download settings decide the rest:
 - "Only download subtitles that are a perfect match" (Emby: "Require a hash match"), on
   by default: only a subtitle recorded against that release is saved. Untick it to get
   the best match.
+- "Skip if the default audio track matches the download language": a language the
+  audio is already in is not asked. The audio is the default audio track, else the first.
 - SubtitleDB unticked as a subtitle downloader: nothing is asked.
 
 A video is asked for once in 10 minutes, and a subtitle already beside it is not saved
@@ -78,8 +81,8 @@ subtitle carries the playing file's release name. Without a release name, the la
 carries the line count. Everything else, including why it ranked there, is in the
 comment.
 
-The bytes reach the host as the API stores them, typed by the row's format, not the file
-name. The host converts the character set; the plugin does not.
+The bytes reach the host as the API sends them, in UTF-8, typed by the row's format
+rather than the file name.
 
 Each request waits 15 seconds. One that times out, cannot connect or gets a server error
 is tried twice more; then the search lists nothing from SubtitleDB and the host logs one
@@ -115,7 +118,7 @@ second DLL appears in `dist/emby`.
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 164 tests
+dotnet test SubtitleDb.sln     # 175 tests
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 

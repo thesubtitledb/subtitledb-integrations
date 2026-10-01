@@ -152,7 +152,37 @@ namespace SubtitleDb.Tests
             var bytes = await Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None);
 
             Assert.StartsWith("1\n", System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
-            Assert.Equal(new[] { "https://api.example.test/get/1", "https://files.example.test/x/1.srt" }, handler.Calls);
+            Assert.Equal(
+                new[] { "https://api.example.test/get/1?client=subtitledb-plugin", "https://files.example.test/x/1.srt" },
+                handler.Calls);
+        }
+
+        [Fact]
+        public async Task ADownloadNamesThePluginInItsQueryAndItsVersionInItsAgent()
+        {
+            // The query names the plugin to the API, as every lookup does; the agent
+            // carries the version, which the query does not.
+            var handler = new StubHandler().On("/get/1", "1\n00:00:01,000 --> 00:00:02,000\nhi\n");
+            var client = new SubtitleDbClient(
+                new HttpClient(handler), "https://api.example.test", "jellyfin", new HttpClient(handler));
+
+            await client.DownloadAsync("https://api.example.test/get/1", CancellationToken.None);
+
+            Assert.Equal("https://api.example.test/get/1?client=jellyfin", handler.Calls[0]);
+            Assert.Equal(client.UserAgent, handler.Agents[0]);
+            Assert.Matches(@"^subtitledb-jellyfin/\d+\.\d+\.\d+ \(\+https://thesubtitledb\.org\)$", client.UserAgent);
+            Assert.DoesNotContain("/0.0.0 ", client.UserAgent, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("https://api.example.test/get/1", "https://api.example.test/get/1?client=emby")]
+        [InlineData("https://api.example.test/get/1?ext=srt", "https://api.example.test/get/1?ext=srt&client=emby")]
+        [InlineData("https://api.example.test/get/1#top", "https://api.example.test/get/1?client=emby#top")]
+        public void TheNameGoesOnTheDownloadUrlWhateverItAlreadyCarries(string given, string wanted)
+        {
+            var client = new SubtitleDbClient(new HttpClient(new StubHandler()), "https://api.example.test", "emby");
+
+            Assert.Equal(wanted, client.WithClient(given));
         }
 
         [Fact]
@@ -180,7 +210,7 @@ namespace SubtitleDb.Tests
                 () => Client(handler).DownloadAsync("https://api.example.test/get/1", CancellationToken.None));
 
             Assert.Contains("off our hosts", err.Message, StringComparison.Ordinal);
-            Assert.Equal(new[] { "https://api.example.test/get/1" }, handler.Calls);
+            Assert.Equal(new[] { "https://api.example.test/get/1?client=subtitledb-plugin" }, handler.Calls);
         }
 
         [Fact]

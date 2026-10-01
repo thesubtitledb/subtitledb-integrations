@@ -27,6 +27,7 @@ import xbmcvfs
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo("id")
+VERSION = ADDON.getAddonInfo("version")
 PROFILE = ADDON.getAddonInfo("profile")
 
 import logic  # noqa: E402
@@ -144,7 +145,7 @@ def do_search(params):
             return
 
     log("searching for %s" % logic.hint_from(info))
-    client = logic.make_client(ADDON.getSetting("api_base") or None)
+    client = logic.make_client(ADDON.getSetting("api_base") or None, version=VERSION)
     try:
         items = logic.search(client, info, languages,
                              limit=per_language(ADDON.getSetting("per_language")), log=log)
@@ -162,7 +163,7 @@ def do_search(params):
 
 def do_download(params):
     item = {"id": int(params.get("id") or 0), "format": params.get("format") or "srt"}
-    client = logic.make_client(ADDON.getSetting("api_base") or None)
+    client = logic.make_client(ADDON.getSetting("api_base") or None, version=VERSION)
     try:
         content = client.download(params.get("url") or "")
     except SubtitleDbError as err:

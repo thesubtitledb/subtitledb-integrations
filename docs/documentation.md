@@ -637,6 +637,10 @@ createClient({
 
 `client` is a query parameter on purpose. A custom header makes the browser issue a
 preflight before every new path, and an attribution string is not worth a round trip.
+The subtitle download carries it too, or `downloadClient` in its place when that is set.
+
+A download is read only from the API's own hosts, and a web page or an empty body is
+refused with a `download_failed` error rather than handed on as a subtitle.
 
 ### Caching your own lookups
 

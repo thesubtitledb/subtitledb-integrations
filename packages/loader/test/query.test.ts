@@ -67,17 +67,24 @@ describe('query', () => {
     expect(typeof res.results[0]?.track).toBe('function');
   });
 
-  it('names the release and the page load on the way in', async () => {
+  it('names the loader and the page load on the way in', async () => {
     const { query, engine } = await fresh();
     await query({ hint: { imdbId: 'tt0133093' } });
-    expect(engine.queries[0].clientName).toBe('cdn/0.0.0-test');
+    expect(engine.queries[0].clientName).toBe('loader');
+    expect(engine.queries[0].downloadClient).toBe('loader');
     expect(engine.queries[0].antispamId).toMatch(UUID);
   });
 
-  it('lets the page name itself', async () => {
+  it('lets the page name itself on lookups, but not on downloads', async () => {
     const { query, engine } = await fresh();
-    await query({ hint: { imdbId: 'tt0133093' }, clientName: 'mine/1', antispamId: 'page-1' });
+    await query({
+      hint: { imdbId: 'tt0133093' },
+      clientName: 'mine/1',
+      downloadClient: 'mine/1',
+      antispamId: 'page-1',
+    });
     expect(engine.queries[0].clientName).toBe('mine/1');
+    expect(engine.queries[0].downloadClient).toBe('loader');
     expect(engine.queries[0].antispamId).toBe('page-1');
   });
 
@@ -125,7 +132,7 @@ describe('get', () => {
     const { get, engine } = await fresh();
     engine.answer.results = [];
     await get({ hint: { imdbId: 'tt0133093' } });
-    expect(engine.queries[0].clientName).toBe('cdn/0.0.0-test');
+    expect(engine.queries[0].clientName).toBe('loader');
     expect(engine.queries[0].antispamId).toMatch(UUID);
   });
 });

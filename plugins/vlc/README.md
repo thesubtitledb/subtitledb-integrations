@@ -24,12 +24,16 @@ the results, then the actions. vlsub is GPL-3.0, so none of its code is used.
 
 - Search this file uses the file name: `Breaking.Bad.S05E14.1080p.BluRay.x264-DEMAND.mkv`
   is a series, season and episode; `Anatomy.of.a.Fall.2023.mkv` a film and year. An IMDb
-  id, if VLC knows one, comes first.
+  id typed into the form is asked first.
 - Search by name ignores the id and searches the title as typed, for a file named
   `video1.mkv` or a wrong id.
 - Up to three languages, asked for in order.
-- Download saves the file beside the video as `<video>.<language>.<format>`, which VLC loads
-  by itself next time, and loads it into what is playing now.
+- Download saves the file beside the video the search was for, as
+  `<video>.<language>.<format>`, which VLC loads by itself next time, and loads it if that
+  video is still playing. It downloads only from SubtitleDB's own addresses, and refuses
+  a web page or an empty file sent in place of a subtitle.
+- When the playlist moves on, the form is filled in again for the new item and the old
+  results are cleared.
 - The status line names the title the results are for. With no answer, it asks once
   more for a title that always answers, and says whether the API is down or no title
   matched.

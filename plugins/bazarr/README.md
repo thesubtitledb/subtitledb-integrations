@@ -47,17 +47,24 @@ one API request. `SUBTITLEDB_API_BASE` points it at your own copy of the API.
 
 | Bazarr has | The provider |
 |---|---|
-| an IMDb id | asks for that title, one request |
+| an IMDb id | asks for that title by its id |
 | a series (IMDb id or name), season and episode | asks by the series' id, else its name, drilled to that episode, and keeps only that episode's rows |
 | the episode title | chooses between episodes of the series |
 | the file's release name | prefers a subtitle recorded against that release |
-| a language list | sends one request per language |
+| a language list | asks for each language on its own |
 
 Bazarr scores only the matches a provider claims, and drops an episode's subtitle unless
 series, season and episode are among them. The provider claims only what it checked: the
 title the lookup resolved to (by IMDb id when both sides have one, else by name and
 year), the season and episode it drilled to, and what Bazarr's parser reads off the
 subtitle's release name.
+
+## When the API is busy or down
+
+A 429, or a failure or no answer once the client has retried, reaches Bazarr as its own
+TooManyRequests or ServiceUnavailable. After five in two minutes Bazarr stops asking:
+for an hour after a 429, for 20 minutes otherwise. A subtitle that is gone (404) is
+skipped and the next best is taken.
 
 ## Languages
 

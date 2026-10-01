@@ -19,6 +19,9 @@ namespace SubtitleDb.Tests
 
         public List<string> Calls { get; } = new List<string>();
 
+        /// <summary>The User-Agent each call was made with, beside <see cref="Calls"/>.</summary>
+        public List<string?> Agents { get; } = new List<string?>();
+
         public StubHandler On(string contains, string json, HttpStatusCode status = HttpStatusCode.OK)
         {
             _routes.Add(new Route(contains, json, status, null));
@@ -37,6 +40,7 @@ namespace SubtitleDb.Tests
         {
             var url = request.RequestUri!.ToString();
             Calls.Add(url);
+            Agents.Add(request.Headers.TryGetValues("User-Agent", out var agent) ? string.Join(" ", agent) : null);
 
             foreach (var route in _routes)
             {

@@ -62,13 +62,22 @@ PACKAGE = ("category", "description", "guid", "name", "overview", "owner")
 RELEASE = ("changelog", "targetAbi", "timestamp", "version")
 
 
-def version() -> str:
+def prop(name: str) -> str:
     # Our own file, checked in beside this script, so there is nothing to defuse.
     props = ET.parse(ROOT / "Directory.Build.props").getroot()  # noqa: S314
-    found = props.find(".//Version")
-    if found is None or not found.text:
-        raise SystemExit("no <Version> in Directory.Build.props")
-    return found.text.strip()
+    found = props.find(".//" + name)
+    if found is None or not found.text or not found.text.strip():
+        raise SystemExit("no <%s> in Directory.Build.props" % name)
+    return " ".join(found.text.split())
+
+
+def version() -> str:
+    return prop("Version")
+
+
+def notes() -> str:
+    """What changed in this version. Jellyfin shows it in its catalog beside the update."""
+    return prop("PackageReleaseNotes")
 
 
 def publish(project: pathlib.Path, framework: str, out: pathlib.Path, dotnet: str) -> None:
@@ -116,7 +125,7 @@ def build_jellyfin(dotnet: str, ver: str) -> pathlib.Path:
     # never be updated.
     meta = {
         "category": "Subtitles",
-        "changelog": "",
+        "changelog": notes(),
         "description": "Subtitles from the SubtitleDB open index. No account, no key, no quota.",
         "guid": GUID,
         "name": "SubtitleDB",

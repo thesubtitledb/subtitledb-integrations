@@ -114,6 +114,43 @@ namespace SubtitleDb.Tests
         }
 
         [Fact]
+        public async Task TheLanguageTheAudioIsInIsNotAskedWhenTheLibrarySkipsIt()
+        {
+            // Any spelling of the language: the audio says fra, the library says fre.
+            var host = new Host { Spoken = "fra" };
+            host.Best["fre"] = "h_2";
+            host.Best["eng"] = "h_1";
+
+            await host.Run("fre", "eng");
+
+            Assert.Equal(new[] { "eng" }, host.Asked);
+            Assert.Equal(new[] { "h_1" }, host.Saved);
+        }
+
+        [Fact]
+        public async Task AudioInTheOnlyLanguageAsksNothingAndSaysWhy()
+        {
+            var host = new Host { Spoken = "eng" };
+            host.Best["eng"] = "h_1";
+
+            var said = await host.Run("eng");
+
+            Assert.Empty(host.Asked);
+            Assert.Equal("its audio is in eng, and its library skips a subtitle in that language", said);
+        }
+
+        [Fact]
+        public void TheAudioThatCountsIsTheDefaultStreamElseTheFirst()
+        {
+            Assert.Equal("eng", OnPlay.Spoken(new (string?, bool)[] { ("ger", false), ("eng", true) }));
+            Assert.Equal("ger", OnPlay.Spoken(new (string?, bool)[] { ("ger", false), ("eng", false) }));
+            // A default stream that names no language says nothing, as the hosts read it.
+            Assert.Null(OnPlay.Spoken(new (string?, bool)[] { (null, true), ("eng", false) }));
+            Assert.Null(OnPlay.Spoken(Array.Empty<(string?, bool)>()));
+            Assert.Null(OnPlay.Spoken(null));
+        }
+
+        [Fact]
         public async Task AFetchThatFailsSavesNothingAndSaysWhy()
         {
             var host = new Host { Fails = true };
@@ -179,6 +216,8 @@ namespace SubtitleDb.Tests
 
             public bool Fails { get; set; }
 
+            public string? Spoken { get; set; }
+
             public Task<string> Run(params string[] languages)
             {
                 return OnPlay.RunAsync(
@@ -197,7 +236,8 @@ namespace SubtitleDb.Tests
                         Saved.Add(id);
                         return Task.CompletedTask;
                     },
-                    CancellationToken.None);
+                    CancellationToken.None,
+                    Spoken);
             }
         }
     }

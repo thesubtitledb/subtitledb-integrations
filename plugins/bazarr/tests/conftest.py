@@ -111,6 +111,18 @@ class Provider:
     pass
 
 
+class ProviderError(Exception):
+    pass
+
+
+class ServiceUnavailable(ProviderError):
+    """subliminal's. Bazarr rests a provider for 20 minutes after five in two minutes."""
+
+
+class TooManyRequests(ProviderError):
+    """subliminal_patch's. Bazarr rests a provider for an hour after five in two minutes."""
+
+
 #: Every guess the provider handed to Bazarr's parser, newest last.
 GUESSES = []
 
@@ -135,8 +147,10 @@ def _module(name: str, **members) -> types.ModuleType:
 
 _module("guessit", guessit=guessit)
 _module("subliminal", Episode=Episode, Movie=Movie, Video=Video)
-_module("subliminal.exceptions", AuthenticationError=Exception, ConfigurationError=Exception)
+_module("subliminal.exceptions", AuthenticationError=Exception, ConfigurationError=Exception,
+        ServiceUnavailable=ServiceUnavailable)
 _module("subliminal_patch")
+_module("subliminal_patch.exceptions", TooManyRequests=TooManyRequests)
 _module("subliminal_patch.providers", Provider=Provider)
 _module("subliminal_patch.subtitle", Subtitle=Subtitle, guess_matches=guess_matches)
 _module("subzero")

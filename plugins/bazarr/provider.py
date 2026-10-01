@@ -21,7 +21,12 @@ import os
 
 from guessit import guessit
 from subliminal import Episode, Movie
-from subliminal.exceptions import AuthenticationError, ConfigurationError  # noqa: F401
+from subliminal.exceptions import (  # noqa: F401
+    AuthenticationError,
+    ConfigurationError,
+    ServiceUnavailable,
+)
+from subliminal_patch.exceptions import TooManyRequests
 from subliminal_patch.providers import Provider
 from subliminal_patch.subtitle import Subtitle, guess_matches
 from subtitledb import (
@@ -116,6 +121,21 @@ def from_api_code(code):
         except Exception:
             logger.debug("subtitledb: no babelfish language for %r (%s)", code, language_name(code))
             return None
+
+
+def throttle(err):
+    """The exception that has Bazarr rest this provider, or None when it need not.
+
+    Bazarr's pool counts a TooManyRequests or a ServiceUnavailable, and after five in
+    two minutes stops asking for an hour or for twenty minutes, so a library scan
+    does not keep asking an API that is limiting it or down. The client has already
+    retried by then. Anything else is about one title or one subtitle.
+    """
+    if err.status == 429:
+        return TooManyRequests(str(err))
+    if err.status is None or err.status >= 500:
+        return ServiceUnavailable(str(err))
+    return None
 
 
 def _named(name, names):
@@ -256,8 +276,10 @@ class SubtitleDbProvider(Provider):
             try:
                 result = find(self.client, hint, opts)
             except SubtitleDbError as err:
-                # A provider that raises takes the whole search down with it. Bazarr
-                # has other providers; ours being unreachable is not their problem.
+                # Raising sets aside this provider alone; the others' results stand.
+                busy = throttle(err)
+                if busy is not None:
+                    raise busy from err
                 logger.error("subtitledb: %s", err)
                 return out
 
@@ -288,6 +310,11 @@ class SubtitleDbProvider(Provider):
         try:
             subtitle.content = self.client.download(subtitle.download_link)
         except SubtitleDbError as err:
+            busy = throttle(err)
+            if busy is not None:
+                raise busy from err
+            # This one subtitle is gone. Without content Bazarr calls it invalid and
+            # takes the next best.
             logger.error("subtitledb: download failed: %s", err)
 
 

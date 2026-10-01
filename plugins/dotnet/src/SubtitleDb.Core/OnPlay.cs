@@ -55,6 +55,18 @@ namespace SubtitleDb.Core
         }
 
         /// <summary>
+        /// The language a player starts the video in: the default audio stream's, else
+        /// the first one's, as the hosts decide it for their own subtitle downloads.
+        /// Null when there is no audio or it names no language.
+        /// </summary>
+        public static string? Spoken(IEnumerable<(string? Language, bool IsDefault)>? audio)
+        {
+            var streams = (audio ?? Enumerable.Empty<(string? Language, bool IsDefault)>()).ToList();
+            var first = streams.Where(s => s.IsDefault).Concat(streams).Select(s => s.Language).FirstOrDefault();
+            return string.IsNullOrWhiteSpace(first) ? null : first!.Trim();
+        }
+
+        /// <summary>
         /// Asks in each language in turn and saves the first match, unless the video
         /// already has a file with exactly those bytes. Other subtitles do not stop it:
         /// a video that has some still gets SubtitleDB's. Returns what it did, for the log.
@@ -65,20 +77,34 @@ namespace SubtitleDb.Core
         /// <param name="held">The files of the subtitles the video has now.</param>
         /// <param name="save">Saves the subtitle the way the host saves one a user picked.</param>
         /// <param name="cancellationToken">Ends the lookup.</param>
+        /// <param name="spoken">
+        /// From <see cref="Spoken"/>, when the library skips a subtitle in the language
+        /// the audio is already in; that language is not asked.
+        /// </param>
         public static async Task<string> RunAsync(
             IReadOnlyList<string> languages,
             Func<string, CancellationToken, Task<string?>> best,
             Func<string, CancellationToken, Task<byte[]>> fetch,
             Func<IEnumerable<string>> held,
             Func<string, byte[], CancellationToken, Task> save,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? spoken = null)
         {
             if (languages.Count == 0)
             {
                 return "no subtitle download languages are set for its library";
             }
 
-            foreach (var language in languages)
+            var spokenCode = global::SubtitleDb.Core.Languages.ToCode(spoken);
+            var asked = spokenCode == null
+                ? languages
+                : languages.Where(l => !string.Equals(global::SubtitleDb.Core.Languages.ToCode(l), spokenCode, StringComparison.Ordinal)).ToList();
+            if (asked.Count == 0)
+            {
+                return "its audio is in " + spoken + ", and its library skips a subtitle in that language";
+            }
+
+            foreach (var language in asked)
             {
                 var id = await best(language, cancellationToken).ConfigureAwait(false);
                 if (id == null)
@@ -96,7 +122,7 @@ namespace SubtitleDb.Core
                 return "saved SubtitleDB's " + language + " subtitle " + id;
             }
 
-            return "SubtitleDB has nothing for it in " + string.Join(", ", languages);
+            return "SubtitleDB has nothing for it in " + string.Join(", ", asked);
         }
 
         /// <summary>

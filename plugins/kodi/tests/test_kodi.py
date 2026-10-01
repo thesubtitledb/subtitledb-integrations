@@ -505,6 +505,19 @@ def test_the_lookup_on_play_stops_inside_the_5_s_kodi_allows():
     assert "timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested" in play
 
 
+def test_the_addon_names_itself_and_its_own_version():
+    # The shared client's version is not the addon's; the agent carries the addon's.
+    client = logic.make_client(None, version="0.4.2")
+    assert client.client == "kodi"
+    assert client.user_agent == "subtitledb-kodi/0.4.2 (+https://thesubtitledb.org)"
+    lib = HERE / "service.subtitles.subtitledb" / "resources" / "lib"
+    side = (lib / "kodi_side.py").read_text(encoding="utf-8")
+    assert 'VERSION = ADDON.getAddonInfo("version")' in side
+    assert side.count("version=VERSION") == 2
+    assert 'version=addon.getAddonInfo("version")' in (lib / "kodi_play.py").read_text(
+        encoding="utf-8")
+
+
 # -- the zip ----------------------------------------------------------------
 
 

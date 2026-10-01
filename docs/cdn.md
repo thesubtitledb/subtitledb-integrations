@@ -185,9 +185,10 @@ It returns the top result already loaded, or `null` when nothing matched.
 `SubtitleDB.toBlobUrl(loaded)` and `SubtitleDB.toTrack(loaded)` turn a `load()` result
 into a blob URL or a `<track>` directly, for when you kept the loaded bytes yourself.
 
-Every query and download carries a per-page-load `antispam_id`, so abusive traffic can
-be told from ordinary use. It is regenerated on each page load and identifies the page,
-not the visitor.
+Every query and download carries `client=loader` and a per-page-load `antispam_id`, so
+the loader's traffic can be told apart and abusive traffic told from ordinary use. A
+page's own `clientName` replaces the name on queries, never on downloads. The id is
+regenerated on each page load and identifies the page, not the visitor.
 
 ## Playback debugger
 
@@ -319,7 +320,7 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.8.1/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/0.8.2/subtitle-helper.js"></script>
 ```
 
 Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
@@ -332,7 +333,7 @@ entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.8.1/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/0.8.2/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>

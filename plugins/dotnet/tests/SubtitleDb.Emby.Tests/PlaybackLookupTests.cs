@@ -108,6 +108,29 @@ namespace SubtitleDb.Emby.Tests
             Assert.True(new PluginConfiguration().LookUpOnPlay);
         }
 
+        [Fact]
+        public void TheSaveAfterALookupOnPlayIsHandedTheBytesItFetched()
+        {
+            // Emby takes its own key and the underscore off an id before it asks the
+            // provider, so the provider is asked for the bare id.
+            var bytes = new byte[] { 1, 2, 3 };
+            using (Prefetched.Hold("8d1e4b7c_481207", bytes))
+            {
+                Assert.Same(bytes, Prefetched.Take("481207"));
+                Assert.Null(Prefetched.Take("481207"));
+            }
+        }
+
+        [Fact]
+        public void NothingIsHeldOnceTheSaveIsOver()
+        {
+            using (Prefetched.Hold("481208", new byte[] { 1 }))
+            {
+            }
+
+            Assert.Null(Prefetched.Take("481208"));
+        }
+
         /// <summary>Any Emby interface, answering every call with null.</summary>
         public class Nothing : DispatchProxy
         {

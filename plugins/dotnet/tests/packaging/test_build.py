@@ -50,6 +50,14 @@ def test_the_version_is_the_one_in_the_build_props():
     assert build.version() == props.split("<Version>")[1].split("</Version>")[0].strip()
 
 
+def test_each_version_says_what_changed():
+    # Jellyfin shows the changelog beside an update. Empty, an update reads as nothing.
+    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
+    written = props.split("<PackageReleaseNotes>")[1].split("</PackageReleaseNotes>")[0]
+    assert build.notes() == " ".join(written.split())
+    assert len(build.notes()) > 20
+
+
 def test_only_our_own_assemblies_are_published(tmp_path):
     folder = tmp_path / "SubtitleDB_0.1.0"
     published(folder)
@@ -230,6 +238,7 @@ def test_the_manifest_says_what_jellyfin_reads(tmp_path, monkeypatch):
     assert meta["version"] == "0.1.0"
     # Jellyfin refuses a plugin whose targetAbi is above its own server version.
     assert meta["targetAbi"] == "10.10.0.0"
+    assert meta["changelog"] == build.notes()
     assert calls == ["net8.0"]
 
 

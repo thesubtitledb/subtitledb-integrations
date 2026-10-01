@@ -194,6 +194,11 @@ namespace SubtitleDb.Emby
 
             var providers = _subtitles.GetSupportedProviders(video).Select(p => p.Name).ToList();
             var seriesIds = (video as Episode)?.Series?.ProviderIds;
+            var spoken = options.SkipSubtitlesIfAudioTrackMatches
+                ? OnPlay.Spoken(video.GetMediaStreams()
+                    .Where(s => s.Type == MediaStreamType.Audio)
+                    .Select(s => ((string?)s.Language, s.IsDefault)))
+                : null;
             return await OnPlay.RunAsync(
                 OnPlay.Languages(options.SubtitleDownloadLanguages),
                 async (language, token) =>
@@ -218,12 +223,18 @@ namespace SubtitleDb.Emby
                     .Select(s => s.Path),
                 async (id, bytes, token) =>
                 {
-                    // Emby has no call that saves bytes it is handed, so it fetches the
-                    // subtitle again and saves it as its search dialog's download does.
-                    await _subtitles.DownloadSubtitles(video, id, options, token).ConfigureAwait(false);
+                    // Emby has no call that saves bytes it is handed: it asks the provider
+                    // for the subtitle again, as its search dialog's download does. The
+                    // provider hands back these bytes, so a play downloads the file once.
+                    using (Prefetched.Hold(id, bytes))
+                    {
+                        await _subtitles.DownloadSubtitles(video, id, options, token).ConfigureAwait(false);
+                    }
+
                     _providers.QueueRefresh(video.InternalId, new MetadataRefreshOptions(_fileSystem), RefreshPriority.High);
                 },
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                spoken).ConfigureAwait(false);
         }
     }
 }
