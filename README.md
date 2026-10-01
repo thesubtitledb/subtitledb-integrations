@@ -1,7 +1,10 @@
 # subtitledb-integrations
 
-Subtitles in the player's own captions menu, and a client for the API behind it.
-[thesubtitledb.org](https://thesubtitledb.org)
+Subtitles from [TheSubtitleDB](https://thesubtitledb.org) in web video players and media
+servers. This repo holds the script tag, the JavaScript packages behind it, and plugins
+for Jellyfin, Emby, Kodi, VLC and Bazarr. None of them needs a key or an account.
+
+## Script tag
 
 ```html
 <video id="v" controls src="film.mp4"></video>
@@ -15,498 +18,292 @@ Subtitles in the player's own captions menu, and a client for the API behind it.
 </script>
 ```
 
-No key, no signup, about 2 KB. [Plugins](#plugins) do the same for Jellyfin, Emby,
-Kodi, VLC and Bazarr.
+The script is about 3 KB gzipped and loads player code only when the page needs it. The
+same build is an ES module at `latest/subtitle-helper.esm.js`. Use `/v/<version>/` in
+place of `/latest/` to pin a version.
 
-## Query the API
+| `SubtitleDB.` | What it does |
+|---|---|
+| `attach(target, options)` | Adds subtitles to the player's captions menu and returns a [handle](#handle) |
+| `query(options)` | The ranked subtitles as data, each with `url`, `label`, `language`, `load()`, `blobUrl()` and `track()` |
+| `get(options)` | The best match, already loaded, or `null` |
+| `toBlobUrl(loaded)`, `toTrack(loaded)` | A loaded subtitle as an object URL or a `<track>` |
+| `debug(key, options)` | Reports playback of every video on the page to the [playback debugger](docs/cdn.md#playback-debugger) |
+| `preload()` | Fetches the player code ahead of time |
+| `setBasePath(path)` | Loads the code from your own copy of the files |
+| `version` | The version that loaded |
+
+```js
+const sub = await SubtitleDB.get({ hint: { imdbId: 'tt0133093' }, convertTo: 'vtt' });
+if (sub) video.append(sub.track);
+```
+
+`query` and `get` take `hint`, `languages`, `hearingImpaired` and `limit`. They convert
+on load with `convertTo: 'vtt'`, `encoding`, `offsetMs`, `fps: { from, to }` and
+`cues: true`. [docs/cdn.md](docs/cdn.md) covers pinning, CSP, self-hosting and the
+debugger.
+
+## Options
+
+`attach` takes the same options for every player:
+
+```js
+SubtitleDB.attach(player, {
+  // or { tmdbId }, or { title, year, season, episode }; read from the page if left out
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en', 'fr'],       // best first
+  autoSelect: true,              // or 'locale', or a code such as 'en-US'
+  hearingImpaired: false,        // rank hearing impaired subtitles first
+  maxTracks: 30,                 // most subtitles offered
+  limit: 100,                    // subtitles asked for per language, 100 per request
+  convert: true,                 // srt, ass and ssa to WebVTT in the browser
+  formats: ['vtt'],              // what the player renders itself; ArtPlayer adds srt, ass, ssa
+  player: 'videojs',             // skip detection
+  strict: false,                 // throw when a player is found but its menu cannot be reached
+  transcribe: false,             // speech to text on the device when nothing matches
+  cacheTtlMs: 300000,            // how long a lookup is reused
+  maxRequests: 12,               // network calls for the life of the attach
+  apiBase: 'https://api.thesubtitledb.org',
+  clientName: 'my-site',         // sent as `client` on lookups
+  fetch: window.fetch,
+  debug: 'sdbg_...',             // script tag only: the debugger for this video
+  onResolved(result) {},         // after every lookup, also one that found nothing
+  onSelected(loaded) {},         // a subtitle was fetched and handed to the player
+  onDegraded(info) {},           // a player was found but its captions menu was not
+  onError(err) {},
+});
+```
+
+`transcribe: true` runs Whisper in the browser through transformers.js. It also takes
+`{ when, engine, model, task, device, language, source, onProgress }`. Nothing downloads
+until a viewer picks the transcription. See
+[docs/documentation.md](docs/documentation.md#transcription).
+
+## Handle
+
+```js
+const handle = SubtitleDB.attach(player, options);
+
+await handle.ready;          // script tag only: the player code has loaded
+handle.player;               // { name, label, untested, via }
+handle.degraded;             // null, or the player that was seen but not reached
+handle.session;              // the lookup state underneath
+handle.media();              // the <video> playing now
+handle.tracks();             // the subtitles on offer, in menu order
+handle.current();            // the last lookup's result
+await handle.select(track);  // fetch, convert and show one
+await handle.refresh();      // look up again
+handle.destroy();            // remove the tracks and stop
+```
+
+A lookup offers subtitles and shows none. One shows when `autoSelect` picks it, when
+`select()` is called, or when the viewer turns it on in the player's menu.
+
+## Players
+
+The binding is picked from the object you pass. One call covers Video.js, Shaka, Plyr,
+Vidstack, DPlayer, Clappr, xgplayer, MediaElement.js, OpenPlayerJS, Media Chrome,
+ArtPlayer, Bitmovin, Flowplayer, THEOplayer, JW Player and a bare `<video>`, which is
+also how hls.js and dash.js are served.
+
+```js
+attach(video);                    // a <video>
+attach(player);                   // a player instance
+attach(container);                // the element around it
+attach(ref);                      // a React or Vue ref
+attach({ plyr });                 // plyr-react
+attach({ player });               // @videojs-player/vue
+attach({ player, videoElement }); // shaka-player-react
+```
+
+[docs/players.md](docs/players.md) lists every player and what was tested on each.
+
+## Packages
+
+The script tag is built from these packages. They are not on npm, so build them from
+this repo.
+
+### @subtitledb/core
 
 ```js
 import { createClient } from '@subtitledb/core';
 
 const sdb = createClient({ client: 'my-app/1.0' });
 
-const bundle = await sdb.byImdb('tt0133093', { lang: 'en', limit: 1 });
-```
-
-Real response, `subtitle_languages` cut:
-
-```json
-{
-  "title": {
-    "imdb": "tt0133093",
-    "tmdb_id": 603,
-    "media_type": "movie",
-    "name": "The Matrix",
-    "year": 1999,
-    "subtitle_count": 1092,
-    "subtitle_languages": { "en": 139, "es": 66, "tr": 58, "ar": 55, "pl": 52 }
-  },
-  "subtitles": {
-    "total": 139,
-    "limit": 1,
-    "offset": 0,
-    "items": [
-      {
-        "id": 1775434752,
-        "language": "en",
-        "format": "srt",
-        "cues": 1834,
-        "duration_s": 8094,
-        "bytes": 110564,
-        "encoding": "utf-8",
-        "release_name": "The.Matrix.1999.WEB-DL.TUBI",
-        "hearing_impaired": false,
-        "fps": null,
-        "added_at": "2023-03-02T03:07:00Z",
-        "download_url": "https://api.thesubtitledb.org/get/1775434752"
-      }
-    ]
-  }
-}
-```
-
-### Lookups
-
-```js
-await sdb.byImdb('tt0133093');       // 133093, "133093" or "tt0133093"
+await sdb.byImdb('tt0133093', { lang: 'en' }); // 133093 works too
 await sdb.byTmdb(603);
-await sdb.byTitle('the matrix');     // free text, server picks the top title
+await sdb.byTitle('the matrix');
 await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE');
 await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
-await sdb.bySubid(1775434752);       // which title does this file belong to
-```
-
-Each resolves to `{ title, subtitles }`; four add a block saying how they got there:
-
-```js
-(await sdb.byTitle('the matrix')).match;
-// { name: 'The Matrix', imdb: 'tt0133093', score: 1 }
-
-(await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE')).match;
-// { sub_id: 7497274,
-//   release_name: 'The.Matrix.1999.REMASTERED.1080p.BluRay.X264-AMIABLE',
-//   score: 0.61, shared_tokens: 7 }
-
-(await sdb.bySubid(1775434752)).subtitle;
-// the subtitle row itself, alongside title: { imdb, name }
-
-(await sdb.byInfohash(hash)).torrent;
-// the torrent the hash belongs to
-```
-
-### One episode
-
-```js
-await sdb.byImdb('tt0903747', { season: 1, episode: 1, lang: 'en', limit: 1 });
-```
-
-```json
-{
-  "title": {
-    "imdb": "tt0903747",
-    "tmdb_id": 1396,
-    "media_type": "tv",
-    "name": "Breaking Bad",
-    "year": 2008,
-    "subtitle_count": 362,
-    "subtitle_languages": { "id": 125, "ar": 43, "fa": 41, "en": 36, "pt": 25 }
-  },
-  "subtitles": {
-    "total": 36,
-    "limit": 1,
-    "offset": 0,
-    "items": [
-      {
-        "id": 8900892,
-        "language": "en",
-        "format": "srt",
-        "cues": 813,
-        "duration_s": 3533,
-        "bytes": 52009,
-        "encoding": "utf-8-sig",
-        "release_name": "Breaking Bad S01E01 Pilot.DVDRip.HI.cc.en.SNY",
-        "hearing_impaired": false,
-        "fps": 29.97,
-        "added_at": "2021-12-06T17:43:31Z",
-        "download_url": "https://api.thesubtitledb.org/get/8900892"
-      }
-    ]
-  }
-}
-```
-
-A drilled episode does not echo `season` or `episode`. `title` describes the series
-(`media_type: 'tv'`), `subtitles` the episode.
-
-### Parameters
-
-```js
-await sdb.byImdb('tt0133093', {
-  lang: 'en',                  // one code, or up to 16 comma separated
-  format: 'srt',
-  sort: 'cues',                // 'lang' | 'downloads' | 'cues' | 'bytes'
-  limit: 50,                   // API defaults to 20, caps at 100
-  offset: 0,
-  response_class: 'standard',  // 'minimal' | 'standard' | 'detailed' | 'full'
-  season: 1,                   // every by* lookup except bySubid
-  episode: 1,
-  signal: controller.signal,
-});
-```
-
-`lang` and `format` apply to a movie or an episode drill, and are ignored on a series
-or season bundle, which comes back whole.
-
-`response_class` sets how much TMDB metadata `title` carries:
-
-```js
-(await sdb.byImdb('tt0133093', { response_class: 'minimal' })).title;
-// imdb, tmdb_id, media_type, name, year, subtitle_count, subtitle_languages
-
-(await sdb.byImdb('tt0133093', { response_class: 'standard' })).title;
-// the same, plus poster_path, backdrop_path, overview, original_title,
-// release_date, genres, vote, runtime_min, tagline, original_language
-```
-
-### Errors
-
-```js
-import { SubtitleDbError, SubtitleDbAbort } from '@subtitledb/core';
-
-try {
-  await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
-} catch (e) {
-  e instanceof SubtitleDbError; // true
-  console.log(e.message, e.status, e.code);
-}
-```
-
-```text
-no title mapped to that infohash   404   not_found
-```
-
-A bad id fails without a request:
-
-```js
-await sdb.byImdb('nope');
-// SubtitleDbError: not an imdb id: nope   (status 0, code bad_request)
-```
-
-An unmapped IMDb id does not 404: it answers with `name: ''`, `tmdb_id: null` and any
-rows filed under it, so check `title.name` before trusting the list.
-
-Only 429, 5xx and transport failures retry. An aborted `signal` throws
-`SubtitleDbAbort`.
-
-### The bytes
-
-```js
-const sub = bundle.subtitles.items[0];
-const { text, format } = await sdb.fetchSubtitleText(sub);
-
-format;        // 'srt'
-text.length;   // 110190
-text.slice(0, 40);
-// '1\n00:00:03,036 --> 00:00:06,239\nCAPTIONI'
-```
-
-Returns the stored format untouched, from `download_url` exactly as given (the files
-host can move).
-
-### Health and posters
-
-```js
+await sdb.bySubid(1775434752);                 // the title a subtitle belongs to
+await sdb.fetchSubtitleText(subtitle);         // { text, format }, as stored
+sdb.downloadUrl(subtitle);                     // the address fetchSubtitleText reads
 await sdb.health();
-// { ok: true, titles: 519754, indexed_subtitles: 10702424, tmdb_mappings: 160973 }
-
-sdb.posterUrl('/abc.jpg');          // https://api.thesubtitledb.org/p/w342/abc.jpg
-sdb.posterUrl('/abc.jpg', 'w780');  // https://api.thesubtitledb.org/p/w780/abc.jpg
-sdb.posterUrl(null);                // null
+sdb.posterUrl('/abc.jpg', 'w780');
 ```
 
-### Client options
+A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTitle`,
+`byReleasename`, `bySubid` and `byInfohash` also say what they matched, in `match`,
+`subtitle` or `torrent`. Every lookup takes `lang` (up to 16, comma separated),
+`format`, `sort` (`lang`, `downloads`, `cues` or `bytes`), `limit` (up to 100),
+`offset`, `response_class` (`minimal`, `standard`, `detailed` or `full`) and `signal`,
+and all but `bySubid` take `season` and `episode`. Client options are `apiBase`,
+`client`, `downloadClient`, `antispamId`, `timeoutMs` (10000), `retries` (2) and
+`fetch`.
+
+A failed request throws `SubtitleDbError` with `status` and `code`, and an aborted
+`signal` throws `SubtitleDbAbort`. Only a 429, a 5xx or a network failure is retried. An
+IMDb id the index does not know returns an empty `title.name` rather than a 404.
 
 ```js
-createClient({
-  apiBase: 'https://api.thesubtitledb.org',
-  client: 'my-app/1.0',  // a query param, not a header: no CORS preflight
-  timeoutMs: 10000,      // per attempt
-  retries: 2,
-  fetch: myFetch,
-});
+// the ranked list attach uses
+findSubtitles({ client, hint, languages, formats, hearingImpaired, limit });
+candidateLabel(candidate);      // 'English - HI - The.Matrix.1999.1080p.BluRay'
+query(options);                 // what SubtitleDB.query wraps
+createSession(options);         // the lookup state behind a handle
+identify({ config, element, src, doc }); // what is playing, from ids, the element or the file name
+elementIdentity(video);         // the options identify reads off a <video>
+isResolvable(hint);             // is there enough to look anything up
+parseFilename(name);            // title, year, season, episode, group, tags, container
+basename(pathOrUrl);
+similarity(a, b);               // 0 to 1, how alike two release names are
+languageName('en');             // 'English'
+hasLanguageName('pb');          // true
+normaliseImdb(133093);          // 'tt0133093'
+backoffMs(attempt, retryAfter); // the retry wait, honouring Retry-After
+toVtt(text, 'srt');             // also srtToVtt and assToVtt; CONVERTIBLE lists the formats
+subtitleMime('ass');            // 'text/x-ssa'
+decodeBytes(bytes, 'auto');     // bytes to text in their own charset
+serialize(rescale(shift(parseVtt(vtt), -500), 23.976, 25)); // cue edits
+new SingleFlightCache({ ttlMs, maxEntries }); // get, set, pending, resolve(key, fn), delete, clear
 ```
 
-## Ranking
+Core also exports `SubtitleDbClient`, `SubtitleSession`, `ConvertError`,
+`UnknownPlayerError`, `PlayerNotReachableError` and `DEFAULT_API_BASE`; the handle
+registry the adapters share
+(`registerHandle`, `handleFor`, `handleForAny`, `EMPTY_RESULT`); and the transcription
+contract (`resolveTranscribe`, `syntheticCandidate`, `DEFAULT_MODELS`, `SYNTHETIC_ID`).
+
+### @subtitledb/players
 
 ```js
-import { createClient, findSubtitles, candidateLabel } from '@subtitledb/core';
+import { attachSubtitleDb, attachedTo, observeSubtitleDb } from '@subtitledb/players';
 
-const result = await findSubtitles({
-  client: createClient(),
-  hint: { imdbId: 'tt0133093' },
-  languages: ['en'],
-  formats: ['vtt', 'srt'], // hard filter: what the player can actually render
-  limit: 3,
-});
+attachSubtitleDb(player, options);         // what SubtitleDB.attach runs
+attachedTo(target);                        // the live handle for a player or element
+// every video under root, now and as they are added
+const watcher = observeSubtitleDb({ root, onAttach, ...options });
+watcher.handles(); watcher.stop(); watcher.destroy();
 ```
 
-Result, `title` and `candidates` cut:
+Also exported: each binding by name (`videojs`, `shaka`, `plyr` and the rest), the list
+of them as `bindings` or `BINDINGS`, and `bindingByName`, `detectBinding`, `findPlayer`,
+`playerFor`, `resolvePlayer`, `findVideo`, `isVideoElement`, `ownerOf`, `looksOwned` and
+`OWNER_CLASSES`.
 
-```json
-{
-  "tier": "explicit-imdb",
-  "unrenderable": 1,
-  "wrongEpisode": 0,
-  "title": { "imdb": "tt0133093", "name": "The Matrix", "year": 1999 },
-  "candidates": [
-    {
-      "subtitle": {
-        "id": 1693438976,
-        "language": "en",
-        "format": "srt",
-        "cues": 1477,
-        "hearing_impaired": true,
-        "release_name": "The Matrix (1999) (1080p BluRay X265 HEVC 10bit AAC 7.1 Joy) [UTR]"
-      },
-      "score": 100,
-      "reason": "preferred language en"
-    }
-  ]
-}
-```
+### @subtitledb/html5 and @subtitledb/artplayer
 
 ```js
-result.candidates.map(candidateLabel);
-// [ 'English - HI - The Matrix (1999) (1080p BluRay X265 HEV',
-//   'English - The.Matrix.1999.WEB-DL.TUBI' ]
-```
-
-`tier` is the rung that won: `explicit-imdb`, `explicit-tmdb`, `series-imdb` (the
-series' id with a season and episode), `title`, or `manual` when nothing automatic
-worked. `unrenderable` counts rows dropped for format alone, `wrongEpisode` rows filed
-under another episode.
-
-## Helpers
-
-```js
-import {
-  parseFilename,
-  identify,
-  similarity,
-  languageName,
-  subtitleMime,
-  normaliseImdb,
-  backoffMs,
-} from '@subtitledb/core';
-
-parseFilename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv');
-// { title: 'The Matrix', year: 1999, season: null, episode: null,
-//   group: 'AMIABLE', tags: ['1080p', 'bluray', 'x264'],
-//   container: 'mkv', release: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE' }
-
-parseFilename('Breaking.Bad.S01E01.720p.WEB-DL.mkv');
-// { title: 'Breaking Bad', year: null, season: 1, episode: 1,
-//   group: null, tags: ['720p', 'web'], container: 'mkv', ... }
-
-identify({ src: '/media/The.Matrix.1999.1080p.BluRay.x264.mkv' });
-// { release: 'The.Matrix.1999.1080p.BluRay.x264', title: 'The Matrix',
-//   year: 1999, source: 'filename' }
-
-identify({ config: { imdbId: 'tt0133093' } });
-// { imdbId: 'tt0133093', source: 'config' }
-
-similarity(
-  'The.Matrix.1999.1080p.BluRay.x264-AMIABLE',
-  'The Matrix 1999 1080p BluRay x264 AMIABLE',
-); // 1
-similarity('The Matrix', 'Breaking Bad'); // 0
-
-languageName('en');    // 'English'
-languageName('fre');   // 'FRE'  table is 2-letter, unknown falls back to the code
-subtitleMime('vtt');   // 'text/vtt'
-subtitleMime('ass');   // 'text/x-ssa'
-normaliseImdb(133093); // 'tt0133093'
-backoffMs(0, null);    // ~150, then ~300, ~600
-backoffMs(0, '5');     // 5000   Retry-After wins
-```
-
-```js
-import { toVtt } from '@subtitledb/core';
-
-toVtt('1\n00:00:01,000 --> 00:00:03,500\nHello there.\n', 'srt');
-```
-
-```text
-WEBVTT
-
-00:00:01.000 --> 00:00:03.500
-Hello there.
-```
-
-```js
-toVtt(text, 'sub'); // ConvertError: cannot convert sub to vtt
-```
-
-`CONVERTIBLE` is `srt`, `vtt`, `ass`, `ssa`. Everything else throws.
-
-## Attach to a player
-
-```js
-import { attachSubtitleDb } from '@subtitledb/players';
-
-const handle = attachSubtitleDb(player, {
-  hint: { imdbId: 'tt0133093' },
-  languages: ['en', 'fr'],
-  autoSelect: true,
+import { attachSubtitleDb } from '@subtitledb/html5';
+attachSubtitleDb(video, {
+  disabled: true,                  // add tracks off and let the viewer turn one on
+  onTracks(tracks, candidates) {}, // the <track> elements changed
+  onShow(track, index, loaded) {}, // a track has its text and is showing
 });
 
-await handle.ready;
-handle.player.name; // 'videojs'
-handle.player.via;  // 'instance'
-handle.tracks();    // Candidate[], menu order
-await handle.select(handle.tracks()[0]);
-handle.current();   // ResolveResult
-handle.media();     // the <video> playing now
-await handle.refresh();
-handle.destroy();
+import { subtitleDbPlugin } from '@subtitledb/artplayer';
+new Artplayer({ container, url, plugins: [subtitleDbPlugin({ languages: ['en'] })] });
 ```
 
-Targets it accepts:
+`@subtitledb/html5` is the smallest build, for a bare `<video>` only. The ArtPlayer
+package adds its own settings menu and also exports `attachSubtitleDb(art, options)`.
 
-```js
-attachSubtitleDb(videoEl);                    // bare <video>
-attachSubtitleDb(player);                     // player instance
-attachSubtitleDb(container);                  // its container
-attachSubtitleDb({ plyr });                   // plyr-react
-attachSubtitleDb({ player });                 // @videojs-player/vue
-attachSubtitleDb({ player, videoElement });   // shaka-player-react
-attachSubtitleDb(ref);                        // React useRef, Vue ref
-attachSubtitleDb(player, { player: 'plyr' }); // skip detection
-```
+### @subtitledb/transcribe
 
-Sixteen bindings over fifteen libraries; hls.js and dash.js go through `<video>`.
-`player.via` names the route that matched: `named`, `instance`, `element`, `ref`,
-`descend`, `ascend`, `native`.
+The engines behind `transcribe`: `runTranscription`, `runInWorker`, `spawnWorker`,
+`engineProgram`, `transformersProgram` and `whisperCppProgram` (with `TRANSFORMERS_CDN`,
+`WHISPER_CPP_CDN` and `WHISPER_CPP_MODELS`), the audio steps `extractAudio`, `downmix`,
+`resampleLinear` and `TARGET_RATE`, the output steps `cuesToVtt` and `formatTimestamp`,
+and `TranscribeError`.
 
-Besides the client options: `convert` (srt, ass and ssa to WebVTT in the browser, on
-by default), `maxTracks` (30), `strict` (throw rather than degrade), `hearingImpaired`,
-`onResolved`, `onSelected`, `onDegraded`, `onError`.
+### @subtitledb/debug
 
-## CDN helper
+The playback debugger behind `debug`: `watch(video, options)` for one video,
+`watchPage(options)` for every video on a page, `looksLikeKey` and `KEY_PATTERN` for a
+debugger key, `toLoadId`, the report bits in `FLAGS`, the two storage keys it writes
+(`OUTBOX` and `VISITOR`), and `resetDebug` for tests.
 
-```js
-import {
-  attach,
-  debug,
-  preload,
-  setBasePath,
-  version,
-} from 'https://cdn.thesubtitledb.org/latest/subtitle-helper.esm.js';
-```
+### @subtitledb/loader
 
-| Member | Type | Does |
-|---|---|---|
-| `attach(target, options?)` | `DeferredHandle` | Mounts, loading bindings only if the target needs them. |
-| `debug(key, options?)` | `DebugHandle` | Reports playback on every video on the page to the key's owner, under `options.hint` when given. See [the debugger](docs/cdn.md#playback-debugger). |
-| `preload()` | `Promise<unknown>` | Warms the chunks early. |
-| `setBasePath(path)` | `void` | Fetch chunks from your own copy. |
-| `version` | `string` | Stamped at publish. |
+The script tag itself, built into the files cdn.thesubtitledb.org serves.
 
 ## Plugins
 
 | Host | Install and settings |
 |---|---|
-| Jellyfin 10.10+, Emby 4.8+ | [plugins/dotnet](plugins/dotnet/README.md) |
+| Jellyfin 10.10+ and Emby 4.8+ | [plugins/dotnet](plugins/dotnet/README.md) |
 | Kodi 19+ | [plugins/kodi](plugins/kodi/README.md) |
 | VLC 3 | [plugins/vlc](plugins/vlc/README.md) |
 | Bazarr | [plugins/bazarr](plugins/bazarr/README.md) |
 
-No account, key or quota. Plugins fetch 100 subtitles per API request, up to their
-per-language setting. All rank by the same rules: every suite reads
-`plugins/shared/match-cases.json`, so they cannot drift between languages.
+They all rank by the same rules, tested against one shared file,
+`plugins/shared/match-cases.json`. [plugins/hosts](plugins/hosts/README.md) runs each
+plugin inside its real application. The Stremio addon lives in
+[subtitledb-stremio](https://github.com/thesubtitledb/subtitledb-stremio).
 
 ## Releases
 
-CI builds every installable file from the commit the release names, after every test
-passes. Each release carries a `SHA256SUMS` and a build attestation signed by GitHub.
+CI builds each release from the commit it names, after every test passes, and publishes
+it with a `SHA256SUMS` and a build attestation. A release is made when a version
+changes, and a published one never changes.
 
-| Tag | Files |
-|---|---|
-| `loader-v*` | every file cdn.thesubtitledb.org serves for that version, zipped, and `SHA256SUMS` by path |
-| `jellyfin-v*` | the plugin zip and the repository `manifest.json` |
-| `emby-v*` | the plugin zip |
-| `kodi-v*` | the add-on zip |
-| `vlc-v*` | `subtitledb.lua` |
-| `bazarr-v*` | the provider, the shared client and `install.py` |
+| Tag | Files | Version from |
+|---|---|---|
+| `loader-v*` | everything cdn.thesubtitledb.org serves for that version, zipped | `packages/loader/package.json` |
+| `jellyfin-v*` | the plugin zip and the repository `manifest.json` | `plugins/dotnet/Directory.Build.props` |
+| `emby-v*` | the plugin zip | the same |
+| `kodi-v*` | the add-on zip | the add-on's `addon.xml` |
+| `vlc-v*` | `subtitledb.lua` | `S.VERSION` in that file |
+| `bazarr-v*` | the provider, the shared client and `install.py` | `plugins/python/pyproject.toml` |
 
-The CDN serves release files unchanged, so either copy verifies:
+The CDN serves the release files unchanged, so either copy verifies:
 
 ```bash
-curl -sO https://cdn.thesubtitledb.org/v/0.8.2/subtitle-helper.js
+curl -sO https://cdn.thesubtitledb.org/v/<version>/subtitle-helper.js
 gh attestation verify subtitle-helper.js --repo thesubtitledb/subtitledb-integrations
 ```
 
-A release is made when a version changes in `packages/loader/package.json`,
-`plugins/dotnet/Directory.Build.props` (Jellyfin and Emby), the Kodi `addon.xml`,
-`S.VERSION` in `subtitledb.lua` or `plugins/python/pyproject.toml` (the shared client,
-most of the Bazarr files). A published release cannot be changed.
-
-## Build from source
+## Build and test
 
 ```bash
-git clone https://github.com/thesubtitledb/subtitledb-integrations
-cd subtitledb-integrations
-npm install && npm run build && npm run vendor
+npm install
+npm run build        # every package
+npm test             # unit tests, no network
+npm run test:live    # contract tests against the real API
+npm run typecheck
+npm run lint         # Biome; lint:fix writes the fixes
+npm run vendor       # built packages into examples/vendor
+npm run serve        # the examples on localhost:4173
+npm run e2e          # Playwright over the examples
+npm run build:cdn    # the CDN files, into cdn/
+npm run serve:cdn    # cdn/ on localhost:4174
 ```
 
-`vendor` writes ES modules to `examples/vendor`. Not on npm yet.
-
-| Package | For |
-|---|---|
-| `@subtitledb/core` | The client above, plus identify, match, convert, cache |
-| `@subtitledb/players` | Sixteen bindings, one call |
-| `@subtitledb/html5` | Bare `<video>` and its track list |
-| `@subtitledb/artplayer` | ArtPlayer's own plugin shape |
-| `@subtitledb/transcribe` | On-device speech to text, offered when the index has nothing |
-| `@subtitledb/debug` | The playback debugger behind the script tag's `debug` |
-| `@subtitledb/loader` | The cdn.thesubtitledb.org script |
-
-## Scripts
-
 ```bash
-npm test              # unit, hermetic, no network
-npm run test:live     # contract tests against the real API
-npm run typecheck     # types, plus the stray-build check
-npm run build         # every package
-npm run vendor        # built packages -> examples/vendor
-npm run serve         # localhost:4173
-npm run e2e           # Playwright over the examples
-npm run lint          # Biome
-npm run lint:fix      # Biome, writing fixes
-npm run build:cdn     # the cdn.thesubtitledb.org tree, into cdn/
-npm run serve:cdn     # cdn/ on localhost:4174, a second origin on purpose
-```
-
-Plugin toolchains:
-
-```bash
-ruff check .                                          # every Python tree at once
-(cd plugins/python && python -m pytest)               # the shared client
+ruff check .
+(cd plugins/python && python -m pytest)
 (cd plugins/bazarr && python -m pytest)
-(cd plugins/kodi   && python -m pytest && python build.py)
+(cd plugins/kodi && python -m pytest && python build.py)
 (cd plugins/dotnet && dotnet test SubtitleDb.sln && python -m pytest)
-(cd plugins/vlc    && tests/get-lua.sh && tests/.lua/bin/lua tests/run.lua)
+(cd plugins/vlc && tests/get-lua.sh && tests/.lua/bin/lua tests/run.lua)
 ```
 
-These test each plugin against stubs; [plugins/hosts](plugins/hosts/README.md) runs
-each inside its real host. [docs/testing.md](docs/testing.md) lists every suite, what it
-proves and its CI job.
+[docs/testing.md](docs/testing.md) lists every suite and the CI job that runs it.
 
 ## More
 
-- [docs/documentation.md](docs/documentation.md) - every export, every option
-- [docs/players.md](docs/players.md) - every player, which binding, what was run
-- [docs/cdn.md](docs/cdn.md) - the script tag, what it downloads, the debugger, pinning, CSP, self-hosting
-- [examples/minimal.html](examples/minimal.html) - smallest working page
-- [examples/cdn.html](examples/cdn.html) - the same with no build step
-- [subtitledb-stremio](https://github.com/thesubtitledb/subtitledb-stremio) - hosted addon, not a plugin
+- [docs/documentation.md](docs/documentation.md): every option and load pattern in detail
+- [docs/players.md](docs/players.md): each player and its binding
+- [docs/cdn.md](docs/cdn.md): the script tag, the debugger, pinning, CSP and self-hosting
+- [examples/minimal.html](examples/minimal.html) and
+  [examples/cdn.html](examples/cdn.html): the smallest working pages

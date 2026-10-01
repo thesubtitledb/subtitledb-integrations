@@ -119,7 +119,7 @@ SHOWS = [
            episode_imdb="tt2471500", episode_name="Episode 1", season=1, episode=1,
            episode_tvdb=4645420),
     # No IMDb id of its own in the library, so every host has to find it by the
-    # series' id. By name, the API answers "Friends" with Matlock (2024).
+    # series' id.
     Sample("tv/Friends/Season 01/Friends.S01E01.480p.HDTV.x264-GROUP.mkv",
            "Friends", 1994, "tt0108778", 1668, tvdb=79168,
            episode_imdb="tt0583459", episode_name="The One Where Monica Gets a Roommate",

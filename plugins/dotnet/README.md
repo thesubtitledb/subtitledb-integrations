@@ -1,136 +1,112 @@
 # SubtitleDB for Jellyfin and Emby
 
-Two plugins over one library.
+Two subtitle providers built on one shared library.
 
 ```
-src/SubtitleDb.Core       the client, the ladder and the ranking. netstandard2.0
-src/SubtitleDb.Jellyfin   ISubtitleProvider for Jellyfin 10.10 and later. net8.0
-src/SubtitleDb.Emby       ISubtitleProvider for Emby 4.8 and later. netstandard2.0
+src/SubtitleDb.Core       the API client and the ranking, netstandard2.0
+src/SubtitleDb.Jellyfin   the provider for Jellyfin 10.10 and later, net8.0
+src/SubtitleDb.Emby       the provider for Emby 4.8 and later, netstandard2.0
 ```
-
-Jellyfin and Emby each ship a different assembly called `MediaBrowser.Controller`, so
-every decision lives in Core, which knows neither host, and each adapter only translates
-its host's request.
 
 ## Install
 
-- Jellyfin: under Dashboard -> Plugins -> Repositories add
-  `https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install SubtitleDB from
-  the catalog and restart. Updates come through the repository, which serves the
-  `jellyfin-v` release zips.
-- Emby: unzip [subtitledb-emby.zip](https://cdn.thesubtitledb.org/plugins/emby/subtitledb-emby.zip),
-  always the newest `emby-v` [release](https://github.com/thesubtitledb/subtitledb-integrations/releases),
-  into Emby's `plugins` directory, which puts `SubtitleDb.Emby.dll` there, and restart.
+Jellyfin: in Dashboard > Plugins > Repositories, add
+`https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install SubtitleDB from
+the catalog and restart. Updates come through the same repository.
 
-Then turn it on for each library, where both hosts keep their subtitle downloads:
+Emby: unzip [subtitledb-emby.zip](https://cdn.thesubtitledb.org/plugins/emby/subtitledb-emby.zip)
+into Emby's `plugins` directory and restart.
 
-- Jellyfin: Dashboard -> Libraries, Manage library, then Subtitle Downloads.
-- Emby: Settings -> Library, edit the library with Show advanced settings on.
+Then tick SubtitleDB and pick the download languages in each library's settings:
 
-Tick SubtitleDB there and pick your download languages. The plugin has no language
-list: the host asks one language at a time.
+- Jellyfin: Dashboard > Libraries > Manage library > Subtitle Downloads
+- Emby: Settings > Library, edit the library with "Show advanced settings" on
 
 ## Settings
 
+On the plugin's page, under Dashboard > Plugins in Jellyfin or Settings > Plugins in
+Emby:
+
 | Setting | Default |
 |---|---|
-| Get latest subtitles on play, see [On play](#on-play) | on |
-| Subtitles per language, the most offered for each, 100 to 2000 | 500 |
+| Get latest subtitles on play | on |
+| Subtitles per language, 100 to 2000 | 500 |
 | API address | `https://api.thesubtitledb.org` |
 
-All three are on the plugin's page: Dashboard -> Plugins -> SubtitleDB in Jellyfin,
-Settings -> Plugins -> SubtitleDB in Emby.
+## Search
+
+The host's subtitle search asks for one language at a time. The plugin looks the video
+up by the first of these that finds it:
+
+- the IMDb id
+- the TMDB id, for a film
+- the series' IMDb id, with the season and episode
+- the series name, season and episode, with the episode title to choose between episodes
+
+A subtitle recorded against the playing file's release ranks first. Subtitles filed
+under another episode, or in a format the host cannot show, are left out. Each result
+shows the release name (or the line count when there is none) and its language, and a
+same-release subtitle is marked as matching your file. The result's comment says why it
+ranked where it did. The file reaches the host in UTF-8, typed by its stored format.
 
 ## On play
 
-When a film or an episode starts, the plugin asks SubtitleDB for it and saves the best
-match beside it, also when the video has subtitles already. The library's subtitle
-download settings decide the rest:
+When a film or an episode starts, the plugin saves the best match beside it, also when
+it has subtitles already. The library's subtitle settings decide what it asks for:
 
-- Download languages: asked in order, and the first with a match is saved. With none
-  set, nothing is asked.
-- "Only download subtitles that are a perfect match" (Emby: "Require a hash match"), on
-  by default: only a subtitle recorded against that release is saved. Untick it to get
-  the best match.
-- "Skip if the default audio track matches the download language": a language the
-  audio is already in is not asked. The audio is the default audio track, else the first.
-- SubtitleDB unticked as a subtitle downloader: nothing is asked.
+- The download languages are tried in order, and the first with a match is saved.
+  Nothing is asked when none are set.
+- "Only download subtitles that are a perfect match" (Emby: "Require a hash match"),
+  on by default, saves only a subtitle recorded against that release.
+- "Skip if the default audio track matches the download language" skips a language the
+  default audio track (or the first one) is already in.
+- With SubtitleDB unticked for the library, nothing is asked.
 
-A video is asked for once in 10 minutes, and a subtitle already beside it is not saved
-again. Players read the subtitle list as playback starts, so the new one is listed from
-the next play. It uses only the host's own calls: the playback event, its subtitle search
-and save, and the library refresh its subtitle dialog runs after a save.
+Each video is asked for at most once in 10 minutes, and a subtitle already beside it is
+not saved again. Players read the subtitle list as playback starts, so a new subtitle is
+listed from the next play.
 
-## What it uses
+## When the API fails
 
-| The host knows | The plugin |
-|---|---|
-| an IMDb id | asks for that title; episodes have their own ids in the corpus |
-| a TMDB id, for a film | asks by it, falling through when the map has no row |
-| the series' IMDb id (Jellyfin: found in its library) | asks by it, drilled to the season and episode, before the name |
-| series name, season, episode | searches the series, keeps only that episode |
-| the episode's own title | chooses between episodes of the series |
-| the file that is playing | prefers a subtitle recorded against the same release |
-| "this must be a perfect match" | returns only same-release subtitles |
-
-A subtitle filed under another episode, or in a format the host cannot render, is
-dropped rather than ranked low.
-
-Both hosts show the label, the language and a "matches your file" mark, set when the
-subtitle carries the playing file's release name. Without a release name, the label
-carries the line count. Everything else, including why it ranked there, is in the
-comment.
-
-The bytes reach the host as the API sends them, in UTF-8, typed by the row's format
-rather than the file name.
-
-Each request waits 15 seconds. One that times out, cannot connect or gets a server error
-is tried twice more; then the search lists nothing from SubtitleDB and the host logs one
-warning. A download that is empty or a web page is refused, not saved.
+Each request waits up to 15 seconds. A timeout, a failed connection or a server error is
+retried twice. After that the search lists nothing from SubtitleDB and the host logs one
+warning. A download that is empty or a web page is refused.
 
 ## Build
 
 ```bash
-python3 tools/build-plugins.py
+python3 tools/build-plugins.py                    # both; --host jellyfin or --host emby for one
+python3 tools/build-plugins.py --repo <url>       # also dist/repo/, a Jellyfin repository
 ```
 
-Needs the .NET 8 SDK. `--host jellyfin` or `--host emby` builds one. Writes `dist/`:
+Needs the .NET 8 SDK.
 
-| | |
+| Output | Use |
 |---|---|
 | `dist/jellyfin/SubtitleDB_<version>/` | copy into Jellyfin's `plugins` directory |
-| `dist/subtitledb-jellyfin-<version>.zip` | that folder's files, with no folder around them |
+| `dist/subtitledb-jellyfin-<version>.zip` | the same files, zipped |
 | `dist/emby/SubtitleDb.Emby.dll` | copy into Emby's `plugins` directory |
-| `dist/subtitledb-emby-<version>.zip` | the same, zipped |
+| `dist/subtitledb-emby-<version>.zip` | the same file, zipped |
+| `dist/repo/` | with `--repo`: the zip and a `manifest.json` naming it at `<url>/<zip>` |
 
-`--repo <url>` also writes `dist/repo/`, a Jellyfin repository: the zip and a
-`manifest.json` naming it at `<url>/<zip>` with its MD5. `--history <manifest>` keeps
-every version an earlier manifest lists. A release builds it with its own download
-folder as the URL and the previous release's manifest as the history;
-cdn.thesubtitledb.org serves the newest release's manifest.
-
-Only our own assemblies ship: a bundled copy of a host assembly shadows the server's.
-Jellyfin gets Core and the adapter in the plugin's folder. Emby resolves a plugin's
-references only against its own assemblies, so it would never find a
-`SubtitleDb.Core.dll`: it gets one DLL with Core compiled in, and the build fails if a
-second DLL appears in `dist/emby`.
+`--history <manifest>` keeps every version an earlier manifest lists. No host assembly
+ships, since a bundled copy would shadow the server's own. Emby resolves a plugin's
+references only against its own assemblies, so its build is one DLL with Core compiled
+in, and the build fails if a second DLL appears in `dist/emby`.
 
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 175 tests
+dotnet test SubtitleDb.sln
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 
-`tests/SubtitleDb.Tests` runs `plugins/shared/match-cases.json`.
-`tests/SubtitleDb.Jellyfin.Tests` and `tests/SubtitleDb.Emby.Tests` are separate
-projects because one process cannot load both hosts' assemblies. They test each host's
-translation: which id is safe to send, which name is the series and which the episode,
-and which language spelling arrived. In the real servers:
-[`plugins/hosts`](../hosts/README.md).
+`tests/SubtitleDb.Tests` runs the shared cases in `plugins/shared/match-cases.json`. The
+Jellyfin and Emby test projects check each host's translation and are separate because
+one process cannot load both hosts' assemblies. [plugins/hosts](../hosts/README.md)
+tests the plugins inside the real servers.
 
 ## License
 
-MIT. The text is in [`plugins/LICENSE`](../LICENSE) and ships in the Jellyfin folder.
-Emby's zip unpacks into a directory other plugins share, so there the assemblies carry
-the copyright instead, from `Directory.Build.props`.
+MIT, in [plugins/LICENSE](../LICENSE), which ships in the Jellyfin folder. Emby's
+plugins share one directory, so there the assemblies carry the copyright instead.
