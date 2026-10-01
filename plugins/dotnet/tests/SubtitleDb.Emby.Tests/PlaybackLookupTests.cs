@@ -108,13 +108,16 @@ namespace SubtitleDb.Emby.Tests
             Assert.True(new PluginConfiguration().LookUpOnPlay);
         }
 
-        [Fact]
-        public void TheSaveAfterALookupOnPlayIsHandedTheBytesItFetched()
+        [Theory]
+        [InlineData("4c29aabd01ed42af4e8ee437834ff0ba_en_481207")]
+        [InlineData("8d1e4b7c_481207")]
+        public void TheSaveAfterALookupOnPlayIsHandedTheBytesItFetched(string searched)
         {
-            // Emby takes its own key and the underscore off an id before it asks the
-            // provider, so the provider is asked for the bare id.
+            // Emby's search hands out its key, the language and the provider's id, as in
+            // the first case, which is what Emby 4.8 to 4.10 log. It takes the first two
+            // off before it asks the provider, so the provider is asked for the bare id.
             var bytes = new byte[] { 1, 2, 3 };
-            using (Prefetched.Hold("8d1e4b7c_481207", bytes))
+            using (Prefetched.Hold(searched, bytes))
             {
                 Assert.Same(bytes, Prefetched.Take("481207"));
                 Assert.Null(Prefetched.Take("481207"));

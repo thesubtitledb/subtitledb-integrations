@@ -29,12 +29,15 @@ namespace SubtitleDb.Emby
         }
 
         /// <summary>
-        /// The provider's own id. Emby's subtitle manager puts a key for the provider
-        /// and an underscore in front of it, and takes them off before asking.
+        /// The provider's own id. Emby's subtitle manager puts its key for the provider
+        /// and the language in front of it, each followed by an underscore
+        /// (<c>4c29aabd01ed42af4e8ee437834ff0ba_en_860400</c>), and takes them off before
+        /// asking. This provider's ids are numbers, so the id is what follows the last
+        /// underscore.
         /// </summary>
         internal static string Bare(string id)
         {
-            var cut = id.IndexOf('_');
+            var cut = id.LastIndexOf('_');
             return cut < 0 ? id : id.Substring(cut + 1);
         }
 
