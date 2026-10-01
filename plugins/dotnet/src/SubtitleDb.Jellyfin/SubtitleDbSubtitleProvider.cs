@@ -23,8 +23,8 @@ namespace SubtitleDb.Jellyfin
     /// </summary>
     /// <remarks>
     /// Jellyfin asks for one language at a time and decides what to do with the
-    /// answer, so this plugin has no language settings of its own: the ones under
-    /// Dashboard, Playback, Subtitles are the ones it uses.
+    /// answer, so this plugin has no language settings of its own: each library's
+    /// subtitle download languages are the ones it uses.
     /// </remarks>
     public class SubtitleDbSubtitleProvider : ISubtitleProvider, IHasOrder
     {

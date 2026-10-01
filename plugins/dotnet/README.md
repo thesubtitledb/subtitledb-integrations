@@ -17,13 +17,17 @@ its host's request.
 - Jellyfin: under Dashboard -> Plugins -> Repositories add
   `https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install SubtitleDB from
   the catalog and restart. Updates come through the repository, which serves the
-  `jellyfin-v` release zips. Enable it under Dashboard -> Playback -> Subtitles.
+  `jellyfin-v` release zips.
 - Emby: unzip [subtitledb-emby.zip](https://cdn.thesubtitledb.org/plugins/emby/subtitledb-emby.zip),
   always the newest `emby-v` [release](https://github.com/thesubtitledb/subtitledb-integrations/releases),
   into Emby's `plugins` directory, which puts `SubtitleDb.Emby.dll` there, and restart.
-  Enable it under Settings -> Subtitles.
 
-Tick SubtitleDB on that page and set your languages there. The plugin has no language
+Then turn it on for each library, where both hosts keep their subtitle downloads:
+
+- Jellyfin: Dashboard -> Libraries, Manage library, then Subtitle Downloads.
+- Emby: Settings -> Library, edit the library with Show advanced settings on.
+
+Tick SubtitleDB there and pick your download languages. The plugin has no language
 list: the host asks one language at a time.
 
 ## Settings
@@ -44,8 +48,9 @@ download settings decide the rest:
 
 - Download languages: asked in order, and the first with a match is saved. With none
   set, nothing is asked.
-- "Only download subtitles that are a perfect match", on by default: only a subtitle
-  recorded against that release is saved. Untick it to get the best match.
+- "Only download subtitles that are a perfect match" (Emby: "Require a hash match"), on
+  by default: only a subtitle recorded against that release is saved. Untick it to get
+  the best match.
 - SubtitleDB unticked as a subtitle downloader: nothing is asked.
 
 A video is asked for once in 10 minutes, and a subtitle already beside it is not saved
@@ -110,7 +115,7 @@ second DLL appears in `dist/emby`.
 ## Tests
 
 ```bash
-dotnet test SubtitleDb.sln     # 162 tests
+dotnet test SubtitleDb.sln     # 164 tests
 python3 -m pytest              # the packaging rules, no compiler needed
 ```
 

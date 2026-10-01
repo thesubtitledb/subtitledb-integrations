@@ -70,6 +70,17 @@ namespace SubtitleDb.Emby.Tests
         }
 
         [Fact]
+        public void ThePageSendsTheReaderToEachLibrary()
+        {
+            // Emby keeps the download languages and the ticked downloaders on each library.
+            // Its settings have no Subtitles page to turn this plugin on in.
+            var html = Page(main: true);
+
+            Assert.Contains("for each library under Settings, Library", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Settings, Subtitles", html, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void TheControllerIsOneEmbyCanBuildWithNew()
         {
             // Emby calls new on what the script returns. An arrow function throws there,
