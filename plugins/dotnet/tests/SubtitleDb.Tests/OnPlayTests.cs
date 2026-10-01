@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -135,6 +136,27 @@ namespace SubtitleDb.Tests
             Assert.True(OnPlay.AlreadyHeld(new[] { missing, longer, same }, Ours));
             Assert.False(OnPlay.AlreadyHeld(new[] { missing, longer, sameLength }, Ours));
             Assert.False(OnPlay.AlreadyHeld(Array.Empty<string>(), Ours));
+        }
+
+        [Fact]
+        public void TheFilesNamedForTheVideoAreTheOnesItHolds()
+        {
+            // Beside the video, and in a second folder (Jellyfin's metadata folder) that
+            // need not exist yet. Another film's subtitle and the video itself are not it.
+            var video = Write("Heat.1995.1080p.mkv", "video");
+            var beside = Write("Heat.1995.1080p.en.srt", "beside");
+            var cased = Write("heat.1995.1080p.eng.0.srt", "a second one");
+            Write("Heat.1995.720p.en.srt", "another release");
+            Write("Heat.1995.1080p-en.srt", "not after a dot");
+            var metadata = Path.Combine(_dir, "metadata");
+            Directory.CreateDirectory(metadata);
+            var kept = Path.Combine(metadata, "Heat.1995.1080p.eng.srt");
+            File.WriteAllText(kept, "kept apart");
+
+            Assert.Equal(
+                new[] { beside, cased, kept }.OrderBy(p => p, StringComparer.Ordinal),
+                OnPlay.NamedFor(video, _dir, metadata, Path.Combine(_dir, "none"), null)
+                    .OrderBy(p => p, StringComparer.Ordinal));
         }
 
         private string Write(string name, string text)

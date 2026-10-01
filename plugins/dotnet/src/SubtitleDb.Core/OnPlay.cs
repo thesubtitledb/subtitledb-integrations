@@ -99,6 +99,36 @@ namespace SubtitleDb.Core
             return "SubtitleDB has nothing for it in " + string.Join(", ", languages);
         }
 
+        /// <summary>
+        /// The files in <paramref name="folders"/> named for <paramref name="video"/>, the
+        /// way a host names a subtitle it saves for it: its file name, a dot, then the
+        /// language and the format. Read from the disk because the hosts' own lists of a
+        /// video's streams change shape between their versions.
+        /// </summary>
+        public static IEnumerable<string> NamedFor(string video, params string?[] folders)
+        {
+            var stem = Path.GetFileNameWithoutExtension(video) + ".";
+            var found = new List<string>();
+            foreach (var folder in folders.Where(f => !string.IsNullOrEmpty(f)).Distinct())
+            {
+                try
+                {
+                    found.AddRange(Directory.EnumerateFiles(folder!).Where(path =>
+                        Path.GetFileName(path).StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(path, video, StringComparison.Ordinal)));
+                }
+                catch (IOException)
+                {
+                    // No such folder yet, as a metadata folder is until something is saved.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+
+            return found;
+        }
+
         /// <summary>True when one of <paramref name="paths"/> holds exactly <paramref name="bytes"/>.</summary>
         public static bool AlreadyHeld(IEnumerable<string> paths, byte[] bytes)
         {

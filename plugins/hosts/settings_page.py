@@ -48,9 +48,9 @@ def sign_in(page, server):
     """Through the sign-in page, whether it shows the users or asks for a name."""
     page.goto(server.base + "/web/index.html")
     password = page.locator("input[type=password]:visible")
-    # A button in Jellyfin, a card like the users' in Emby 4.8.
-    manual = page.get_by_text(re.compile(r"^\s*manual login\s*$", re.IGNORECASE)).filter(
-        visible=True)
+    # A button in Jellyfin, a card beside the users' in Emby, its text next to an icon:
+    # the smallest element that holds the words.
+    manual = page.get_by_text(re.compile(r"manual login", re.IGNORECASE)).filter(visible=True)
     user = page.get_by_text(M.USER, exact=True)
     end = time.time() + 90
     while not password.count():

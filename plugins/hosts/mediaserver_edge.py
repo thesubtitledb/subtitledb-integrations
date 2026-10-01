@@ -120,9 +120,10 @@ class Log:
         return bool(re.match(r"\S+ \S+ (Error|Fatal) ", line))
 
     def wait_for(self, text, seconds):
+        # Jellyfin's file log quotes each value written into a line.
         end = time.time() + seconds
         while time.time() < end:
-            if any(text in line for line in self.lines()):
+            if any(text in line.replace('"', "") for line in self.lines()):
                 return True
             time.sleep(0.5)
         return False
@@ -145,15 +146,23 @@ def title_of(key):
     return FILMS[key][0].rsplit(" (", 1)[0]
 
 
+def is_film(key, name):
+    """Whether the fake answered ``name`` for ``key``'s film. A host may search by the
+    folder's name, year and all, as Jellyfin does when no metadata was fetched."""
+    return (name or "").lower().startswith(title_of(key).lower())
+
+
 def asked_for(key, since):
     """The fake's requests since ``since`` about ``key``'s film: its lookups by name,
     and the by-subid lookups and downloads of its subtitles."""
-    title, sid, out = title_of(key).lower(), F.sid_for(title_of(key)), []
+    out = []
     for _, path in F.S.requests[since:]:
         url = urllib.parse.urlsplit(path)
-        named = (dict(urllib.parse.parse_qsl(url.query)).get("q") or "").lower()
-        by_id = url.path.startswith(("/v1/by-subid/", "/get/"))
-        if named.startswith(title) or (by_id and int(url.path.rsplit("/", 1)[1]) // 10 == sid):
+        if url.path.startswith(("/v1/by-subid/", "/get/")):
+            name = F.S.names.get(int(url.path.rsplit("/", 1)[1]) // 10)
+        else:
+            name = dict(urllib.parse.parse_qsl(url.query)).get("q")
+        if is_film(key, name):
             out.append(path)
     return out
 
@@ -363,7 +372,7 @@ class Edge:
         if len(new) != 1:
             return False, "saved %s" % [p.name for p in new]
         path = new[0]
-        sent = {body for sid, body in F.S.served if sid // 10 == F.sid_for(title_of(key))}
+        sent = {body for sid, body in F.S.served if is_film(key, F.S.names.get(sid // 10))}
         tags = {".%s." % tag for tag in M.FILE_TAGS["en"]}
         problems = []
         if path.read_bytes() not in sent:

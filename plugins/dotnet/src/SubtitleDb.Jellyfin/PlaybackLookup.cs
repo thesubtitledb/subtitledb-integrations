@@ -242,9 +242,11 @@ namespace SubtitleDb.Jellyfin
                         return copy.ToArray();
                     }
                 },
-                () => video.GetMediaStreams()
-                    .Where(s => s.Type == MediaStreamType.Subtitle && s.IsExternal && !string.IsNullOrEmpty(s.Path))
-                    .Select(s => s.Path),
+                // Where Jellyfin saves a subtitle: beside the video, or in its metadata
+                // folder when the library keeps subtitles apart. Not GetMediaStreams: its
+                // 10.10 form is gone from 10.11 and 12, where the lookup failed there on
+                // every play.
+                () => OnPlay.NamedFor(video.Path, video.ContainingFolderPath, video.GetInternalMetadataPath()),
                 async (id, bytes, token) =>
                 {
                     fetched!.Stream = new MemoryStream(bytes);
