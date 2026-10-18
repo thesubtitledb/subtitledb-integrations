@@ -67,14 +67,14 @@ def test_by_title_sends_the_query_and_the_client_name():
     assert calls[0].startswith("https://api.example.test/v1/by-title?")
     assert "q=anatomy+of+a+fall" in calls[0]
     assert "limit=5" in calls[0]
-    assert "client=subtitledb-plugin" in calls[0]
+    assert "client=python" in calls[0]
 
 
 def test_a_download_names_the_plugin_as_a_lookup_does():
     calls: list[str] = []
     c = client_with([FakeResponse(b"1\n00:00:01,000 --> 00:00:02,000\nhi\n")], calls)
     c.download("https://api.example.test/get/1")
-    assert calls == ["https://api.example.test/get/1?client=subtitledb-plugin"]
+    assert calls == ["https://api.example.test/get/1?client=python"]
 
 
 def test_the_name_goes_after_any_query_the_download_url_has():
@@ -89,6 +89,8 @@ def test_the_user_agent_names_the_plugin_and_its_version():
     assert Client(client="kodi", version="0.4.2").user_agent == (
         "subtitledb-kodi/0.4.2 (+https://thesubtitledb.org)")
     assert Client(user_agent="mine/1").user_agent == "mine/1"
+    # The default names this library once, not "subtitledb-subtitledb-plugin".
+    assert Client().user_agent == "subtitledb-python/%s (+https://thesubtitledb.org)" % VERSION
     assert VERSION == subtitledb.__version__
 
 
@@ -344,8 +346,8 @@ def test_a_redirect_off_our_hosts_is_refused_before_it_is_followed(serve):
     elsewhere, asked_elsewhere = serve({"/evil.srt": (200, {}, b"not ours")})
     evil = "http://localhost:%d/evil.srt" % elsewhere
     ours, _ = serve({"/get/1": (302, {"Location": evil}, b""),
-                     "/get/1?client=subtitledb-plugin": (302, {"Location": evil}, b""),
-                     "/v1/by-imdb/1?client=subtitledb-plugin": (302, {"Location": evil}, b"")})
+                     "/get/1?client=python": (302, {"Location": evil}, b""),
+                     "/v1/by-imdb/1?client=python": (302, {"Location": evil}, b"")})
     c = local_client(ours)
     with pytest.raises(SubtitleDbError, match="redirected off our hosts"):
         c.download("http://127.0.0.1:%d/get/1" % ours)
@@ -362,14 +364,14 @@ def test_a_redirect_between_our_hosts_is_followed(serve):
     # Another port on the API's host stands in for files.thesubtitledb.org.
     srt = b"1\n00:00:01,000 --> 00:00:02,000\nhi\n"
     files, seen = serve({"/file/2": (200, {}, srt)})
-    api, _ = serve({"/get/2?client=subtitledb-plugin": (
+    api, _ = serve({"/get/2?client=python": (
         302, {"Location": "http://127.0.0.1:%d/file/2" % files}, b"")})
     assert local_client(api).download("http://127.0.0.1:%d/get/2" % api) == srt
     assert seen == ["/file/2"]
 
 
 def test_a_download_the_host_refuses_is_a_subtitledb_error(serve):
-    port, _ = serve({"/get/3?client=subtitledb-plugin": (410, {}, b"gone")})
+    port, _ = serve({"/get/3?client=python": (410, {}, b"gone")})
     with pytest.raises(SubtitleDbError, match="HTTP 410") as caught:
         local_client(port).download("http://127.0.0.1:%d/get/3" % port)
     assert caught.value.status == 410

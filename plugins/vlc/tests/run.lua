@@ -604,6 +604,63 @@ test("a web page or an empty body is not a subtitle", function()
   equal(S.not_a_subtitle("[Script Info]\n"), nil)
 end)
 
+--- VLC's variables and stream, recording the User-Agent each request went out with.
+local function fake_net(vars, body)
+  local state = { vars = vars, seen = {} }
+  state.vlc = {
+    object = { libvlc = function() return "libvlc" end },
+    var = {
+      get = function(_, name)
+        if state.vars[name] == nil then error("variable " .. name .. " does not exist") end
+        return state.vars[name]
+      end,
+      set = function(_, name, value) state.vars[name] = value end,
+      create = function(_, name, value) state.vars[name] = value end,
+    },
+    misc = { version = function() return "3.0.20 Vetinari" end },
+    stream = function()
+      state.seen[#state.seen + 1] = state.vars["http-user-agent"]
+      if body == nil then error("connection refused") end
+      local done = false
+      return { read = function()
+        if done then return nil end
+        done = true
+        return body
+      end }
+    end,
+  }
+  return state
+end
+
+local OURS = "subtitledb-vlc/" .. S.VERSION .. " (+https://thesubtitledb.org)"
+
+test("a request goes out with our User-Agent and VLC's own comes back after", function()
+  local net = fake_net({ ["http-user-agent"] = "VLC/3.0.20 LibVLC/3.0.20" }, "body")
+  vlc = net.vlc
+  equal(S.fetch("https://api.thesubtitledb.org/v1/by-imdb/1"), "body")
+  equal(net.seen[1], OURS)
+  equal(net.vars["http-user-agent"], "VLC/3.0.20 LibVLC/3.0.20")
+  vlc = nil
+end)
+
+test("without the variable, VLC's default is what is left behind", function()
+  local net = fake_net({}, "body")
+  vlc = net.vlc
+  equal(S.fetch("https://api.thesubtitledb.org/v1/by-imdb/1"), "body")
+  equal(net.seen[1], OURS)
+  equal(net.vars["http-user-agent"], "VLC/3.0.20 LibVLC/3.0.20")
+  vlc = nil
+end)
+
+test("a request that throws still puts VLC's User-Agent back", function()
+  local net = fake_net({ ["http-user-agent"] = "VLC/3.0.20 LibVLC/3.0.20" }, nil)
+  vlc = net.vlc
+  local ok = pcall(S.fetch, "https://api.thesubtitledb.org/v1/by-imdb/1")
+  equal(ok, false)
+  equal(net.vars["http-user-agent"], "VLC/3.0.20 LibVLC/3.0.20")
+  vlc = nil
+end)
+
 --- Enough of VLC for the window: widgets keep what is put in them, and the item
 --- playing can be swapped for the next one in the playlist.
 local function fake_vlc(uri)
