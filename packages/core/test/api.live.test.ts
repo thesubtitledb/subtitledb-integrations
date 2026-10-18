@@ -194,6 +194,19 @@ describe('live API contract', () => {
 });
 
 describe('live matching', () => {
+  it('finds a TV episode by series id, season and episode', async () => {
+    // The npm README's first example. The lookups send no season or episode on a
+    // file, and 0.5.0 read that as "another episode" and dropped every one.
+    const r = await findSubtitles({
+      client,
+      hint: { imdbId: SERIES_IMDB, season: 1, episode: 1 },
+      languages: ['en'],
+      formats: ['srt', 'vtt'],
+    });
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(r.wrongEpisode).toBe(0);
+  });
+
   it('matches a film from a bare release filename', async () => {
     const { identify } = await import('../src/identify.js');
     const hint = identify({ src: 'The.Matrix.1999.1080p.BluRay.x264-AMIABLE.mkv', doc: null });

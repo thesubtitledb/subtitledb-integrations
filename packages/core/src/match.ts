@@ -1,7 +1,7 @@
 import type { DrillParams, SubtitleDbClient } from './client.js';
 import { SubtitleDbError } from './errors.js';
 import type { MediaHint } from './identify.js';
-import { languageName } from './languages.js';
+import { corpusLanguage, languageName } from './languages.js';
 import type { BundleSubtitle, LookupBundle, LookupTitle } from './types.js';
 
 /**
@@ -186,7 +186,7 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
   }
 
   // An episode we could confirm, rather than one we merely could not rule out.
-  if (opts.hint.season !== undefined && s.season !== null && !wrongEpisode(s, opts.hint)) {
+  if (opts.hint.season !== undefined && s.season != null && !wrongEpisode(s, opts.hint)) {
     score += 20;
     reasons.push(`season ${opts.hint.season} episode ${opts.hint.episode}`);
   }
@@ -209,13 +209,13 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
  */
 function wrongEpisode(s: BundleSubtitle, hint: MediaHint): boolean {
   if (hint.season === undefined || hint.episode === undefined) return false;
-  if (s.season === null || s.episode === null) return false;
+  // Lookup items omit both: the drilled address already names the episode.
+  if (s.season == null || s.episode == null) return false;
   return s.season !== hint.season || s.episode !== hint.episode;
 }
 
 /**
- * Filter, score and order. Exported because this is the behaviour the shared cases in
- * plugins/shared/match-cases.json pin, in four languages.
+ * Filter, score and order.
  *
  * The bundle already sorts a page newest-first and carries no download count, so ties
  * break on the id: two runs of the same query then agree on the order.
@@ -324,10 +324,12 @@ export async function fetchBundlePage(
  * which is what keeps eager loading affordable: one cacheable JSON request per player
  * (per language), regardless of how many subtitles come back.
  */
-export async function findSubtitles(opts: MatchOptions): Promise<MatchResult> {
+export async function findSubtitles(input: MatchOptions): Promise<MatchResult> {
+  const codes = [...new Set((input.languages ?? []).map(corpusLanguage).filter(Boolean))];
+  const opts = { ...input, languages: codes };
   const { client, hint, signal } = opts;
   const limit = opts.limit ?? DEFAULT_LIMIT;
-  const langs = opts.languages?.length ? opts.languages : undefined;
+  const langs = codes.length ? codes : undefined;
 
   // The limit holds per language, so the ranked list keeps that many for each.
   const keep = { ...opts, limit: limit * (langs?.length ?? 1) };

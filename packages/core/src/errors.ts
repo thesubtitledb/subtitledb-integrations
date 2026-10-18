@@ -1,10 +1,11 @@
 import type { ApiErrorBody } from './types.js';
 
 /**
- * Every failure this library raises. `status` is 0 for transport failures, which is
- * the common case in a browser rather than an exotic one: the API rejects
- * wrong-host requests before its CORS hook runs, so those arrive as opaque network
- * errors with no readable body. Nothing here may depend on reading an error body.
+ * Every failure this library raises. `status` is 0 when no answer was read, and
+ * `code` says why: `transport_error` (the request failed, the common case in a
+ * browser, where a refused cross-origin request is an opaque network error),
+ * `timeout` (no answer within `timeoutMs`), or `bad_request` (the input was
+ * refused before anything was sent). Nothing here may depend on reading an error body.
  */
 export class SubtitleDbError extends Error {
   readonly status: number;
@@ -30,7 +31,8 @@ export class SubtitleDbError extends Error {
 
   /** True when the caller asking again later could plausibly succeed. */
   get retryable(): boolean {
-    return this.status === 0 || this.status === 429 || this.status >= 500;
+    if (this.status === 0) return this.code === 'transport_error' || this.code === 'timeout';
+    return this.status === 429 || this.status >= 500;
   }
 
   static fromBody(status: number, url: string, body: unknown): SubtitleDbError {

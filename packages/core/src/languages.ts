@@ -102,6 +102,18 @@ export function baseLanguage(code: string): string {
   return code.trim().toLowerCase().split(/[-_]/)[0] ?? '';
 }
 
+/**
+ * A caller's language tag as the code the corpus files it under: `en-US` -> `en`,
+ * `pt-BR` -> `pb`, `zh-Hant` or `zh-TW` -> `zt`. The API answers 400 for a tag
+ * that is not a plain code, so nothing else may reach `lang`.
+ */
+export function corpusLanguage(code: string): string {
+  const tag = code.trim().toLowerCase().replace(/_/g, '-');
+  if (tag === 'pt-br') return 'pb';
+  if (/^zh-(hant|tw|hk|mo)/.test(tag)) return 'zt';
+  return baseLanguage(tag);
+}
+
 /** Shape of the parts of `navigator` this reads. Injectable so tests need no DOM. */
 export interface LocaleSource {
   languages?: readonly string[];

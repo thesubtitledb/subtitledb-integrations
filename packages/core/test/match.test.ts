@@ -203,6 +203,40 @@ describe('findSubtitles ladder', () => {
     expect(r.wrongEpisode).toBe(1);
   });
 
+  it('keeps the files of a drilled episode, which the lookups send with no season or episode', async () => {
+    const { client } = clientWith([
+      {
+        match: /by-imdb\/tt0944947\/season\/1\/episode\/1/,
+        body: episodeBundle([bundleSubtitle({ id: 1 }), bundleSubtitle({ id: 2 })]),
+      },
+    ]);
+
+    const r = await findSubtitles({
+      client,
+      hint: { imdbId: 'tt0944947', season: 1, episode: 1 },
+      formats: SRT_ONLY,
+    });
+
+    expect(r.candidates.map((c) => c.subtitle.id)).toEqual([1, 2]);
+    expect(r.wrongEpisode).toBe(0);
+  });
+
+  it('asks the API for corpus codes, whatever tag the caller passed', async () => {
+    const { client, calls } = clientWith([
+      { match: /by-imdb/, body: movieBundle([bundleSubtitle()]) },
+    ]);
+
+    await findSubtitles({
+      client,
+      hint: { imdbId: 'tt0133093' },
+      languages: ['en-US', 'pt-BR', 'zh-Hant', 'EN'],
+      formats: SRT_ONLY,
+    });
+
+    const asked = calls.map((c) => new URL(c.url).searchParams.get('lang')).sort();
+    expect(asked).toEqual(['en', 'pb', 'zt']);
+  });
+
   it('reports manual when the title does not resolve', async () => {
     const { client } = clientWith([{ match: /by-title/, status: 404, body: {} }]);
 
