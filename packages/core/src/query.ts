@@ -13,7 +13,8 @@
  */
 import type { ClientOptions, SubtitleDbClient } from './client.js';
 import { CONVERTIBLE, toVtt } from './convert.js';
-import type { MediaHint } from './identify.js';
+import { SubtitleDbError } from './errors.js';
+import { isResolvable, type MediaHint } from './identify.js';
 import { type Candidate, candidateLabel, type MatchTier } from './match.js';
 import { createSession } from './session.js';
 import { type Cue, parseVtt, rescale, serialize, shift } from './transform.js';
@@ -25,32 +26,39 @@ import type { BundleSubtitle, LanguageCode, LookupTitle } from './types.js';
  */
 export interface QueryConvert {
   /** Convert to WebVTT. Any of the transforms below implies this. */
-  convertTo?: 'vtt';
+  convertTo?: 'vtt' | undefined;
   /** Decode the source bytes with this charset. `'auto'` sniffs a BOM. Default UTF-8. */
-  encoding?: string;
-  /** Shift every cue by this many milliseconds. Negative pulls earlier. */
-  offsetMs?: number;
-  /** Rescale cue times from one frame rate to another. `from` defaults to the subtitle's own fps. */
-  fps?: { from?: number; to: number };
+  encoding?: string | undefined;
+  /** Shift every cue by this many milliseconds. Negative pulls earlier. Applied before `fps`. */
+  offsetMs?: number | undefined;
+  /**
+   * Rescale cue times from one frame rate to another, after `offsetMs` has been
+   * applied. `from` defaults to the subtitle's own fps.
+   */
+  fps?: { from?: number | undefined; to: number } | undefined;
   /** Include the parsed cues on the loaded result. */
-  cues?: boolean;
+  cues?: boolean | undefined;
 }
 
 export interface QueryOptions extends QueryConvert {
   /** What is playing. Same shape resolve() takes: imdbId, tmdbId, or title/year/season/episode. */
-  hint?: MediaHint;
-  /** Preferred languages, best first. Each is fetched and merged. */
-  languages?: string[];
-  hearingImpaired?: boolean;
+  hint?: MediaHint | undefined;
+  /** Preferred languages, best first, as tags (`en-US`, `pt-BR`). Each is fetched and merged. */
+  languages?: string[] | undefined;
+  /** One language, as a tag. Added to `languages`. */
+  lang?: string | undefined;
+  hearingImpaired?: boolean | undefined;
   /** Candidates per language. */
-  limit?: number;
+  limit?: number | undefined;
   /** Correlation id sent on every request. The loader supplies its per-page-load value. */
-  antispamId?: string;
-  apiBase?: string;
-  clientName?: string;
+  antispamId?: string | undefined;
+  apiBase?: string | undefined;
+  clientName?: string | undefined;
   /** The name a download is recorded under; see ClientOptions.downloadClient. */
-  downloadClient?: string;
+  downloadClient?: string | undefined;
   fetch?: ClientOptions['fetch'];
+  /** An API key; see ClientOptions.key. */
+  key?: string | undefined;
 }
 
 /** A loaded subtitle: bytes plus what a player needs to label and tag the track. */
@@ -110,6 +118,8 @@ async function loadOne(
   const vtt = toVtt(got.text, got.format);
   if (!wantsTransform) return { text: vtt, format: 'vtt', language, label };
 
+  // The offset first, then the rescale, so the offset is in the subtitle's own
+  // milliseconds and is itself rescaled with them.
   let cues = parseVtt(vtt);
   if (convert.offsetMs) cues = shift(cues, convert.offsetMs);
   if (convert.fps) {
@@ -131,11 +141,27 @@ async function loadOne(
  * `formats` is set to every convertible format rather than one player's list, because a
  * query result is for a caller's own player and must not be pre-filtered to what ours
  * would render.
+ *
+ * Unlike a session's resolve(), this throws: a caller asking for data wants to know
+ * why there is none. A hint with nothing to look up by is refused before any request
+ * (`bad_request`); an API refusal carries the API's own code and message.
  */
 export async function query(opts: QueryOptions): Promise<QueryResult> {
+  const hint = opts.hint ?? {};
+  if (!isResolvable(hint)) {
+    throw new SubtitleDbError({
+      message: 'query needs an imdbId, a tmdbId or a title in hint',
+      code: 'bad_request',
+    });
+  }
+  const languages = [...(opts.lang ? [opts.lang] : []), ...(opts.languages ?? [])];
+
+  // resolve() reports and returns empty rather than throwing. The report is kept here
+  // and thrown once resolve() has returned, so the caller gets the failure, not [].
+  let failure: unknown;
   const session = createSession({
     formats: [...CONVERTIBLE],
-    ...(opts.languages !== undefined ? { languages: opts.languages } : {}),
+    ...(languages.length ? { languages } : {}),
     ...(opts.hearingImpaired !== undefined ? { hearingImpaired: opts.hearingImpaired } : {}),
     ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
     ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
@@ -143,6 +169,10 @@ export async function query(opts: QueryOptions): Promise<QueryResult> {
     ...(opts.clientName !== undefined ? { clientName: opts.clientName } : {}),
     ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
     ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
+    ...(opts.key !== undefined ? { key: opts.key } : {}),
+    onError: (err) => {
+      failure ??= err;
+    },
   });
 
   const convert: QueryConvert = {
@@ -153,7 +183,8 @@ export async function query(opts: QueryOptions): Promise<QueryResult> {
     ...(opts.cues !== undefined ? { cues: opts.cues } : {}),
   };
 
-  const result = await session.resolve(opts.hint ?? {});
+  const result = await session.resolve(hint);
+  if (failure !== undefined) throw failure;
   const results = result.candidates.map((c) => wrap(session.client, c, convert));
   return { hint: result.hint, title: result.title, tier: result.tier, results };
 }

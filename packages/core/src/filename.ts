@@ -15,11 +15,18 @@ export interface ParsedFilename {
   /** Best-effort human title. Empty string when nothing survived the tag stripping. */
   title: string;
   year: number | null;
+  /** Null for an anime-style absolute episode number, which has no season. */
   season: number | null;
+  /** The first episode of a multi-episode file such as S02E01E02. */
   episode: number | null;
-  /** Release group, when the name ends in the conventional -GROUP form. */
+  /** Every episode of a multi-episode file, in order. Only present when there is more than one. */
+  episodes?: number[];
+  /** Release group: a trailing -GROUP or [GROUP], or the leading [Group] of an anime name. */
   group: string | null;
-  /** Recognised quality/source tags, lowercased, in the order they appeared. */
+  /**
+   * Recognised quality/source tags, lowercased, in the order they appeared. Dotted
+   * audio and codec tags are collapsed: DDP5.1 is `ddp51`, H.265 is `h265`.
+   */
   tags: string[];
   container: string | null;
   /**
@@ -87,7 +94,6 @@ const TAGS = new Set([
   'x265',
   'h264',
   'h265',
-  'h',
   'hevc',
   'avc',
   'xvid',
@@ -114,12 +120,8 @@ const TAGS = new Set([
   'flac',
   'mp3',
   'opus',
-  'ddp5',
   'ddp',
-  'dd5',
   'dd',
-  '5',
-  '7',
   'commentary',
   'proper',
   'repack',
@@ -157,14 +159,29 @@ const TAGS = new Set([
   'ma',
 ]);
 
-/** S01E02, s01.e02, 1x02, S01E02E03 (first episode wins), Season 1 Episode 2. */
+/**
+ * S01E02, s01.e02, 1x02, Season 1 Episode 2. A multi-episode file (S01E02E03,
+ * S01E02-E03) keeps every number in group 3.
+ */
 const EPISODE_PATTERNS: RegExp[] = [
-  /\bs(\d{1,2})[\s._-]*e(\d{1,3})\b/i,
+  /\bs(\d{1,2})[\s._-]*e(\d{1,3})((?:[\s._-]*e\d{1,3})*)\b/i,
   /\b(\d{1,2})x(\d{1,3})\b/i,
   /\bseason[\s._-]*(\d{1,2})[\s._-]*episode[\s._-]*(\d{1,3})\b/i,
 ];
 
+/**
+ * The anime convention: `[Group] Title - 1100 [1080p]`, an absolute episode number
+ * with no season, after " - " and before the end or the first bracketed tag. An
+ * optional v2 marks a re-release.
+ */
+const ANIME = /^(\[[^\]]+\]\s*)(.+?)\s+-\s+(\d{1,4})(?:v\d)?(?=\s|\[|\(|$)/i;
+
 const YEAR = /\b(19\d{2}|20\d{2})\b/g;
+
+/** DDP5.1, DD+5.1, AAC2.0, DTS-HD5.1: audio tags whose dots would otherwise split them. */
+const AUDIO = /\b(ddp|dd\+|dd|eac3|ac3|aac|dts-?hd|dts|truehd|flac|opus)[.\s-]?(\d)[.](\d)\b/gi;
+/** A collapsed audio tag, such as `ddp51`. */
+const AUDIO_TAG = /^(ddp|dd|eac3|ac3|aac|dtshd|dts|truehd|flac|opus)\d\d$/;
 
 function stripContainer(name: string): { base: string; container: string | null } {
   const dot = name.lastIndexOf('.');
@@ -192,14 +209,29 @@ export function basename(input: string): string {
   }
 }
 
-/** Trailing "-GROUP" on a release name, where GROUP has no spaces. */
+function isTag(token: string): boolean {
+  const t = token.toLowerCase();
+  return TAGS.has(t) || AUDIO_TAG.test(t);
+}
+
+/** Trailing "-GROUP" or "[GROUP]" on a release name, where GROUP has no spaces. */
 function extractGroup(base: string): { rest: string; group: string | null } {
+  // "-[YTS.MX]" and "[YTS.MX]": a bracketed group at the end. A bracketed tag
+  // ("[1080p]") or an anime CRC32 ("[A1B2C3D4]") is not a group.
+  const br = /\s*-?\s*\[([A-Za-z0-9_.]{2,20})\]$/.exec(base);
+  if (br?.[1] && !isTag(br[1]) && !/^[0-9A-Fa-f]{8}$/.test(br[1])) {
+    return { rest: base.slice(0, br.index), group: br[1] };
+  }
+
   const m = /-([A-Za-z0-9_.]{2,20})$/.exec(base);
   if (!m || m[1] === undefined) return { rest: base, group: null };
   const candidate = m[1];
 
-  // A trailing "-2160p" style token is a tag, not a group.
-  if (TAGS.has(candidate.toLowerCase())) return { rest: base, group: null };
+  // A trailing "-2160p" style token is a tag, not a group, and neither is the
+  // "-E02.720p" tail of a multi-episode name.
+  if (tokenise(candidate).some((t) => isTag(t) || /^e\d{1,3}$/i.test(t))) {
+    return { rest: base, group: null };
+  }
 
   // Hyphenated tags are the trap here: WEB-DL and Blu-Ray both end in a hyphen
   // followed by a short token, so a naive match reports groups called "DL" and
@@ -213,8 +245,18 @@ function extractGroup(base: string): { rest: string; group: string | null } {
   return { rest: head, group: candidate };
 }
 
-function tokenise(base: string): string[] {
+/** Collapse the dotted tags that splitting on "." would break apart: DDP5.1, H.265. */
+function collapseTags(base: string): string {
   return base
+    .replace(AUDIO, (_, codec: string, a: string, b: string) => {
+      const c = codec.toLowerCase().replace('+', 'p').replace('-', '');
+      return `${c}${a}${b}`;
+    })
+    .replace(/\bh[.\s-]?(264|265)\b/gi, 'h$1');
+}
+
+function tokenise(base: string): string[] {
+  return collapseTags(base)
     .replace(/[[\]()_{}]/g, ' ')
     .replace(/[.\-+]/g, ' ')
     .split(/\s+/)
@@ -228,10 +270,11 @@ function titleCase(words: string[]): string {
 export function parseFilename(input: string): ParsedFilename {
   const name = basename(input);
   const { base, container } = stripContainer(name);
-  const { rest, group } = extractGroup(base);
+  let { rest, group } = extractGroup(base);
 
   let season: number | null = null;
   let episode: number | null = null;
+  let episodes: number[] | undefined;
   let episodeCut = -1;
 
   for (const re of EPISODE_PATTERNS) {
@@ -240,7 +283,22 @@ export function parseFilename(input: string): ParsedFilename {
       season = Number(m[1]);
       episode = Number(m[2]);
       episodeCut = m.index;
+      const more = [...(m[3] ?? '').matchAll(/\d{1,3}/g)].map((e) => Number(e[0]));
+      if (more.length) episodes = [episode, ...more];
       break;
+    }
+  }
+
+  // No season marker: an anime name carries the group first and an absolute episode
+  // number after the title. A number in the year range is a year, not an episode.
+  if (episodeCut === -1) {
+    const m = ANIME.exec(rest);
+    if (m?.[1] !== undefined && m[2] !== undefined && m[3] !== undefined && !isYear(Number(m[3]))) {
+      episode = Number(m[3]);
+      group = m[1].slice(1, m[1].indexOf(']'));
+      // Drop the leading [Group]; the title then runs up to the " - 1100".
+      rest = rest.slice(m[1].length);
+      episodeCut = m[2].length;
     }
   }
 
@@ -254,7 +312,7 @@ export function parseFilename(input: string): ParsedFilename {
   YEAR.lastIndex = 0;
   for (const m of searchSpace.matchAll(YEAR)) {
     const v = Number(m[0]);
-    if (v < 1900 || v > new Date().getFullYear() + 2) continue;
+    if (!isYear(v)) continue;
     // Nothing in front of it means it is the name, not the date: "2012.S01E01" is a
     // series called 2012, and reading it as a year leaves no title to search with.
     if (tokenise(searchSpace.slice(0, m.index)).length === 0) continue;
@@ -269,11 +327,11 @@ export function parseFilename(input: string): ParsedFilename {
 
   const head = rest.slice(0, cut);
   const headTokens = tokenise(head);
-  const tagIdx = headTokens.findIndex((t) => TAGS.has(t.toLowerCase()));
+  const tagIdx = headTokens.findIndex(isTag);
   const titleTokens = tagIdx === -1 ? headTokens : headTokens.slice(0, tagIdx);
 
   const allTokens = tokenise(rest);
-  const tags = allTokens.map((t) => t.toLowerCase()).filter((t) => TAGS.has(t));
+  const tags = allTokens.map((t) => t.toLowerCase()).filter(isTag);
 
   if (cut === rest.length && titleTokens.length === 0) cut = 0;
 
@@ -282,9 +340,14 @@ export function parseFilename(input: string): ParsedFilename {
     year,
     season,
     episode,
+    ...(episodes ? { episodes } : {}),
     group,
     tags: [...new Set(tags)],
     container,
     release: base,
   };
+}
+
+function isYear(v: number): boolean {
+  return v >= 1900 && v <= new Date().getFullYear() + 2;
 }

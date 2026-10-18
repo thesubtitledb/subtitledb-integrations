@@ -5,9 +5,9 @@
  * Core stays engine-agnostic. It knows how to *offer* a transcription (a synthetic
  * candidate in the picker) and how to *ask for one* (call the injected `transcriber`
  * when that candidate is selected), and nothing about Whisper, WebGPU or WASM. The
- * engine lives in `@subtitledb/transcribe`, loaded lazily so none of it downloads
- * until a viewer actually clicks the row. See the CDN loader for the wiring, and the
- * plan's Part C for why the default is transformers.js with `whisper-tiny.en`.
+ * engine is loaded lazily, so none of it downloads until a viewer actually clicks the
+ * row. See the CDN loader for the wiring. The default is transformers.js with
+ * `whisper-tiny.en`.
  */
 import type { Candidate } from './match.js';
 import type { BundleSubtitle } from './types.js';
@@ -92,8 +92,8 @@ export interface TranscribeRequest {
 /**
  * The engine, injected rather than imported so core carries none of its weight.
  *
- * The CDN loader wires this to a function that lazy-loads `@subtitledb/transcribe`;
- * a page bundling the packages itself passes one built from that package directly.
+ * The CDN loader wires this to a function that loads the engine lazily; a page
+ * bundling its own engine passes one directly.
  * Returns WebVTT text, which rides the same blob-URL path as a fetched subtitle.
  */
 export type Transcriber = (req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>;
