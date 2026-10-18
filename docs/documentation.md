@@ -839,7 +839,8 @@ language ports at once.
 
 `lang`, `format`, `sort`, `limit` and `offset` apply to a bundle's own `subtitles`
 page at every scope, including the show-level page of a series root and the
-season-pack page of a season drill. The `seasons` tree under them takes `limit` only,
+season-pack page of a season drill. A season drill's `seasons` holds that season alone.
+The `seasons` tree takes `limit` only,
 which caps every season and episode page; the other filters do not reach it, so drill
 to `/season/:s/episode/:e` when an episode's files have to be filtered.
 

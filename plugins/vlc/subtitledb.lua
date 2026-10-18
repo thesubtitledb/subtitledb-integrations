@@ -24,7 +24,7 @@
 SubtitleDb = {}
 local S = SubtitleDb
 
-S.VERSION = "0.3.3"
+S.VERSION = "0.3.4"
 S.API_BASE = "https://api.thesubtitledb.org"
 S.FORMATS = { srt = true, ass = true, ssa = true, sub = true, vtt = true }
 
@@ -563,17 +563,40 @@ end
 
 S.NO_ANSWER = "no answer from "
 
+S.USER_AGENT = "subtitledb-vlc/" .. S.VERSION .. " (+https://thesubtitledb.org)"
+
+--- Runs fn with S.USER_AGENT as VLC's User-Agent, then puts VLC's own back.
+--- vlc.stream takes no headers; its http access reads http-user-agent from libvlc.
+function S.with_user_agent(fn)
+  local libvlc = vlc.object and vlc.object.libvlc and vlc.object.libvlc()
+  if not libvlc then return fn() end
+  local had, old = pcall(vlc.var.get, libvlc, "http-user-agent")
+  if had then
+    vlc.var.set(libvlc, "http-user-agent", S.USER_AGENT)
+  else
+    local ver = string.match(vlc.misc.version() or "", "^(%S+)") or ""
+    old = "VLC/" .. ver .. " LibVLC/" .. ver
+    vlc.var.create(libvlc, "http-user-agent", S.USER_AGENT)
+  end
+  local ok, a, b = pcall(fn)
+  vlc.var.set(libvlc, "http-user-agent", old)
+  if not ok then error(a, 0) end
+  return a, b
+end
+
 --- Read a URL whole. Replaced in tests; in VLC this is the only network call.
 function S.fetch(url)
-  local stream = vlc.stream(url)
-  if not stream then return nil, S.NO_ANSWER .. S.API_BASE end
-  local chunks = {}
-  while true do
-    local chunk = stream:read(65536)
-    if not chunk or #chunk == 0 then break end
-    chunks[#chunks + 1] = chunk
-  end
-  return table.concat(chunks)
+  return S.with_user_agent(function()
+    local stream = vlc.stream(url)
+    if not stream then return nil, S.NO_ANSWER .. S.API_BASE end
+    local chunks = {}
+    while true do
+      local chunk = stream:read(65536)
+      if not chunk or #chunk == 0 then break end
+      chunks[#chunks + 1] = chunk
+    end
+    return table.concat(chunks)
+  end)
 end
 
 --- One request the API always answers: the film its own live tests use. Swap for a

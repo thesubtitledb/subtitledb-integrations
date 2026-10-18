@@ -308,9 +308,8 @@ export interface LookupExtras {
  *
  * `subtitles` is always the page for exactly the scope asked for: a movie's files, a
  * drilled episode's own files, or a series' unbucketed files. `seasons` is the tree:
- * present on a series root and a season drill, absent on a movie and on an episode
- * drill. A season drill still returns every season in it, so read `subtitles` and not
- * `seasons[0]` when a slug was used.
+ * every season on a series root, that season alone on a season drill, absent on a movie
+ * and on an episode drill.
  */
 export interface LookupBundle extends LookupExtras {
   title: LookupTitle;

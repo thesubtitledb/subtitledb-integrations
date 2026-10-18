@@ -25,7 +25,7 @@ from dataclasses import dataclass
 DEFAULT_API_BASE = "https://api.thesubtitledb.org"
 
 #: This library's version, which Bazarr ships as its own. pyproject.toml carries it too.
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 
 RETRY_BASE_S = 0.3
 MAX_BACKOFF_S = 8.0
@@ -72,7 +72,7 @@ class Client:
     api_base: str = DEFAULT_API_BASE
     #: Sent as a query parameter, not a header: identifies the plugin in our logs,
     #: on every lookup and on every download.
-    client: str = "subtitledb-plugin"
+    client: str = "python"
     timeout: float = 15.0
     retries: int = 2
     #: The plugin's version, for the User-Agent. This library's when not given.
