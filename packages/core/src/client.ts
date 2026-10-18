@@ -82,10 +82,7 @@ export interface RequestOptions {
  * filter that matched nothing:
  *
  *   - `lang` NOW TAKES A COMMA LIST, up to 16 codes: `lang=en,fr,de` comes back with all
- *     three. It used to take one code and silently drop a list, which is why the callers
- *     in this repo still fan out one request per language. That fan-out is now a cost we
- *     choose, not one the API forces; collapsing it is a behaviour change across four
- *     language ports and is deliberately not part of this change.
+ *     three. A malformed code answers 400.
  *   - Both filters bite on a MOVIE bundle and on an episode drill, and are IGNORED on a
  *     series or season bundle: the tree is served unfiltered by design, so
  *     `by-imdb/tt0944947?lang=en` returns exactly the bytes of the unfiltered call.
@@ -216,6 +213,18 @@ export class SubtitleDbClient {
     return u.toString();
   }
 
+  /** A fetch that threw: our own timeout, or the network. */
+  private failed(url: string, cause: unknown, message: string): SubtitleDbError {
+    const timedOut = cause instanceof Error && cause.name === 'TimeoutError';
+    return new SubtitleDbError({
+      message: timedOut ? `no answer within ${this.timeoutMs} ms` : message,
+      status: 0,
+      code: timedOut ? 'timeout' : 'transport_error',
+      url,
+      cause,
+    });
+  }
+
   /** One request, with timeout, retry and typed errors. */
   private async request<T>(url: string, signal?: AbortSignal): Promise<T> {
     let last: SubtitleDbError | undefined;
@@ -235,13 +244,7 @@ export class SubtitleDbClient {
         // Covers the browser opaque failure for a cross-origin rejection that never
         // received CORS headers. There is no body to read in that case, by
         // construction, so nothing below may depend on one.
-        last = new SubtitleDbError({
-          message: 'network request failed',
-          status: 0,
-          code: 'transport_error',
-          url,
-          cause,
-        });
+        last = this.failed(url, cause, 'network request failed');
         if (attempt < this.retries) {
           await sleep(backoffMs(attempt, null), signal);
           continue;
@@ -319,7 +322,7 @@ export class SubtitleDbClient {
    * `season`/`episode` to narrow a series. First-class beside byTmdb and the same bundle
    * shape: media servers hand over an IMDb id, so this is the rung that resolves them.
    */
-  byImdb(imdb: string | number, params: DrillParams = {}): Promise<LookupBundle> {
+  async byImdb(imdb: string | number, params: DrillParams = {}): Promise<LookupBundle> {
     const id = normaliseImdb(imdb);
     return this.request<LookupBundle>(
       this.url(
@@ -469,11 +472,7 @@ export class SubtitleDbClient {
       res = await doFetch(url, { method: 'GET', headers: this.auth(), signal });
     } catch (cause) {
       if (opts.signal?.aborted) throw new SubtitleDbAbort();
-      throw new SubtitleDbError({
-        message: 'subtitle download failed',
-        url,
-        cause,
-      });
+      throw this.failed(url, cause, 'subtitle download failed');
     }
     if (!res.ok) {
       throw new SubtitleDbError({

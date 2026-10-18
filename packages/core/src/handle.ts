@@ -62,7 +62,7 @@ export interface DegradedInfo {
 export type MediaRef = () => HTMLVideoElement | null;
 
 /**
- * What every adapter in this repo hands back.
+ * What every player adapter hands back.
  *
  * Declared here and imported by all four, because it was three separate interfaces
  * that had already drifted: two of them carried `session` and no `player`, the third

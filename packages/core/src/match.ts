@@ -186,7 +186,7 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
   }
 
   // An episode we could confirm, rather than one we merely could not rule out.
-  if (opts.hint.season !== undefined && s.season !== null && !wrongEpisode(s, opts.hint)) {
+  if (opts.hint.season !== undefined && s.season != null && !wrongEpisode(s, opts.hint)) {
     score += 20;
     reasons.push(`season ${opts.hint.season} episode ${opts.hint.episode}`);
   }
@@ -209,13 +209,13 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
  */
 function wrongEpisode(s: BundleSubtitle, hint: MediaHint): boolean {
   if (hint.season === undefined || hint.episode === undefined) return false;
-  if (s.season === null || s.episode === null) return false;
+  // Lookup items omit both: the drilled address already names the episode.
+  if (s.season == null || s.episode == null) return false;
   return s.season !== hint.season || s.episode !== hint.episode;
 }
 
 /**
- * Filter, score and order. Exported because this is the behaviour the shared cases in
- * plugins/shared/match-cases.json pin, in four languages.
+ * Filter, score and order.
  *
  * The bundle already sorts a page newest-first and carries no download count, so ties
  * break on the id: two runs of the same query then agree on the order.

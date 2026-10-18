@@ -2,7 +2,7 @@
 
 A client for [The Subtitle Database](https://thesubtitledb.org), a free subtitle API for films and series in over 100 languages. Install it and call it. No account and no key.
 
-No dependencies. Runs in browsers and Node 20 or newer. TypeScript types included.
+No dependencies. Runs in browsers and Node 20.3 or newer. TypeScript types included. It is an ES module: use `import`, not `require()`.
 
 ## Install
 
@@ -35,7 +35,8 @@ const sub = await results[0].load();
 | `load()` | Downloads one result. With `convertTo: 'vtt'` it converts SRT and ASS to WebVTT. `offsetMs` shifts the timings and `fps` changes the frame rate. |
 | `createClient()` | The API itself. `byImdb`, `byTmdb`, `byTitle`, `byReleasename`, `byInfohash` and `bySubid` each return a title with its subtitles. |
 | `parseFilename()` | Reads the title, year, season, episode and release from a video file name. |
-| `toVtt()`, `shift()`, `rescale()` | The conversion and timing helpers on their own. |
+| `toVtt()` | Converts SRT or ASS text to WebVTT. |
+| `parseVtt()`, `shift()`, `rescale()`, `serialize()` | Timing helpers. `shift()` and `rescale()` take the cues from `parseVtt()`, not text. |
 
 ```js
 import { createClient } from '@subtitledb/core';
@@ -51,7 +52,8 @@ Everything above is free and needs no key. A free key from [your account](https:
 
 | | No key | With a key |
 |---|---|---|
-| Downloads | 200 an hour per IP address | 10,000 a day |
+| Lookups | 300 a minute per IP address | 1,800 a minute |
+| Downloads | 200 an hour per IP address | 5,000 an hour, 10,000 a day |
 | Text search | Not included | `client.search()` |
 
 ```js
@@ -59,7 +61,7 @@ const client = createClient({ key: process.env.SUBTITLEDB_KEY });
 const { results } = await client.search('breaking bad', { lang: 'en' });
 ```
 
-The key goes in a request header. Use it on a server, not in page code, where anyone can read it.
+The key goes in a request header. Use it on a server, not in page code, where anyone can read it. A key that is wrong or revoked is refused with `bad_key`, never ignored.
 
 The playback debugger for your own site takes its own debug key, from the Debugger tab at [thesubtitledb.org/developer](https://thesubtitledb.org/developer). It reports startup time, stalls and errors from your viewers.
 

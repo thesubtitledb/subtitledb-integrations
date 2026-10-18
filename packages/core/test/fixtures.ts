@@ -46,14 +46,13 @@ export function bundleSubtitle(over: Partial<BundleSubtitle> = {}): BundleSubtit
     id,
     language: 'en',
     format,
-    season: null,
-    episode: null,
+    // No season, episode or uploader: the lookups never send them (checked live
+    // 2026-10-18). A fixture that sent null hid a filter that dropped every episode.
     cues: 1386,
     duration_s: 7827,
     bytes: 106244,
     encoding: 'utf-8',
     release_name: '',
-    uploader: '',
     hearing_impaired: false,
     fps: null,
     added_at: '2021-06-04T12:11:09Z',

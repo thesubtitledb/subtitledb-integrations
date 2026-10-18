@@ -162,6 +162,30 @@ describe('SubtitleDbClient', () => {
     expect(err.retryable).toBe(true);
   });
 
+  it('names a timeout as one', async () => {
+    const impl = (async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }) as unknown as typeof fetch;
+    const c = new SubtitleDbClient({ fetch: impl, retries: 0, timeoutMs: 5 });
+
+    const err = await c.byImdb(1).catch((e) => e);
+    expect(err.status).toBe(0);
+    expect(err.code).toBe('timeout');
+    expect(err.message).toBe('no answer within 5 ms');
+    expect(err.retryable).toBe(true);
+  });
+
+  it('refuses a bad imdb id before sending, and does not call it retryable', async () => {
+    const { fetch, calls } = stubFetch([]);
+    const c = new SubtitleDbClient({ fetch });
+
+    const err = await c.byImdb('hello').catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbError);
+    expect(err.code).toBe('bad_request');
+    expect(err.retryable).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
   it('follows download_url exactly as returned and never builds a files-host URL', async () => {
     const { fetch, calls } = stubFetch([{ match: /files\.example\.test/, text: '1\nhello\n' }]);
     const c = new SubtitleDbClient({ fetch });

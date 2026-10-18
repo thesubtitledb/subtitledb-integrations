@@ -144,19 +144,23 @@ export interface ApiErrorBody {
  *     them are optional here -- a consumer must handle the id-only title.
  */
 
-/** One file in a bundle page. Leaner than `Subtitle`: no parent echo, no internals. */
+/**
+ * One file in a bundle page. Leaner than `Subtitle`: no parent echo, no internals.
+ * `season`, `episode` and `uploader` are not sent by the lookups, where the drilled
+ * address already says which episode a file belongs to.
+ */
 export interface BundleSubtitle {
   id: number;
   language: LanguageCode;
   format: string;
-  season: number | null;
-  episode: number | null;
+  season?: number | null;
+  episode?: number | null;
   cues: number;
   duration_s: number;
   bytes: number;
   encoding: string;
   release_name: string;
-  uploader: string;
+  uploader?: string;
   hearing_impaired: boolean;
   fps: number | null;
   /** ISO 8601, e.g. "2021-06-04T12:11:09Z". */
