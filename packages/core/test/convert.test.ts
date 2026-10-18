@@ -40,6 +40,16 @@ describe('srt to vtt', () => {
     expect(hostile).toContain('A &amp; B');
   });
 
+  it('escapes a lone angle bracket and never escapes twice', () => {
+    expect(toVtt('1\n00:00:01,000 --> 00:00:02,000\na<b & c\n', 'srt')).toContain(
+      '\na&lt;b &amp; c\n',
+    );
+    const vtt = toVtt('1\n00:00:01,000 --> 00:00:02,000\n<i>x</i> 1 < 2 > 0 &lt; &amp;\n', 'srt');
+    expect(vtt).toContain('<i>x</i> 1 &lt; 2 &gt; 0 &lt; &amp;');
+    expect(vtt).not.toContain('&amp;lt;');
+    expect(vtt).not.toContain('&amp;amp;');
+  });
+
   it('drops font colouring instead of putting the markup on screen', () => {
     // Colour tags are everywhere in the SubRip corpus and WebVTT has no equivalent.
     // Escaping them is safe and unreadable: the viewer gets a line of markup.

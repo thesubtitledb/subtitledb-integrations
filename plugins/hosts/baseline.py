@@ -47,8 +47,9 @@ def routes(sample: media.Sample) -> dict[str, tuple[Hint, tuple[str, ...]]]:
     may answer each."""
     if not sample.is_episode:
         return {
-            "ids": (Hint(imdb_id=sample.imdb, tmdb_id=sample.tmdb, title=sample.name,
-                         year=sample.year, release=sample.release), FILM_IDS),
+            "ids": (Hint(imdb_id=sample.imdb, tmdb_id=sample.tmdb, tmdb_type="movie",
+                         title=sample.name, year=sample.year, release=sample.release),
+                    FILM_IDS),
             "name": (Hint(title=sample.name, year=sample.year, release=sample.release),
                      (TIER_TITLE,)),
         }

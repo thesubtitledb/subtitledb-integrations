@@ -23,11 +23,15 @@ declare const b: boolean | undefined;
 createClient({ key: s, apiBase: s, client: s, downloadClient: s, antispamId: s, timeoutMs: n, retries: n, fetch: undefined });
 const c = createClient();
 void c.byImdb('tt1', { lang: s, languages: undefined, limit: n, offset: n, format: s, sort: undefined, season: n, episode: n, signal: undefined });
-void c.byTmdb(1, { season: n, episode: n, response_class: undefined });
+void c.byTmdb(1, { season: n, episode: n, response_class: undefined, type: undefined });
+void c.byTmdb(1, { type: 'tv' });
+void c.byImdb('tt1', { sort: 'newest' });
+// @ts-expect-error the API has no such sort
+void c.byImdb('tt1', { sort: 'downloads' });
 void c.search('x', { lang: s, languages: undefined, type: undefined, year: n, limit: n, dir: undefined });
 void c.fetchSubtitleText({ download_url: '', format: 'srt' }, { encoding: s, signal: undefined });
 void query({
-  hint: { imdbId: s, tmdbId: n, seriesImdbId: s, title: s, year: n, season: n, episode: n, release: s },
+  hint: { imdbId: s, tmdbId: n, tmdbType: undefined, seriesImdbId: s, title: s, year: n, season: n, episode: n, release: s },
   languages: undefined, lang: s, key: s, limit: n, hearingImpaired: b,
   convertTo: undefined, offsetMs: n, fps: undefined, encoding: s, cues: b,
   apiBase: s, clientName: s, downloadClient: s, antispamId: s,

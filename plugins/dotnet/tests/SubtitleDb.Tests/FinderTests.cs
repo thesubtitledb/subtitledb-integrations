@@ -67,6 +67,64 @@ namespace SubtitleDb.Tests
         }
 
         [Fact]
+        public async Task TheTmdbRungTakesTheTypedPath()
+        {
+            var handler = new StubHandler().On("by-tmdb", Movie(SrtRow));
+            var hints = new[]
+            {
+                new Hint { TmdbId = 603, TmdbType = "movie" },
+                new Hint { TmdbId = 1396, Season = 2, Episode = 3 },
+                new Hint { TmdbId = 603 },
+            };
+            foreach (var hint in hints)
+            {
+                await Finder.FindAsync(Client(handler), hint, Options(), CancellationToken.None);
+            }
+
+            Assert.StartsWith("https://api.example.test/v1/by-tmdb/movie/603?", handler.Calls[0]);
+            Assert.StartsWith(
+                "https://api.example.test/v1/by-tmdb/tv/1396/season/2/episode/3?", handler.Calls[1]);
+            Assert.StartsWith("https://api.example.test/v1/by-tmdb/603?", handler.Calls[2]);
+        }
+
+        [Fact]
+        public async Task TheTmdbRungFallsBackToTheUntypedPathWhileTheTypedOneHasNoRoute()
+        {
+            var handler = new StubHandler()
+                .On("by-tmdb/tv/", "{\"error\":\"not_found\",\"message\":\"no route for GET /v1/by-tmdb/tv/1396\"}", HttpStatusCode.NotFound)
+                .On("by-tmdb/1396", Movie(SrtRow));
+
+            var result = await Finder.FindAsync(
+                Client(handler),
+                new Hint { TmdbId = 1396, Season = 2, Episode = 3 },
+                Options(),
+                CancellationToken.None);
+
+            Assert.Equal(MatchTier.ExplicitTmdb, result.Tier);
+            Assert.Equal(2, handler.Calls.Count);
+            Assert.StartsWith("https://api.example.test/v1/by-tmdb/tv/1396/season/2/episode/3?", handler.Calls[0]);
+            Assert.StartsWith("https://api.example.test/v1/by-tmdb/1396/season/2/episode/3?", handler.Calls[1]);
+            Assert.Contains("type=tv", handler.Calls[1]);
+        }
+
+        [Fact]
+        public async Task AMissingTitleOnTheTypedPathIsNotRetried()
+        {
+            var handler = new StubHandler()
+                .On("by-tmdb/", "{\"error\":\"not_found\",\"message\":\"no title mapped to tmdb id 603\"}", HttpStatusCode.NotFound)
+                .On("by-imdb", Movie(SrtRow));
+
+            var result = await Finder.FindAsync(
+                Client(handler),
+                new Hint { TmdbId = 603, TmdbType = "movie", ImdbId = "tt0133093" },
+                Options(),
+                CancellationToken.None);
+
+            Assert.Equal(MatchTier.ExplicitImdb, result.Tier);
+            Assert.Equal(2, handler.Calls.Count);
+        }
+
+        [Fact]
         public async Task ATmdb404FallsThroughToImdb()
         {
             // subs.tmdb_map is only partial in production, so by-tmdb 404s for many ids.

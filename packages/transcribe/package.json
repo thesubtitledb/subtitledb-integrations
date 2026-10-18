@@ -22,6 +22,6 @@
     "typecheck": "tsc -b tsconfig.json --force"
   },
   "dependencies": {
-    "@subtitledb/core": "0.5.2"
+    "@subtitledb/core": "0.5.3"
   }
 }

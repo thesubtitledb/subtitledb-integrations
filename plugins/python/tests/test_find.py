@@ -104,6 +104,14 @@ def test_tmdb_leads_the_ladder_when_it_is_present():
     assert [name for name, _, _ in c.calls] == ["by_tmdb"], "imdb was hit despite a tmdb win"
 
 
+def test_the_tmdb_rung_passes_the_type_it_knows():
+    c = FakeClient(by_tmdb=movie([sub(1)]))
+    find(c, Hint(tmdb_id=603, tmdb_type="movie"), Options(formats=["srt"]))
+    find(c, Hint(tmdb_id=1396, season=2, episode=3), Options(formats=["srt"]))
+    find(c, Hint(tmdb_id=603), Options(formats=["srt"]))
+    assert [kw["media_type"] for _, _, kw in c.calls] == ["movie", "tv", None]
+
+
 def test_a_tmdb_404_falls_through_to_imdb():
     # The imdb->tmdb map is incomplete, so this 404 is ordinary, not exceptional.
     c = FakeClient(by_tmdb=SubtitleDbError("no map", 404), by_imdb=movie([sub(1)]))

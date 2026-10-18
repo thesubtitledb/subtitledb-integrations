@@ -12,31 +12,19 @@ import type {
   SearchSort,
   SubtitleSort,
   TitleKind,
+  TmdbType,
 } from './types.js';
 
 /**
- * Where the API lives, and the reason every path below starts `/v1` rather than
- * `/api/v1`.
- *
- * There are two ways to reach the same API and they differ by exactly this prefix:
- *
- *   https://api.thesubtitledb.org/v1/...       the API's own host, what this defaults to
- *   https://thesubtitledb.org/api/v1/...       the site origin, which proxies /api
- *
- * The paths used to carry `/api` while the base pointed at the API host, which
- * produced `https://api.thesubtitledb.org/api/v1/by-tmdb/603` and a 404 on every single
- * request. It failed silently, because resolve() reports and returns an empty result
- * rather than throwing, so every player showed "no subtitles found" for every title
- * and nothing anywhere said why.
- *
- * With the prefix on the base instead of the path, both deployments work: pass
- * `apiBase: 'https://thesubtitledb.org/api'` and the same `/v1` paths land correctly.
+ * Where the API lives. Every path is appended to it and starts `/v1`, so the same API
+ * is also reached through the site with `apiBase: 'https://thesubtitledb.org/api'`.
  */
 export const DEFAULT_API_BASE = 'https://api.thesubtitledb.org';
 
 // Every optional option is also `| undefined`, so a caller compiling with
 // exactOptionalPropertyTypes can pass `{ key: process.env.KEY }` as it is.
 export interface ClientOptions {
+  /** Must be https when `key` is set: the key is never sent over plain http. */
   apiBase?: string | undefined;
   /** Injected for tests. Defaults to globalThis.fetch. */
   fetch?: typeof fetch | undefined;
@@ -45,11 +33,8 @@ export interface ClientOptions {
   /** Retries after the first attempt. Only 429, 5xx and transport failures retry. */
   retries?: number | undefined;
   /**
-   * Sent as a `client` query parameter on every request so traffic is attributable
-   * in our logs. Deliberately a query parameter and not a header: a custom header
-   * makes the browser issue a CORS preflight before every new path, and the point
-   * of this field is diagnostics, not something worth a round trip. The API ignores
-   * unknown query parameters, verified against the live service.
+   * Your integration's name, sent as a `client` query parameter on every request. A
+   * query parameter rather than a header, so a browser sends no CORS preflight for it.
    */
   client?: string | undefined;
   /**
@@ -59,18 +44,16 @@ export interface ClientOptions {
    */
   downloadClient?: string | undefined;
   /**
-   * A per-page-load correlation id, sent as `antispam_id` on every request including
-   * the subtitle download. It ties a page's searches to its downloads server-side so
-   * a burst of downloads with no matching searches reads as a scraper. Not a visitor
-   * id: the loader mints a fresh one each page load and never persists it. Like
-   * `client`, a query parameter to avoid a preflight, and ignored by the API where it
-   * is not read.
+   * A per-page-load id, sent as `antispam_id` on every request including the subtitle
+   * download, so the API can tie a page's downloads to its lookups. Not a visitor id:
+   * the loader makes a fresh one each page load and never stores it.
    */
   antispamId?: string | undefined;
   /**
    * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
    * works without one. A key raises the download limit and is required by search().
-   * Sent as a Bearer header, so keep it server-side: a key in page code is public.
+   * Sent as a Bearer header, so keep it server-side: a key in page code is public. With
+   * a key, an http `apiBase` or `download_url` is refused (`bad_request`).
    */
   key?: string | undefined;
 }
@@ -135,6 +118,16 @@ export interface SearchParams extends RequestOptions {
 export interface DrillParams extends LookupParams {
   season?: number | undefined;
   episode?: number | undefined;
+}
+
+export interface TmdbParams extends DrillParams {
+  /**
+   * Which TMDB numbering the id is in: a film and a show can share an id. Sent as
+   * `/v1/by-tmdb/movie/:id` or `/v1/by-tmdb/tv/:id`. A `season` or `episode` implies
+   * `tv`. With none of them, the untyped `/v1/by-tmdb/:id` is called, which answers
+   * with the film when both exist.
+   */
+  type?: TmdbType | undefined;
 }
 
 /**
@@ -210,8 +203,7 @@ export class SubtitleDbClient {
     }
     // Stored as given and always called detached, never as `this.doFetch(...)`. A
     // native fetch invoked as a method of this object is an "Illegal invocation" in
-    // every browser, which is what a page bringing no fetch of its own used to hit on
-    // every request. Calling detached also leaves an already-bound wrapper alone,
+    // every browser. Calling detached also leaves an already-bound wrapper alone,
     // which binding to globalThis would not, and covers a fetch from another realm
     // that is the platform's but not identical to this global.
     this.doFetch = f;
@@ -221,6 +213,13 @@ export class SubtitleDbClient {
     this.downloadClient = opts.downloadClient ?? opts.client;
     this.antispamId = opts.antispamId;
     this.key = opts.key?.trim() || undefined;
+    if (this.key && plainHttp(this.apiBase)) {
+      throw new SubtitleDbError({
+        message: 'apiBase is http; a key is only sent over https',
+        code: 'bad_request',
+        url: this.apiBase,
+      });
+    }
   }
 
   /** The key header, when there is a key. None otherwise, so a keyless call needs no preflight. */
@@ -331,15 +330,37 @@ export class SubtitleDbClient {
     };
   }
 
-  /** Look up a title by TMDB id. Pass `season`/`episode` to narrow a series. */
-  byTmdb(tmdb: string | number, params: DrillParams = {}): Promise<LookupBundle> {
-    return this.request<LookupBundle>(
-      this.url(
-        `/v1/by-tmdb/${Number(tmdb)}${this.drill(params.season, params.episode)}`,
-        this.pageQuery(params),
-      ),
-      params.signal,
-    );
+  /**
+   * Look up a title by TMDB id. TMDB numbers films and shows separately, so pass
+   * `type: 'movie'` or `type: 'tv'`. `season`/`episode` narrow a show and always use
+   * the `tv` path; a film ignores them.
+   */
+  async byTmdb(tmdb: string | number, params: TmdbParams = {}): Promise<LookupBundle> {
+    const id = Number(tmdb);
+    const type =
+      params.type ??
+      (params.season !== undefined || params.episode !== undefined ? 'tv' : undefined);
+    const drill = type === 'movie' ? '' : this.drill(params.season, params.episode);
+    const query = this.pageQuery(params);
+    if (!type)
+      return this.request<LookupBundle>(
+        this.url(`/v1/by-tmdb/${id}${drill}`, query),
+        params.signal,
+      );
+    try {
+      return await this.request<LookupBundle>(
+        this.url(`/v1/by-tmdb/${type}/${id}${drill}`, query),
+        params.signal,
+      );
+    } catch (err) {
+      // An API without the typed paths answers "no route": ask the untyped path with
+      // ?type= instead. Remove once the typed paths are live.
+      if (!noRoute(err)) throw err;
+      return this.request<LookupBundle>(
+        this.url(`/v1/by-tmdb/${id}${drill}`, { type, ...query }),
+        params.signal,
+      );
+    }
   }
 
   /**
@@ -472,26 +493,23 @@ export class SubtitleDbClient {
   /**
    * Fetch the subtitle bytes as text.
    *
-   * Follows download_url as the API returned it, only adding the `antispam_id` the
-   * loader threads through so the download can be tied to the search that preceded it.
-   * The files host is documented as changeable and the /get/ redirect exists precisely
-   * so that stays true, so building a files-host URL here would be a bug with a long
-   * fuse. It has already moved once: /d/ and /dl/ were removed and /get/:id is the only
-   * byte path.
+   * Follows download_url as the API returned it, adding only the client name and the
+   * antispam id. download_url redirects to wherever the file is served from, so no
+   * file URL is ever built here.
    *
    * Returns the stored format untouched. Bytes are decoded as UTF-8, which is what the
-   * API sends: its ingest decodes every file to UTF-8 before storing it, and a row's
-   * `encoding` is the charset the file arrived in, not the one sent. `encoding` here is
-   * for a deployment that sends something else.
+   * API sends; a row's `encoding` is the charset the file was uploaded in. Pass
+   * `encoding` for a deployment that sends something else.
    *
    * Only the API's own hosts are read from: a download_url pointing anywhere else is
-   * refused before it is fetched, since the key would go with the request. A web page
-   * or an empty body is refused too: a captive portal answers 200 as well, and handed
-   * to a player as a subtitle it shows an empty track while everything says it worked.
+   * refused before it is fetched, since the key would go with the request, and so is
+   * an http download_url when a key is set. A web page or an empty body is refused
+   * too: a captive portal also answers 200.
    *
-   * A refused download carries the API's own code: `bad_key` for a key that is wrong
-   * or revoked, `key_required` where one is needed, `rate_limited` past the hourly
-   * allowance. Anything else that is not a subtitle is `download_failed`.
+   * A refused download carries the API's own code and message: `bad_request`,
+   * `bad_key` for a key that is wrong or revoked, `key_required` where one is needed,
+   * `rate_limited` past the hourly allowance. Anything else that is not a subtitle is
+   * `download_failed`.
    */
   async fetchSubtitleText(
     sub: Pick<BundleSubtitle, 'download_url' | 'format'>,
@@ -508,6 +526,13 @@ export class SubtitleDbClient {
         url,
       });
     }
+    if (this.key && plainHttp(url)) {
+      throw new SubtitleDbError({
+        message: 'download_url is http; a key is only sent over https',
+        code: 'bad_request',
+        url,
+      });
+    }
     const signal = joinSignals(AbortSignal.timeout(this.timeoutMs), opts.signal);
     let res: Response;
     try {
@@ -519,9 +544,9 @@ export class SubtitleDbClient {
     }
     if (!res.ok) {
       // The API says why it refused a download in the same body shape as a lookup:
-      // {"error":"bad_key"} on 401, key_required on 403, rate_limited on 429.
+      // bad_request on 400, bad_key on 401, key_required on 403, rate_limited on 429.
       let body: Partial<ApiErrorBody> | undefined;
-      if (res.status === 401 || res.status === 403 || res.status === 429) {
+      if ([400, 401, 403, 429].includes(res.status)) {
         try {
           body = (await res.json()) as Partial<ApiErrorBody>;
         } catch {
@@ -581,6 +606,20 @@ function ours(raw: string, apiBase: string): boolean {
   if (host === base) return true;
   const root = base.split('.').slice(-2).join('.');
   return host === root || host.endsWith(`.${root}`);
+}
+
+/** A 404 for a path the API has no route for, as opposed to an id it has no title for. */
+function noRoute(err: unknown): boolean {
+  return err instanceof SubtitleDbError && err.status === 404 && err.message.startsWith('no route');
+}
+
+/** True for an http: URL. */
+function plainHttp(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 /** The hostname of a URL, or '' for anything that does not parse as one. */

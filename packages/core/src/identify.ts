@@ -1,4 +1,5 @@
 import { basename, parseFilename } from './filename.js';
+import type { TmdbType } from './types.js';
 
 /**
  * What we believe we are watching. Every field is optional because the whole point
@@ -8,6 +9,12 @@ import { basename, parseFilename } from './filename.js';
 export interface MediaHint {
   imdbId?: string | undefined;
   tmdbId?: number | undefined;
+  /**
+   * Whether `tmdbId` is a film's or a show's. TMDB numbers the two apart, so the same
+   * id can be both. Unset, a hint with a season or episode is taken as `tv`, and
+   * any other is looked up on the untyped path, which prefers the film.
+   */
+  tmdbType?: TmdbType | undefined;
   /** For TV, the id of the series rather than the episode, when that is what we hold. */
   seriesImdbId?: string | undefined;
   title?: string | undefined;
@@ -54,6 +61,8 @@ function fromDataset(el: Element | null | undefined): MediaHint {
   if (imdb && IMDB_RE.test(imdb)) hint.imdbId = IMDB_RE.exec(imdb)?.[1];
   const tmdb = num(d.tmdbId ?? d.tmdb);
   if (tmdb !== undefined) hint.tmdbId = tmdb;
+  const tmdbType = d.tmdbType?.trim().toLowerCase();
+  if (tmdbType === 'movie' || tmdbType === 'tv') hint.tmdbType = tmdbType;
   if (d.title) hint.title = d.title;
   const year = num(d.year);
   if (year !== undefined) hint.year = year;
@@ -255,5 +264,7 @@ export function elementIdentity(el: unknown): IdentifyOptions {
 
 /** True when the hint carries enough to attempt any lookup at all. */
 export function isResolvable(hint: MediaHint): boolean {
-  return Boolean(hint.imdbId || hint.tmdbId || (hint.title && hint.title.length > 1));
+  return Boolean(
+    hint.imdbId || hint.tmdbId || hint.seriesImdbId || (hint.title && hint.title.length > 1),
+  );
 }

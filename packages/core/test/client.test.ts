@@ -323,6 +323,7 @@ describe('SubtitleDbClient', () => {
 
   it('surfaces the API code and message when a download is refused', async () => {
     const cases: [number, string, string][] = [
+      [400, 'bad_request', 'subtitle id must be a positive integer'],
       [401, 'bad_key', 'key not recognised'],
       [403, 'key_required', 'this download needs a key'],
       [429, 'rate_limited', 'slow down'],
@@ -402,6 +403,42 @@ describe('SubtitleDbClient', () => {
   });
 });
 
+describe('a key never goes over plain http', () => {
+  it('refuses an http download_url when a key is set, before fetching it', async () => {
+    const { fetch, calls } = stubFetch([{ match: /./, text: '1\nhi\n' }]);
+    const err = await createClient({ key: 'k', fetch })
+      .fetchSubtitleText({ download_url: 'http://api.thesubtitledb.org/get/1', format: 'srt' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbError);
+    expect(err).toMatchObject({ code: 'bad_request', status: 0 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an http apiBase when a key is set, localhost included', () => {
+    for (const apiBase of ['http://api.thesubtitledb.org', 'http://localhost:8787']) {
+      let err: unknown;
+      try {
+        createClient({ key: 'k', apiBase });
+      } catch (e) {
+        err = e;
+      }
+      expect(err, apiBase).toBeInstanceOf(SubtitleDbError);
+      expect(err, apiBase).toMatchObject({ code: 'bad_request' });
+    }
+  });
+
+  it('still allows a keyless http apiBase, such as a local test server', async () => {
+    const { fetch, calls } = stubFetch([
+      { match: /by-imdb/, body: movieBundle([]) },
+      { match: /get/, text: '1\n00:00:01,000 --> 00:00:02,000\nhi\n' },
+    ]);
+    const c = createClient({ apiBase: 'http://localhost:8787', fetch });
+    await c.byImdb('tt0133093');
+    await c.fetchSubtitleText({ download_url: 'http://localhost:8787/get/1', format: 'srt' });
+    expect(calls).toHaveLength(2);
+  });
+});
+
 describe('SubtitleDbClient lookup verbs', () => {
   it('builds every lookup URL against the /v1 surface the deployed API serves', async () => {
     // Full URLs, not pathnames: the same base-vs-path trap that once put /api back in
@@ -462,10 +499,11 @@ describe('SubtitleDbClient lookup verbs', () => {
     // An episode with no season is not a valid slug, so it is dropped, not smuggled in.
     await c.byTmdb(1396, { episode: 3 });
 
+    // Any season or episode means a show, so the drill takes the tv path.
     expect(calls.map((x) => new URL(x.url).pathname)).toEqual([
-      '/v1/by-tmdb/1396/season/2',
-      '/v1/by-tmdb/1396/season/1/episode/3',
-      '/v1/by-tmdb/1396',
+      '/v1/by-tmdb/tv/1396/season/2',
+      '/v1/by-tmdb/tv/1396/season/1/episode/3',
+      '/v1/by-tmdb/tv/1396',
     ]);
   });
 
@@ -495,12 +533,75 @@ describe('SubtitleDbClient lookup verbs', () => {
     const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
     const c = new SubtitleDbClient({ fetch });
 
-    await c.byImdb('tt0133093', { lang: 'en', format: 'srt', sort: 'downloads' });
+    await c.byImdb('tt0133093', { lang: 'en', format: 'srt', sort: 'newest' });
 
     const url = new URL(calls[0]?.url ?? '');
     expect(url.searchParams.get('lang')).toBe('en');
     expect(url.searchParams.get('format')).toBe('srt');
-    expect(url.searchParams.get('sort')).toBe('downloads');
+    expect(url.searchParams.get('sort')).toBe('newest');
+  });
+
+  it('takes the typed TMDB path, tv for a season, and the untyped one with no type', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-tmdb/, body: movieBundle([]) }]);
+    const c = new SubtitleDbClient({ fetch });
+    await c.byTmdb(1396, { type: 'tv' });
+    await c.byTmdb(603, { type: 'movie' });
+    await c.byTmdb(1396, { season: 2, episode: 3 });
+    await c.byTmdb(1396, { type: 'tv', season: 2 });
+    await c.byTmdb(603, { type: 'movie', season: 1 });
+    await c.byTmdb(603);
+
+    expect(calls.map((x) => new URL(x.url).pathname)).toEqual([
+      '/v1/by-tmdb/tv/1396',
+      '/v1/by-tmdb/movie/603',
+      '/v1/by-tmdb/tv/1396/season/2/episode/3',
+      '/v1/by-tmdb/tv/1396/season/2',
+      '/v1/by-tmdb/movie/603',
+      '/v1/by-tmdb/603',
+    ]);
+    expect(calls.some((x) => new URL(x.url).searchParams.has('type'))).toBe(false);
+  });
+
+  it('falls back to the untyped path with ?type= while the API has no typed route', async () => {
+    const noRoute = { error: 'not_found', message: 'no route for GET /v1/by-tmdb/tv/1396' };
+    const { fetch, calls } = stubFetch([
+      { match: /by-tmdb\/(tv|movie)\//, status: 404, body: noRoute },
+      { match: /by-tmdb\/\d+/, body: movieBundle([]) },
+    ]);
+    const c = new SubtitleDbClient({ fetch });
+    await c.byTmdb(1396, { season: 2, episode: 3 });
+    await c.byTmdb(603, { type: 'movie' });
+
+    expect(calls.map((x) => new URL(x.url).pathname + new URL(x.url).search)).toEqual([
+      '/v1/by-tmdb/tv/1396/season/2/episode/3',
+      '/v1/by-tmdb/1396/season/2/episode/3?type=tv',
+      '/v1/by-tmdb/movie/603',
+      '/v1/by-tmdb/603?type=movie',
+    ]);
+  });
+
+  it('does not fall back when the typed path finds no title', async () => {
+    const { fetch, calls } = stubFetch([
+      {
+        match: /by-tmdb/,
+        status: 404,
+        body: { error: 'not_found', message: 'no title mapped to tmdb id 9' },
+      },
+    ]);
+    const err = await new SubtitleDbClient({ fetch }).byTmdb(9, { type: 'tv' }).catch((e) => e);
+    expect(err).toMatchObject({ status: 404, code: 'not_found' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('passes the API message on a 400 through unchanged', async () => {
+    const message = 'lang takes ISO 639 codes, e.g. lang=en or lang=en,fr';
+    const { fetch } = stubFetch([
+      { match: /by-imdb/, status: 400, body: { error: 'bad_request', message } },
+    ]);
+    const err = await new SubtitleDbClient({ fetch })
+      .byImdb('tt0133093', { lang: 'en,fr,de,es,it,pt,nl,sv,no,da,fi,pl,cs,hu,ro,el,tr' })
+      .catch((e) => e);
+    expect(err).toMatchObject({ status: 400, code: 'bad_request', message });
   });
 
   it('maps language tags to corpus codes on every lookup, deduplicated, as one comma list', async () => {

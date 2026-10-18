@@ -25,7 +25,7 @@ from dataclasses import dataclass
 DEFAULT_API_BASE = "https://api.thesubtitledb.org"
 
 #: This library's version, which Bazarr ships as its own. pyproject.toml carries it too.
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 
 RETRY_BASE_S = 0.3
 MAX_BACKOFF_S = 8.0
@@ -181,8 +181,23 @@ class Client:
     # passes the numbers. lang takes up to 16 comma separated codes; lang and format
     # are both ignored on a series or season bundle, so drill when a filter must hold.
 
-    def by_tmdb(self, tmdb: int, season=None, episode=None, **params) -> dict:
-        return self._get("/v1/by-tmdb/%d%s" % (int(tmdb), _drill(season, episode)), params)
+    def by_tmdb(self, tmdb: int, season=None, episode=None, media_type=None, **params) -> dict:
+        # TMDB numbers films and shows apart, so one id can be both. ``media_type``
+        # ("movie" or "tv") picks the typed path; a season or episode means "tv". With
+        # neither, the untyped path, kept for existing callers, prefers the film.
+        kind = media_type or ("tv" if season is not None or episode is not None else None)
+        drill = "" if kind == "movie" else _drill(season, episode)
+        bare = "/v1/by-tmdb/%d%s" % (int(tmdb), drill)
+        if kind not in ("movie", "tv"):
+            return self._get(bare, params)
+        try:
+            return self._get("/v1/by-tmdb/%s/%d%s" % (kind, int(tmdb), drill), params)
+        except SubtitleDbError as err:
+            # An API without the typed paths answers "no route": ask the untyped path
+            # with ?type= instead. Remove once the typed paths are live.
+            if err.status != 404 or not str(err).startswith("no route"):
+                raise
+        return self._get(bare, dict(params, type=kind))
 
     def by_imdb(self, imdb: str | int, season=None, episode=None, **params) -> dict:
         return self._get("/v1/by-imdb/%s%s" % (_imdb(imdb), _drill(season, episode)), params)

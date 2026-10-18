@@ -52,6 +52,7 @@ namespace SubtitleDb.Emby.Tests
 
             Assert.Equal("tt17009710", hint.ImdbId);
             Assert.Equal(915935, hint.TmdbId);
+            Assert.Equal("movie", hint.TmdbType);
             Assert.Equal("Anatomy of a Fall", hint.Title);
             Assert.Equal("Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL", hint.Release);
         }

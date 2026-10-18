@@ -175,6 +175,37 @@ describe('parseFilename', () => {
     expect(untagged.tags).toEqual(['dd51', 'h265', '10bit', 'hevc', 'x265']);
   });
 
+  it('reads season packs and ranges, and keeps them out of the title', () => {
+    const cases: [string, number, number[] | undefined][] = [
+      ['Friends.S01-S10.COMPLETE.1080p.BluRay.x264-GROUP.mkv', 1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]],
+      ['Friends.S01-S03.720p', 1, [1, 2, 3]],
+      ['Friends S01-03 720p', 1, [1, 2, 3]],
+      ['Friends Season 1-3 1080p', 1, [1, 2, 3]],
+      ['Friends.Seasons.2.to.4.1080p', 2, [2, 3, 4]],
+      ['Friends.S02.1080p.BluRay-GROUP', 2, undefined],
+      ['Friends Season 4 720p', 4, undefined],
+    ];
+    for (const [name, season, seasons] of cases) {
+      const got = parseFilename(name);
+      expect(got.title, name).toBe('Friends');
+      expect(got.season, name).toBe(season);
+      expect(got.seasons, name).toEqual(seasons);
+      expect(got.episode, name).toBeNull();
+    }
+  });
+
+  it('stops the title at Complete Series', () => {
+    for (const name of [
+      'Friends.Complete.Series.1080p.BluRay',
+      'Friends.The.Complete.Series.1080p',
+      'Friends (1994) Complete Series',
+    ]) {
+      const got = parseFilename(name);
+      expect(got.title, name).toBe('Friends');
+      expect(got.season, name).toBeNull();
+    }
+  });
+
   it('reads a trailing [YTS.MX] as the group', () => {
     for (const name of [
       'Movie.Name.2020.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4',

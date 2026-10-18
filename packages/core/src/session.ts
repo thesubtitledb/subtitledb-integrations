@@ -39,8 +39,8 @@ export interface SessionOptions {
   formats: string[];
 
   /**
-   * Convert on the client, so a player that only speaks WebVTT can still reach the
-   * corpus. WebVTT is 0.036% of what we hold; srt, ass and ssa together are 94%.
+   * Convert on the client, so a player that only speaks WebVTT can still show the
+   * SRT and ASS files that make up almost every subtitle.
    *
    * Conversion happens in load(), never in resolve(), so it costs nothing until a
    * track is chosen, and the API keeps serving exactly what is stored. Setting this
@@ -120,6 +120,7 @@ function hintKey(hint: MediaHint, langs: string[] | undefined): string {
   return JSON.stringify([
     hint.imdbId ?? '',
     hint.tmdbId ?? '',
+    hint.tmdbType ?? '',
     hint.seriesImdbId ?? '',
     hint.title ?? '',
     hint.year ?? '',

@@ -61,6 +61,13 @@ describe('identify precedence', () => {
     expect(hint.source).toBe('dataset');
   });
 
+  it('reads data-tmdb-type beside data-tmdb-id, and ignores any other value', () => {
+    const tv = identify({ element: fakeVideo({ tmdbId: '1396', tmdbType: 'TV' }), doc: null });
+    expect(tv).toMatchObject({ tmdbId: 1396, tmdbType: 'tv' });
+    const junk = identify({ element: fakeVideo({ tmdbId: '1396', tmdbType: 'show' }), doc: null });
+    expect(junk.tmdbType).toBeUndefined();
+  });
+
   it('ignores a data-imdb-id that is not an imdb id', () => {
     const hint = identify({ element: fakeVideo({ imdbId: 'garbage' }), doc: null });
     expect(hint.imdbId).toBeUndefined();
@@ -180,6 +187,7 @@ describe('isResolvable', () => {
     expect(isResolvable({ imdbId: 'tt0133093' })).toBe(true);
     expect(isResolvable({ tmdbId: 603 })).toBe(true);
     expect(isResolvable({ title: 'The Matrix' })).toBe(true);
+    expect(isResolvable({ seriesImdbId: 'tt0903747', season: 2, episode: 3 })).toBe(true);
   });
 
   it('rejects an empty or useless hint', () => {

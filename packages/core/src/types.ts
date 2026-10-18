@@ -1,11 +1,9 @@
 /**
  * Wire types for the SubtitleDB public API.
  *
- * These mirror what api.thesubtitledb.org actually returns, captured from the live
- * service rather than transcribed from docs. Fields the API sends as null for part of
- * the corpus are typed as nullable even where they are conceptually required, because
- * a consumer has to handle today's data: `tmdb_id` and `media_type` are null for a
- * title the IMDb-to-TMDB map has no entry for.
+ * Fields the API sends as null for some titles are typed as nullable even where they
+ * are conceptually required: `tmdb_id` and `media_type` are null for a title with no
+ * TMDB match.
  */
 
 /** ISO639 code as the API emits it: lowercase, occasionally non-standard (pb, ze, zt). */
@@ -15,7 +13,14 @@ export type LanguageCode = string;
 export type TitleKind = 'movie' | 'episode';
 
 export type SearchSort = 'relevance' | 'subtitles' | 'year' | 'name';
-export type SubtitleSort = 'lang' | 'downloads' | 'cues' | 'bytes';
+/**
+ * Order of a subtitle page. `lang`, the default, groups by language with the most cues
+ * first; `cues` puts the most cues first; `newest` the most recently added.
+ */
+export type SubtitleSort = 'lang' | 'cues' | 'newest';
+
+/** TMDB numbers films and shows separately, so a TMDB id needs one of these to be exact. */
+export type TmdbType = 'movie' | 'tv';
 
 /**
  * How much of the TMDB enrichment a lookup bundle's `title` carries. Each tier keeps
@@ -61,7 +66,6 @@ export interface Subtitle {
   hearing_impaired: boolean;
   fps: number | null;
   downloads: number;
-  source_shard: string;
   /** Stable URL on the API host. 302s to the files host, which may change. */
   download_url: string;
 }
@@ -98,7 +102,8 @@ export interface TitleSubtitlesResponse {
 
 export interface HealthResponse {
   ok: boolean;
-  clickhouse: string;
+  /** State of the data store, such as `up`. */
+  store?: string;
   titles: number;
   indexed_subtitles: number;
   tmdb_mappings: number;
@@ -122,26 +127,18 @@ export interface ApiErrorBody {
 /**
  * The lookup surface: one id in, the whole title back.
  *
- * `/v1/by-*` resolves an identifier to a single title and returns one bundle shaped
- * to that title's media type. These types are the second, leaner projection the API
- * emits, captured off the live service the same way the site types above were, and
- * they are deliberately NOT the site types:
+ * `/v1/by-*` resolves an identifier to a single title and returns one bundle:
  *
- *   - A bundle's subtitle item (`BundleSubtitle`) drops the parent-echoing and internal
- *     fields the leaf `Subtitle` still carries -- `imdb`/`title`/`year` live on the
- *     bundle's `title`, and `downloads`/`source_shard`/`added` are gone. It keeps the
- *     ISO `added_at`. The full `Subtitle` is now an /app read only: `/v1/subtitles/:id`
- *     404s since the content mirror moved off /v1, so a bundle item is what /v1 gives
- *     you. The two are different reads and different shapes on purpose.
- *   - A bundle's `title` (`LookupTitle`) is `shapeTitle` with the /v1 field cleanups:
- *     no `imdb_id`/`kind`/`languages`/`subtitles_url`, `language_counts` renamed
- *     `subtitle_languages`, and the TMDB enrichment carried inline. Every enrichment
- *     field is OMITTED when the map has no value for it, never sent as null, so all of
- *     them are optional here -- a consumer must handle the id-only title.
+ *   - A bundle's subtitle item (`BundleSubtitle`) carries no `imdb`, `title` or `year`:
+ *     those are on the bundle's `title`.
+ *   - A bundle's `title` (`LookupTitle`) carries per-language counts as
+ *     `subtitle_languages`, and the TMDB details inline. Each of those is omitted when
+ *     there is no value for it, never sent as null, so all of them are optional here:
+ *     a consumer must handle a title with ids only.
  */
 
 /**
- * One file in a bundle page. Leaner than `Subtitle`: no parent echo, no internals.
+ * One file in a bundle page. Leaner than `Subtitle`: no title fields.
  * `season`, `episode` and `uploader` are not sent by the lookups, where the drilled
  * address already says which episode a file belongs to.
  */
@@ -165,7 +162,7 @@ export interface BundleSubtitle {
   download_url: string;
 }
 
-/** A page of files inside a bundle, newest first. Default `limit` is 20. */
+/** A page of files inside a bundle, in the order `sort` asked for. Default `limit` is 20. */
 export interface SubtitlePage {
   total: number;
   limit: number;
@@ -305,15 +302,11 @@ export interface LookupExtras {
  * `title` and `subtitles` are always present, `seasons` only where there is a tree to
  * return, plus whichever LookupExtras block the verb adds.
  *
- * This was modelled as a four-way union (`MovieBundle | SeriesBundle | SeasonBundle |
- * EpisodeBundle`) narrowed on `'episode' in b` / `'season' in b`. The API never sent
- * those keys. Every consumer fell through to `subtitles` and was right by accident.
- *
  * `subtitles` is always the page for exactly the scope asked for: a movie's files, a
  * drilled episode's own files, or a series' unbucketed files. `seasons` is the tree:
- * present on a series root and a season drill, absent on a movie AND on an episode drill
- * (the API sent it as null there until 2026-09-09). A season drill still returns every
- * season in it, so read `subtitles` and not `seasons[0]` when a slug was used.
+ * present on a series root and a season drill, absent on a movie and on an episode
+ * drill. A season drill still returns every season in it, so read `subtitles` and not
+ * `seasons[0]` when a slug was used.
  */
 export interface LookupBundle extends LookupExtras {
   title: LookupTitle;
