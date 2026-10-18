@@ -1,9 +1,9 @@
 /**
  * The debugger's two ways in: one attached video, or every video on the page.
  *
- * The public names are `SubtitleDB.debug()` and the `debug` option, never
- * `debugger`: that is a reserved word, and a page that destructures the options
- * object would have a syntax error the moment it named it.
+ * The public names are `SubtitleDB.debug()` and the `debug_key` option (`debug`
+ * before 0.9.0, still read), never `debugger`: that is a reserved word, and a page
+ * that destructures the options object would have a syntax error the moment it named it.
  *
  * Everything here is small on purpose, because it sits in the entry every page
  * downloads. The debugger itself is a chunk of its own, fetched only with a key.

@@ -66,7 +66,7 @@ SubtitleDB.attach(player, {
   apiBase: 'https://api.thesubtitledb.org',
   clientName: 'my-site',         // sent as `client` on lookups
   fetch: window.fetch,
-  debug: 'sdbg_...',             // script tag only: the debugger for this video
+  debug_key: 'sdbg_...',         // script tag only: the debugger for this video
   onResolved(result) {},         // after every lookup, also one that found nothing
   onSelected(loaded) {},         // a subtitle was fetched and handed to the player
   onDegraded(info) {},           // a player was found but its captions menu was not

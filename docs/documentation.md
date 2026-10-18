@@ -873,7 +873,7 @@ to no subtitles rather than to a broken player.
 
 ## Playback debugger
 
-The script tag's `debug` option and `SubtitleDB.debug()` report how video plays on
+The script tag's `debug_key` option and `SubtitleDB.debug()` report how video plays on
 your site to the Debugger tab of the developer portal. [cdn.md](cdn.md#playback-debugger)
 covers the key, both calls, every field sent and what is stored in the browser.
 
