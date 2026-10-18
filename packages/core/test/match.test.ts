@@ -221,6 +221,22 @@ describe('findSubtitles ladder', () => {
     expect(r.wrongEpisode).toBe(0);
   });
 
+  it('asks the API for corpus codes, whatever tag the caller passed', async () => {
+    const { client, calls } = clientWith([
+      { match: /by-imdb/, body: movieBundle([bundleSubtitle()]) },
+    ]);
+
+    await findSubtitles({
+      client,
+      hint: { imdbId: 'tt0133093' },
+      languages: ['en-US', 'pt-BR', 'zh-Hant', 'EN'],
+      formats: SRT_ONLY,
+    });
+
+    const asked = calls.map((c) => new URL(c.url).searchParams.get('lang')).sort();
+    expect(asked).toEqual(['en', 'pb', 'zt']);
+  });
+
   it('reports manual when the title does not resolve', async () => {
     const { client } = clientWith([{ match: /by-title/, status: 404, body: {} }]);
 

@@ -1,7 +1,7 @@
 import type { DrillParams, SubtitleDbClient } from './client.js';
 import { SubtitleDbError } from './errors.js';
 import type { MediaHint } from './identify.js';
-import { languageName } from './languages.js';
+import { corpusLanguage, languageName } from './languages.js';
 import type { BundleSubtitle, LookupBundle, LookupTitle } from './types.js';
 
 /**
@@ -324,10 +324,12 @@ export async function fetchBundlePage(
  * which is what keeps eager loading affordable: one cacheable JSON request per player
  * (per language), regardless of how many subtitles come back.
  */
-export async function findSubtitles(opts: MatchOptions): Promise<MatchResult> {
+export async function findSubtitles(input: MatchOptions): Promise<MatchResult> {
+  const codes = [...new Set((input.languages ?? []).map(corpusLanguage).filter(Boolean))];
+  const opts = { ...input, languages: codes };
   const { client, hint, signal } = opts;
   const limit = opts.limit ?? DEFAULT_LIMIT;
-  const langs = opts.languages?.length ? opts.languages : undefined;
+  const langs = codes.length ? codes : undefined;
 
   // The limit holds per language, so the ranked list keeps that many for each.
   const keep = { ...opts, limit: limit * (langs?.length ?? 1) };
