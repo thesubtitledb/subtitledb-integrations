@@ -207,7 +207,7 @@ For one video, pass it to `attach`:
 SubtitleDB.attach(video, {
   hint: { imdbId: 'tt0133093' },
   languages: ['en'],
-  debug: 'sdbg_...',
+  debug_key: 'sdbg_...',
 });
 ```
 
@@ -227,15 +227,16 @@ one instead:
 SubtitleDB.debug('sdbg_...', { hint: { imdbId: 'tt0133093' } });
 ```
 
-The `debug` option also reports what SubtitleDB matched and which subtitle was on, and
+The `debug_key` option also reports what SubtitleDB matched and which subtitle was on, and
 `destroy()` on the handle sends the last report before it lets go of the video.
 `SubtitleDB.debug()` works on a page with no subtitles from us at all, but cannot see
 a video inside a shadow root; pass that one to `attach` instead. A video is watched
 once, however it was passed and however many copies of the script are on the page.
 
-A key of the wrong shape makes `SubtitleDB.debug()` throw a `TypeError`. The `debug`
-option reports it through `onError` and attaches the subtitles anyway. The name is
-`debug` because `debugger` is a reserved word in JavaScript.
+A key of the wrong shape makes `SubtitleDB.debug()` throw a `TypeError`. The
+`debug_key` option reports it through `onError` and attaches the subtitles anyway.
+`debug_key` needs 0.9.0 or later; before that the option was `debug`, which is still
+read. Nothing is named `debugger`, a reserved word in JavaScript.
 
 ### What it sends
 
@@ -262,7 +263,7 @@ empty are left out. `cv`, `qd`, `ql`, the flags 128 and 256 and the `hint` need 
 | `ps` | When the play started, in epoch seconds. |
 | `u` | Visitor id, see [What it stores](#what-it-stores). |
 | `pa` | The page's path and query string, up to 512 characters. |
-| `im`, `tm`, `se`, `ep` | IMDb number, TMDB id, season and episode: what SubtitleDB matched with the `debug` option, or the `hint` given to `SubtitleDB.debug()`. |
+| `im`, `tm`, `se`, `ep` | IMDb number, TMDB id, season and episode: what SubtitleDB matched with the `debug_key` option, or the `hint` given to `SubtitleDB.debug()`. |
 | `du`, `li` | Length in seconds. `li` is 1 for a live stream, which has none: one whose duration is infinite, or grows twice while it plays, which is how hls.js reports a live stream by default. |
 | `st` | Milliseconds from pressing play to the first frame. |
 | `wa` | Milliseconds spent playing: not paused, stalled or seeking. |

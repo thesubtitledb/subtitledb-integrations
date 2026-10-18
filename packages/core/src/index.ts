@@ -5,6 +5,7 @@ export type {
   DrillParams,
   LookupParams,
   RequestOptions,
+  SearchParams,
 } from './client.js';
 export {
   backoffMs,

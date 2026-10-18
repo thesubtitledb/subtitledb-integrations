@@ -231,6 +231,9 @@ jobs:
       - name: Build the packages
         run: npm run build
 
+      - name: Check the npm package
+        run: scripts/npm-publish.sh check
+
       - name: Build the release files
         run: scripts/release.sh build
 
@@ -281,3 +284,8 @@ jobs:
         env:
           TAGS: ${{ steps.plan.outputs.tags }}
         run: scripts/release.sh publish
+
+      # @subtitledb/core is published to npm by hand; CI holds no npm credential.
+      # This step only warns when main carries a version npm does not have yet.
+      - name: Is @subtitledb/core on npm
+        run: scripts/npm-publish.sh status

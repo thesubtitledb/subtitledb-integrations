@@ -74,7 +74,7 @@ async function attachDebugged(page: Page): Promise<void> {
     document.querySelector('main')?.append(v);
     const sdb = (window as never as { SubtitleDB: { attach(t: unknown, o: unknown): unknown } })
       .SubtitleDB;
-    sdb.attach(v, { hint: { imdbId: 'tt0133093' }, languages: ['en'], debug: key });
+    sdb.attach(v, { hint: { imdbId: 'tt0133093' }, languages: ['en'], debug_key: key });
   }, KEY);
   // Watched once the debugger's chunk is in: before that, a play is caught mid-way
   // and its startup is unknown, which is a different test.
@@ -304,7 +304,7 @@ test('an autoplay the browser refuses is reported as a play that never started',
         v.autoplay = true;
         v.src = 'media/sample.webm';
         main.append(v);
-        sdb.attach(v, { hint: { imdbId: 'tt0133093' }, languages: ['en'], debug: key });
+        sdb.attach(v, { hint: { imdbId: 'tt0133093' }, languages: ['en'], debug_key: key });
       }, 50);
     }, KEY);
     const page = await context.newPage();

@@ -59,11 +59,13 @@ function report(options: AttachOptions, message: string): void {
 }
 
 /**
- * The loader's own options on top of the integration's: `debug`, a debugger key
+ * The loader's own options on top of the integration's: `debug_key`, a debugger key
  * that turns the playback debugger on for this one video. Not an AttachOptions
  * field, because only the loader can fetch the chunk behind it.
  */
 export interface LoaderAttachOptions extends AttachOptions {
+  debug_key?: string;
+  /** The name before 0.9.0. Still read; `debug_key` wins when both are given. */
   debug?: string;
 }
 
@@ -74,10 +76,13 @@ export function attach(
 ): DeferredHandle {
   if (incumbent) {
     report(options, mismatch(__SDB_VERSION__, incumbent.version));
-    return incumbent.attach(target, options);
+    // An older loader got there first and knows only `debug`.
+    const key = options.debug_key ?? options.debug;
+    return incumbent.attach(target, key === undefined ? options : { ...options, debug: key });
   }
 
-  const { debug: key, ...rest } = options;
+  const { debug_key, debug, ...rest } = options;
+  const key = debug_key ?? debug;
   // A page may name itself on lookups. A download through the loader is the loader's.
   const opts: AttachOptions = {
     clientName: CLIENT,

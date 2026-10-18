@@ -62,7 +62,7 @@ describe('the debug option', () => {
     const { attach, engine, ANTISPAM_ID, chunk } = await fresh();
     const { setBasePath } = await import('../src/base.js');
     const el = video();
-    const handle = attach(el, { debug: KEY });
+    const handle = attach(el, { debug_key: KEY });
     // Anything asked for from here on comes from a release with no debugger in it, so
     // the debugger has to have been asked for already, beside the engine.
     setBasePath(new URL('./fixtures/no-debug/', import.meta.url).href);
@@ -77,6 +77,20 @@ describe('the debug option', () => {
     });
     // The key is the loader's; the integration never sees it.
     expect(engine.calls[0]?.options).not.toHaveProperty('debug');
+    expect(engine.calls[0]?.options).not.toHaveProperty('debug_key');
+  });
+
+  it('still reads the old debug name, and debug_key wins over it', async () => {
+    const { attach, engine, chunk } = await fresh();
+    await attach(video(), { debug: KEY }).ready;
+    await vi.waitFor(() => expect(chunk.calls).toHaveLength(1));
+    expect(chunk.calls[0]?.key).toBe(KEY);
+    expect(engine.calls[0]?.options).not.toHaveProperty('debug');
+
+    const other = `sdbg_${'b'.repeat(24)}`;
+    await attach(video(), { debug_key: other, debug: KEY }).ready;
+    await vi.waitFor(() => expect(chunk.calls).toHaveLength(2));
+    expect(chunk.calls[1]?.key).toBe(other);
   });
 
   it("hands it what was resolved and selected, even from before it started, and the page's own handlers still run", async () => {
@@ -90,7 +104,7 @@ describe('the debug option', () => {
     };
     const seen: unknown[] = [];
     const handle = attach(video(), {
-      debug: KEY,
+      debug_key: KEY,
       onResolved: (r) => seen.push(r),
       onSelected: (s) => seen.push(s),
     });
@@ -113,7 +127,7 @@ describe('the debug option', () => {
     const broken = await import('./fixtures/broken-debug/debug.mjs');
     const seen: unknown[] = [];
     const handle = attach(video(), {
-      debug: KEY,
+      debug_key: KEY,
       onResolved: (r) => seen.push(r),
       onSelected: (s) => seen.push(s),
     });
@@ -130,7 +144,7 @@ describe('the debug option', () => {
 
   it('destroy sends the final snapshot before the element is taken away', async () => {
     const { attach, engine, chunk } = await fresh();
-    const handle = attach(video(), { debug: KEY });
+    const handle = attach(video(), { debug_key: KEY });
     await handle.ready;
     const d = chunk;
     await vi.waitFor(() => expect(d.calls).toHaveLength(1));
@@ -140,7 +154,7 @@ describe('the debug option', () => {
 
   it('a destroy before the debugger starts means it never does', async () => {
     const { attach, chunk } = await fresh();
-    const handle = attach(video(), { debug: KEY });
+    const handle = attach(video(), { debug_key: KEY });
     handle.destroy();
     await handle.ready;
     await settle();
@@ -154,7 +168,7 @@ describe('the debug option', () => {
     const before = loads();
     const errors: Error[] = [];
     const handle = attach(video(), {
-      debug: `sdb_${'a'.repeat(36)}`,
+      debug_key: `sdb_${'a'.repeat(36)}`,
       onError: (e) => errors.push(e),
     });
     await handle.ready;
@@ -167,7 +181,7 @@ describe('the debug option', () => {
   it('a debugger chunk that will not load is reported, and subtitles attach without it', async () => {
     const { attach, engine } = await fresh(new URL('./fixtures/no-debug/', import.meta.url).href);
     const errors: Error[] = [];
-    const handle = attach(video(), { debug: KEY, onError: (e) => errors.push(e) });
+    const handle = attach(video(), { debug_key: KEY, onError: (e) => errors.push(e) });
     await expect(handle.ready).resolves.toBeTruthy();
     await vi.waitFor(() => expect(errors).toHaveLength(1));
     expect(errors[0]?.message).toMatch(/could not start the debugger/);

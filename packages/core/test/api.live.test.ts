@@ -106,15 +106,15 @@ describe('live API contract', () => {
   it('takes a comma separated lang list on a leaf', async () => {
     // lang used to be one code and a list was silently dropped. It now takes up to 16,
     // which is why the fan-out in match.ts is a cost we choose rather than one we owe.
-    const b = await client.byImdb(SERIES_IMDB, {
-      season: 1,
-      episode: 1,
-      lang: 'en,fr',
-      limit: 100,
-    });
-    const langs = new Set(scopePage(b).items.map((s) => s.language));
-    expect(langs.has('en')).toBe(true);
-    expect(langs.has('fr')).toBe(true);
+    // Totals, not the first page: English alone fills a page of 100 on this episode.
+    const leaf = { season: 1, episode: 1, limit: 100 };
+    const [both, en, fr] = await Promise.all(
+      ['en,fr', 'en', 'fr'].map((lang) => client.byImdb(SERIES_IMDB, { ...leaf, lang })),
+    );
+    expect(scopePage(en).total).toBeGreaterThan(0);
+    expect(scopePage(fr).total).toBeGreaterThan(0);
+    expect(scopePage(both).total).toBe(scopePage(en).total + scopePage(fr).total);
+    const langs = new Set(scopePage(both).items.map((s) => s.language));
     expect([...langs].every((l) => l === 'en' || l === 'fr')).toBe(true);
   });
 
