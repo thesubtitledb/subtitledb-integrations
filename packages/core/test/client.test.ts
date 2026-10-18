@@ -435,3 +435,59 @@ describe('SubtitleDbClient lookup verbs', () => {
     expect(bundle.title.imdb).toBe('tt0133093');
   });
 });
+
+describe('SubtitleDbClient with a key', () => {
+  const header = (init?: RequestInit): string | undefined =>
+    (init?.headers as Record<string, string> | undefined)?.authorization;
+
+  it('sends no key header without a key, so a keyless call needs no preflight', async () => {
+    const { fetch, calls } = stubFetch([
+      { match: /\/v1\//, body: movieBundle([]) },
+      { match: /files\.example\.test/, text: '1\nhi\n' },
+    ]);
+    const c = new SubtitleDbClient({ fetch });
+    await c.byImdb('tt0133093');
+    await c.fetchSubtitleText({ download_url: 'https://files.example.test/get/9', format: 'srt' });
+
+    for (const call of calls) expect(header(call.init), call.url).toBeUndefined();
+  });
+
+  it('sends the key as a Bearer header on lookups and downloads, never in the URL', async () => {
+    const { fetch, calls } = stubFetch([
+      { match: /\/v1\//, body: movieBundle([]) },
+      { match: /files\.example\.test/, text: '1\nhi\n' },
+    ]);
+    const c = new SubtitleDbClient({ fetch, key: ' sdb_test ' });
+    await c.byTmdb(603);
+    await c.fetchSubtitleText({ download_url: 'https://files.example.test/get/9', format: 'srt' });
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(header(call.init), call.url).toBe('Bearer sdb_test');
+      expect(call.url).not.toContain('sdb_test');
+    }
+  });
+
+  it('refuses search without a key before any request', async () => {
+    const { fetch, calls } = stubFetch([]);
+    const c = new SubtitleDbClient({ fetch });
+    await expect(c.search('matrix')).rejects.toMatchObject({ code: 'key_required', status: 401 });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('searches by-search with the query and filters', async () => {
+    const body = { query: {}, total: 0, subtitle_total: 0, limit: 5, offset: 0, results: [] };
+    const { fetch, calls } = stubFetch([{ match: /\/v1\/by-search/, body }]);
+    const c = new SubtitleDbClient({ fetch, key: 'sdb_test' });
+    const got = await c.search('the matrix', { lang: 'en', year: 1999, limit: 5 });
+
+    expect(got).toEqual(body);
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.pathname).toBe('/v1/by-search');
+    expect(url.searchParams.get('q')).toBe('the matrix');
+    expect(url.searchParams.get('lang')).toBe('en');
+    expect(url.searchParams.get('year')).toBe('1999');
+    expect(url.searchParams.get('limit')).toBe('5');
+    expect(header(calls[0]?.init)).toBe('Bearer sdb_test');
+  });
+});

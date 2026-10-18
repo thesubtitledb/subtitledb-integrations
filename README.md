@@ -120,10 +120,14 @@ attach({ player, videoElement }); // shaka-player-react
 
 ## Packages
 
-The script tag is built from these packages. They are not on npm, so build them from
-this repo.
+The script tag is built from these packages. `@subtitledb/core` is on npm; build the
+rest from this repo.
 
 ### @subtitledb/core
+
+```bash
+npm i @subtitledb/core
+```
 
 ```js
 import { createClient } from '@subtitledb/core';
@@ -140,7 +144,14 @@ await sdb.fetchSubtitleText(subtitle);         // { text, format }, as stored
 sdb.downloadUrl(subtitle);                     // the address fetchSubtitleText reads
 await sdb.health();
 sdb.posterUrl('/abc.jpg', 'w780');
+
+// Needs a key from thesubtitledb.org/account/keys
+const keyed = createClient({ key: process.env.SUBTITLEDB_KEY });
+await keyed.search('the matrix', { lang: 'en' });
 ```
+
+Every call works without a key. A key, sent as a Bearer header, raises the download
+limit and is what `search` needs; keep it on a server.
 
 A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTitle`,
 `byReleasename`, `bySubid` and `byInfohash` also say what they matched, in `match`,
@@ -148,7 +159,7 @@ A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTit
 `format`, `sort` (`lang`, `downloads`, `cues` or `bytes`), `limit` (up to 100),
 `offset`, `response_class` (`minimal`, `standard`, `detailed` or `full`) and `signal`,
 and all but `bySubid` take `season` and `episode`. Client options are `apiBase`,
-`client`, `downloadClient`, `antispamId`, `timeoutMs` (10000), `retries` (2) and
+`client`, `downloadClient`, `antispamId`, `key`, `timeoutMs` (10000), `retries` (2) and
 `fetch`.
 
 A failed request throws `SubtitleDbError` with `status` and `code`, and an aborted

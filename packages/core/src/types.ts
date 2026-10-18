@@ -76,12 +76,19 @@ export interface SearchResponse {
     lang: LanguageCode | null;
     type: TitleKind | null;
     year: number | null;
+    year_from: number | null;
+    year_to: number | null;
     sort: SearchSort;
+    dir: 'asc' | 'desc' | null;
   };
+  /** Titles matched. */
   total: number;
+  /** Subtitle files across those titles. */
+  subtitle_total: number;
   limit: number;
   offset: number;
-  results: Title[];
+  /** Each title carries the id of its newest file, for bySubid(). */
+  results: (Title & { subtitle_id: number | null })[];
 }
 
 export interface TitleSubtitlesResponse {

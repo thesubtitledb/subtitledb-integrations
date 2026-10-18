@@ -6,7 +6,10 @@ import type {
   LanguageCode,
   LookupBundle,
   ResponseClass,
+  SearchResponse,
+  SearchSort,
   SubtitleSort,
+  TitleKind,
 } from './types.js';
 
 /**
@@ -60,6 +63,12 @@ export interface ClientOptions {
    * is not read.
    */
   antispamId?: string;
+  /**
+   * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
+   * works without one. A key raises the download limit and is required by search().
+   * Sent as a Bearer header, so keep it server-side: a key in page code is public.
+   */
+  key?: string;
 }
 
 export interface RequestOptions {
@@ -100,6 +109,20 @@ export interface LookupParams extends RequestOptions {
  * `season`/`episode` are ignored when the resolved title is a movie -- except that
  * the API answers 400 for a movie asked for a season, matching the site's slugs.
  */
+/** Filters and paging for search(). */
+export interface SearchParams extends RequestOptions {
+  /** One ISO code, or up to 16 comma separated: titles with subtitles in that language. */
+  lang?: LanguageCode;
+  type?: TitleKind;
+  year?: number;
+  year_from?: number;
+  year_to?: number;
+  sort?: SearchSort;
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
 export interface DrillParams extends LookupParams {
   season?: number;
   episode?: number;
@@ -155,6 +178,7 @@ export class SubtitleDbClient {
   private readonly client: string | undefined;
   private readonly downloadClient: string | undefined;
   private readonly antispamId: string | undefined;
+  private readonly key: string | undefined;
 
   constructor(opts: ClientOptions = {}) {
     this.apiBase = (opts.apiBase ?? DEFAULT_API_BASE).replace(/\/+$/, '');
@@ -174,6 +198,12 @@ export class SubtitleDbClient {
     this.client = opts.client;
     this.downloadClient = opts.downloadClient ?? opts.client;
     this.antispamId = opts.antispamId;
+    this.key = opts.key?.trim() || undefined;
+  }
+
+  /** The key header, when there is a key. None otherwise, so a keyless call needs no preflight. */
+  private auth(): Record<string, string> {
+    return this.key ? { authorization: `Bearer ${this.key}` } : {};
   }
 
   private url(path: string, params: Record<string, string | number | undefined> = {}): string {
@@ -197,7 +227,7 @@ export class SubtitleDbClient {
         const doFetch = this.doFetch;
         res = await doFetch(url, {
           method: 'GET',
-          headers: { accept: 'application/json' },
+          headers: { accept: 'application/json', ...this.auth() },
           signal: joinSignals(AbortSignal.timeout(this.timeoutMs), signal),
         });
       } catch (cause) {
@@ -250,8 +280,8 @@ export class SubtitleDbClient {
    * bundle shape, because media servers identify content by IMDb id. `lang`/`format`/
    * `sort` narrow and order the subtitle bucket the same way on every verb.
    *
-   * `by-search` is intentionally absent: it needs a key, and this client carries no
-   * credential. Resolve free text with byTitle(), which needs none.
+   * search() is the one verb that needs a key. Without one, resolve free text with
+   * byTitle(), which returns the single closest title.
    */
 
   /** The `/season/:s[/episode/:e]` suffix, or '' when no season was asked for. */
@@ -348,6 +378,25 @@ export class SubtitleDbClient {
   }
 
   /**
+   * Search titles by free text: a ranked, paged list, each title with the id of its
+   * newest subtitle. Needs a key (`createClient({ key })`); without one it throws
+   * before any request, since the API would only answer 401.
+   */
+  search(q: string, params: SearchParams = {}): Promise<SearchResponse> {
+    if (!this.key) {
+      return Promise.reject(
+        new SubtitleDbError({
+          message: 'search needs an API key: createClient({ key })',
+          status: 401,
+          code: 'key_required',
+        }),
+      );
+    }
+    const { signal, ...query } = params;
+    return this.request<SearchResponse>(this.url('/v1/by-search', { q, ...query }), signal);
+  }
+
+  /**
    * Look up the title a single subtitle belongs to, by the subtitle id. The bundle is
    * scoped to where that file sits -- a movie file returns the movie, a TV file its
    * episode (or season pack) -- and carries a `subtitle` block with the file itself.
@@ -417,7 +466,7 @@ export class SubtitleDbClient {
     let res: Response;
     try {
       const doFetch = this.doFetch;
-      res = await doFetch(url, { method: 'GET', signal });
+      res = await doFetch(url, { method: 'GET', headers: this.auth(), signal });
     } catch (cause) {
       if (opts.signal?.aborted) throw new SubtitleDbAbort();
       throw new SubtitleDbError({

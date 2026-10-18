@@ -40,7 +40,8 @@ If the page has no build step, there is nothing to install: one script tag from
 `cdn.thesubtitledb.org` does the whole thing, and [cdn.md](cdn.md) is the shorter
 guide. Everything below is for a page that does have one.
 
-Nothing here is on npm yet. Until it is, use the built files.
+`@subtitledb/core`, the API client, is on npm as `npm i @subtitledb/core`. The player
+bindings are not on npm yet. Until they are, use the built files.
 
 ```bash
 git clone https://github.com/thesubtitledb/subtitledb-integrations

@@ -1,8 +1,8 @@
 {
   "name": "@subtitledb/core",
-  "version": "0.4.0",
-  "description": "Dependency-free client and matching core for the SubtitleDB API. Runs in browsers and Node.",
-  "license": "UNLICENSED",
+  "version": "0.5.0",
+  "description": "Client for The Subtitle Database, a free subtitle API for films and series. No key needed. Lookups, matching, downloads and WebVTT conversion, with no dependencies. Runs in browsers and Node 20 or newer.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,9 +14,39 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=20.3"
+  },
+  "keywords": [
+    "subtitles",
+    "subtitle",
+    "srt",
+    "vtt",
+    "webvtt",
+    "ass",
+    "imdb",
+    "tmdb",
+    "api",
+    "captions"
+  ],
+  "homepage": "https://thesubtitledb.org/developer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thesubtitledb/subtitledb-integrations.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/thesubtitledb/subtitledb-integrations/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "typecheck": "tsc -b tsconfig.json --force"
