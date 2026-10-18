@@ -1,11 +1,19 @@
 import type { ApiErrorBody } from './types.js';
 
 /**
- * Every failure this library raises. `status` is 0 when no answer was read, and
- * `code` says why: `transport_error` (the request failed, the common case in a
- * browser, where a refused cross-origin request is an opaque network error),
- * `timeout` (no answer within `timeoutMs`), or `bad_request` (the input was
- * refused before anything was sent). Nothing here may depend on reading an error body.
+ * Every failure this library raises.
+ *
+ * `status` is the HTTP status when the API answered, and `code` is then the `error`
+ * field of its body: `not_found`, `bad_request`, `bad_key` (the key is wrong or
+ * revoked), `key_required`, `rate_limited`. A download that answered something other
+ * than a subtitle is `download_failed`.
+ *
+ * `status` is 0 when no answer was read, and `code` says why: `transport_error` (the
+ * request failed, the common case in a browser, where a refused cross-origin request
+ * is an opaque network error), `timeout` (no answer within `timeoutMs`), `bad_request`
+ * (the input was refused before anything was sent), `key_required` (search() without
+ * a key) or `budget_exhausted` (a session's `maxRequests`). Nothing here may depend on
+ * reading an error body.
  */
 export class SubtitleDbError extends Error {
   readonly status: number;
@@ -15,10 +23,10 @@ export class SubtitleDbError extends Error {
 
   constructor(opts: {
     message: string;
-    status?: number;
-    code?: string;
-    hint?: string;
-    url?: string;
+    status?: number | undefined;
+    code?: string | undefined;
+    hint?: string | undefined;
+    url?: string | undefined;
     cause?: unknown;
   }) {
     super(opts.message, opts.cause === undefined ? undefined : { cause: opts.cause });

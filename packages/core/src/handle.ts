@@ -16,7 +16,7 @@ export interface PlayerInfo {
   label: string;
   /** True when the binding is written to a published API we cannot exercise here. */
   untested: boolean;
-  /** Which resolution step answered. See resolvePlayer() in @subtitledb/players. */
+  /** Which resolution step answered. See resolvePlayer() in the players package. */
   via: PlayerVia;
 }
 

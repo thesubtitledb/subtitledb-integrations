@@ -16,17 +16,19 @@ import {
 
 export interface SessionOptions {
   /** Supply a client, or let the session build one from apiBase. */
-  client?: SubtitleDbClient;
-  apiBase?: string;
-  clientName?: string;
+  client?: SubtitleDbClient | undefined;
+  apiBase?: string | undefined;
+  clientName?: string | undefined;
   /** The name a download is recorded under; see ClientOptions.downloadClient. */
-  downloadClient?: string;
+  downloadClient?: string | undefined;
   fetch?: ClientOptions['fetch'];
   /**
    * A per-page-load correlation id, forwarded to the client as `antispam_id` on every
    * request and on the download. Set by the loader; see ClientOptions.antispamId.
    */
-  antispamId?: string;
+  antispamId?: string | undefined;
+  /** An API key, forwarded to the client; see ClientOptions.key. */
+  key?: string | undefined;
 
   /**
    * Formats the host player can render itself. Required, and deliberately so: an
@@ -44,11 +46,11 @@ export interface SessionOptions {
    * track is chosen, and the API keeps serving exactly what is stored. Setting this
    * widens the candidate filter to every convertible format on top of `formats`.
    */
-  convertTo?: 'vtt';
+  convertTo?: 'vtt' | undefined;
 
   /** Preference order for languages, best first. */
-  languages?: string[];
-  hearingImpaired?: boolean;
+  languages?: string[] | undefined;
+  hearingImpaired?: boolean | undefined;
 
   /**
    * When set, the session fetches one subtitle immediately after resolving. Left off
@@ -63,7 +65,7 @@ export interface SessionOptions {
    *               corpus 'en', which stores no region). Pinning means that language or
    *               nothing, so there is no fallback.
    */
-  autoSelect?: boolean | string;
+  autoSelect?: boolean | string | undefined;
 
   /**
    * Opt-in, on-device speech-to-text for a title the corpus has nothing for. Off by
@@ -72,28 +74,28 @@ export interface SessionOptions {
    * picker and nothing downloads until a viewer selects it. Only offered when a
    * {@link transcriber} is also wired, so a row that cannot run is never shown.
    */
-  transcribe?: boolean | TranscribeOptions;
+  transcribe?: boolean | TranscribeOptions | undefined;
 
   /**
    * The engine behind {@link transcribe}, injected so core stays free of it. The CDN
-   * loader wires this to a lazily loaded `@subtitledb/transcribe`; a page bundling the
-   * packages passes one built from that package. Not part of the declarative surface:
-   * `transcribe` decides whether to offer, this decides what actually runs.
+   * loader wires one in lazily; a page bundling its own engine passes one here. Not
+   * part of the declarative surface: `transcribe` decides whether to offer, this
+   * decides what actually runs.
    */
-  transcriber?: Transcriber;
+  transcriber?: Transcriber | undefined;
 
-  limit?: number;
-  cacheTtlMs?: number;
+  limit?: number | undefined;
+  cacheTtlMs?: number | undefined;
 
   /**
    * Hard ceiling on API requests for the lifetime of this session. Eager loading
-   * multiplies traffic by every player on every page, against an API that currently
-   * has no rate limiting of its own, so the client side carries the budget.
+   * multiplies traffic by every player on every page, and the API's allowance is per
+   * address, so the client side carries a budget of its own.
    */
-  maxRequests?: number;
+  maxRequests?: number | undefined;
 
   /** Called for every non-abort failure. Errors never propagate out of resolve(). */
-  onError?: (err: unknown) => void;
+  onError?: ((err: unknown) => void) | undefined;
 }
 
 export interface ResolveResult extends MatchResult {
@@ -164,6 +166,7 @@ export class SubtitleSession {
         ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
         ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
         ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
+        ...(opts.key !== undefined ? { key: opts.key } : {}),
       });
     const ttl = opts.cacheTtlMs ?? 5 * 60_000;
     this.cache = new SingleFlightCache<MatchResult>({ ttlMs: ttl });
@@ -250,10 +253,10 @@ export class SubtitleSession {
 
     try {
       // Charge the budget only when this will actually hit the network. The ladder
-      // costs a search plus one title fetch per preferred language, because the API
-      // filters on a single language code per request and silently ignores a list,
-      // and each language takes one request per 100 rows `limit` asks for. This is
-      // the most a resolve can take, so the ceiling holds.
+      // costs a search plus one title fetch per preferred language, so that each
+      // language gets its own `limit` rows, and each language takes one request per
+      // 100 rows `limit` asks for. This is the most a resolve can take, so the
+      // ceiling holds.
       const pages = Math.max(1, Math.ceil((this.opts.limit ?? PAGE) / PAGE));
       const cost = 1 + Math.max(1, langs?.length ?? 0) * pages;
       // A cached hit is free, and so is a duplicate that arrives while the first is

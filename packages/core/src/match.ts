@@ -50,7 +50,9 @@ export function candidateLabel(c: Candidate): string {
   if (c.synthetic) return `AI transcription (${languageName(s.language)})`;
   const bits: string[] = [languageName(s.language)];
   if (s.hearing_impaired) bits.push('HI');
-  if (s.release_name) bits.push(s.release_name.slice(0, 40));
+  // Stored names carry stray whitespace; trimmed on both sides of the cut.
+  const release = s.release_name?.trim();
+  if (release) bits.push(release.slice(0, 40).trim());
   else if (s.cues > 0) bits.push(`${s.cues} lines`);
   return bits.join(' - ');
 }
@@ -75,7 +77,7 @@ export interface MatchResult {
 export interface RankOptions {
   hint: MediaHint;
   /** Preference order. Earlier is better. Empty means no language preference. */
-  languages?: string[];
+  languages?: string[] | undefined;
   /**
    * Formats this session can put in front of a viewer: what the player parses
    * natively, plus anything the client side converter can reach. A hard filter, not
@@ -84,17 +86,17 @@ export interface RankOptions {
    */
   formats: string[];
   /** Prefer, or avoid, hearing-impaired subtitles. Undefined means no preference. */
-  hearingImpaired?: boolean;
+  hearingImpaired?: boolean | undefined;
   /**
    * The most subtitles per language. `rank` keeps this many in all; `findSubtitles`
    * reads and keeps this many for each language, 100 to a request. Default 100.
    */
-  limit?: number;
+  limit?: number | undefined;
 }
 
 export interface MatchOptions extends RankOptions {
   client: SubtitleDbClient;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 const DEFAULT_LIMIT = 100;
@@ -245,9 +247,13 @@ export function rank(
   return { candidates, dropped, wrong };
 }
 
-/** 404 and 400 are "this rung does not apply", not failures worth aborting on. */
+/**
+ * 404 is "this rung does not apply", not a failure worth aborting on. A 400 is not: the
+ * request itself was refused, and the next rung would send the same parameters, so it
+ * propagates with the API's own code and message.
+ */
 function isFallthrough(err: unknown): boolean {
-  return err instanceof SubtitleDbError && (err.status === 404 || err.status === 400);
+  return err instanceof SubtitleDbError && err.status === 404;
 }
 
 /**
@@ -264,18 +270,13 @@ function scopedItems(b: LookupBundle): BundleSubtitle[] {
  * Fetch a bundle, up to `cap` rows per preferred language, and merge them in the
  * caller's order.
  *
- * The API `lang` parameter takes a single ISO code. Passing a comma separated list is
- * silently ignored rather than rejected, which is the dangerous shape: the request
- * succeeds, the filter does not apply, and the default `sort=lang` returns the
- * alphabetically earliest languages. For The Matrix, 715 subtitles at limit=100 yields
- * ar through de and no English at all, so a naive multi-language client looks like it
- * works and quietly never finds the language the user asked for.
- *
- * Fanning out costs one small request per configured language, which is typically one
- * to three, and each is independently cacheable at the edge. The languages are asked
- * at once. Within one, the API sends at most 100 rows a request, so a longer list is
- * read a page at a time until the title runs out, the cap is reached, or a page
- * brings nothing new.
+ * One request per language rather than one comma list, so that each language gets its
+ * own `limit` rows and its own page walk: a single list shares one page between every
+ * language in it, and the default `sort=lang` then fills it with the alphabetically
+ * earliest codes. The requests go out at once, and each is independently cacheable at
+ * the edge. Within one language, the API sends at most 100 rows a request, so a
+ * longer list is read a page at a time until the title runs out, the cap is reached,
+ * or a page brings nothing new.
  */
 export async function fetchBundlePage(
   fetchOne: (lang: string | undefined, offset: number, limit: number) => Promise<LookupBundle>,

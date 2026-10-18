@@ -136,5 +136,55 @@ describe('parseFilename', () => {
     expect(got.season).toBe(10);
     expect(got.episode).toBe(24);
     expect(got.title).toBe('Show Name');
+    expect(got.episodes).toBeUndefined();
+  });
+
+  it('reads a multi-episode file as its first episode, and lists them all', () => {
+    for (const name of ['Show.Name.S02E01E02.720p.mkv', 'Show.Name.S02E01-E02.720p.mkv']) {
+      const got = parseFilename(name);
+      expect(got.title, name).toBe('Show Name');
+      expect(got.season, name).toBe(2);
+      expect(got.episode, name).toBe(1);
+      expect(got.episodes, name).toEqual([1, 2]);
+    }
+  });
+
+  it('reads an anime name: leading group, absolute episode, no season', () => {
+    const got = parseFilename('[Group] Title - 1100 [1080p].mkv');
+    expect(got.title).toBe('Title');
+    expect(got.episode).toBe(1100);
+    expect(got.season).toBeNull();
+    expect(got.year).toBeNull();
+    expect(got.group).toBe('Group');
+    expect(got.tags).toContain('1080p');
+
+    const crc = parseFilename('[SubsPlease] Show Name - 05v2 (1080p) [A1B2C3D4].mkv');
+    expect(crc.title).toBe('Show Name');
+    expect(crc.episode).toBe(5);
+    expect(crc.group).toBe('SubsPlease');
+  });
+
+  it('strips dotted audio and codec tags', () => {
+    const got = parseFilename('Show.Name.S01E01.2160p.WEB-DL.DDP5.1.H.265-GRP.mkv');
+    expect(got.title).toBe('Show Name');
+    expect(got.group).toBe('GRP');
+    expect(got.tags).toEqual(['2160p', 'web', 'ddp51', 'h265']);
+
+    const untagged = parseFilename('Some.Film.DD5.1.H265.10bit.HEVC.x265.mkv');
+    expect(untagged.title).toBe('Some Film');
+    expect(untagged.tags).toEqual(['dd51', 'h265', '10bit', 'hevc', 'x265']);
+  });
+
+  it('reads a trailing [YTS.MX] as the group', () => {
+    for (const name of [
+      'Movie.Name.2020.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4',
+      'Movie.Name.2020.1080p.BluRay.x264.AAC5.1.[YTS.MX].mp4',
+      'Movie Name (2020) [1080p] [YTS.MX].mp4',
+    ]) {
+      const got = parseFilename(name);
+      expect(got.title, name).toBe('Movie Name');
+      expect(got.year, name).toBe(2020);
+      expect(got.group, name).toBe('YTS.MX');
+    }
   });
 });

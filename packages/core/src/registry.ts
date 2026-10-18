@@ -4,10 +4,10 @@ import type { SubtitleDbHandle } from './handle.js';
  * Every live handle, by every object that identifies it.
  *
  * There were three of these, one private to each adapter, and the split was not
- * harmless. `@subtitledb/players` attaching to a bare `<video>` delegates to
- * `@subtitledb/html5`, so that element ended up in two maps holding two different
- * handles, and which one a caller got back depended on which package they happened
- * to ask. One map means one handle per player, whoever asks.
+ * harmless. The players adapter attaching to a bare `<video>` delegates to the html5
+ * adapter, so that element ended up in two maps holding two different handles, and
+ * which one a caller got back depended on which package they happened to ask. One
+ * map means one handle per player, whoever asks.
  *
  * A WeakMap so a page that drops a player without calling destroy() does not leak
  * it. That is a page bug, but it should not be our leak.

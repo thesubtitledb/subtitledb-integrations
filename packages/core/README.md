@@ -2,7 +2,7 @@
 
 A client for [The Subtitle Database](https://thesubtitledb.org), a free subtitle API for films and series in over 100 languages. Install it and call it. No account and no key.
 
-No dependencies. Runs in browsers and Node 20.3 or newer. TypeScript types included. It is an ES module: use `import`, not `require()`.
+No dependencies. Runs in browsers and Node 20.3 or newer. TypeScript types included. It is an ES module: `import` it, or `require()` it on Node 22.12 or 20.19 and newer, which load ES modules with `require()`. On older Node use `await import('@subtitledb/core')`.
 
 ## Install
 
@@ -25,14 +25,16 @@ const sub = await results[0].load();
 // { text, format: 'vtt', language: 'en', label }
 ```
 
-`hint` takes an IMDb or TMDB id, or a title and year, plus a season and episode for a series. Add the video's release name as `release` and the results that match its timing come first.
+`hint` takes an IMDb or TMDB id, or a title and year, plus a season and episode for a series. Add the video's release name as `release` and the results that match its timing come first. `languages` takes language tags: `en-US` asks for `en`, `pt-BR` for `pb`, `zh-TW` for `zt`.
+
+`query()` throws a `SubtitleDbError` when the API refuses the request or the hint has nothing to look up by. `code` is the API's own code (`bad_request`, `not_found`, `rate_limited`) and `message` its message.
 
 ## What it does
 
 | Call | |
 |---|---|
 | `query()` | Finds the subtitles for what is playing and ranks them. Nothing downloads until you call `load()`. |
-| `load()` | Downloads one result. With `convertTo: 'vtt'` it converts SRT and ASS to WebVTT. `offsetMs` shifts the timings and `fps` changes the frame rate. |
+| `load()` | Downloads one result. With `convertTo: 'vtt'` it converts SRT and ASS to WebVTT. `offsetMs` shifts the timings and `fps` changes the frame rate; the offset is applied first, then the rescale, so it is given in the subtitle's own time. |
 | `createClient()` | The API itself. `byImdb`, `byTmdb`, `byTitle`, `byReleasename`, `byInfohash` and `bySubid` each return a title with its subtitles. |
 | `parseFilename()` | Reads the title, year, season, episode and release from a video file name. |
 | `toVtt()` | Converts SRT or ASS text to WebVTT. |
@@ -61,7 +63,7 @@ const client = createClient({ key: process.env.SUBTITLEDB_KEY });
 const { results } = await client.search('breaking bad', { lang: 'en' });
 ```
 
-The key goes in a request header. Use it on a server, not in page code, where anyone can read it. A key that is wrong or revoked is refused with `bad_key`, never ignored.
+The key goes in a request header. Use it on a server, not in page code, where anyone can read it. A key that is wrong or revoked is refused with `bad_key`, never ignored. Every refusal is a `SubtitleDbError` whose `code` is the API's: `bad_key` on a lookup or download, `key_required` where a key is needed (`search()` throws it before sending anything), `rate_limited` past the allowance. A download that answers with something other than a subtitle is `download_failed`.
 
 The playback debugger for your own site takes its own debug key, from the Debugger tab at [thesubtitledb.org/developer](https://thesubtitledb.org/developer). It reports startup time, stalls and errors from your viewers.
 

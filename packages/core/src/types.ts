@@ -2,20 +2,16 @@
  * Wire types for the SubtitleDB public API.
  *
  * These mirror what api.thesubtitledb.org actually returns, captured from the live
- * service rather than transcribed from docs. Fields that the API currently sends as
- * null are typed as nullable even where they are conceptually required, because a
- * consumer has to handle today's data, not the data we wish existed. Two in
- * particular are null across the whole corpus right now:
- *
- *   tmdb_id / media_type   the imdb->tmdb map is empty, so every title reports null
- *   season / episode       never populated by the ingest, so TV cannot be addressed
- *                          by number yet. See MatchTier.SeriesEpisode.
+ * service rather than transcribed from docs. Fields the API sends as null for part of
+ * the corpus are typed as nullable even where they are conceptually required, because
+ * a consumer has to handle today's data: `tmdb_id` and `media_type` are null for a
+ * title the IMDb-to-TMDB map has no entry for.
  */
 
 /** ISO639 code as the API emits it: lowercase, occasionally non-standard (pb, ze, zt). */
 export type LanguageCode = string;
 
-/** The API allowlists exactly these, though `episode` is unreachable until the backfill. */
+/** The API allowlists exactly these. */
 export type TitleKind = 'movie' | 'episode';
 
 export type SearchSort = 'relevance' | 'subtitles' | 'year' | 'name';

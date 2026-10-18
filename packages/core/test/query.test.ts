@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SubtitleDbError } from '../src/errors.js';
 import {
   decodeBytes,
   query as exported,
@@ -146,5 +147,52 @@ describe('query', () => {
     const { fetch } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
     const res = await query({ hint: { imdbId: 'tt0133093' }, fetch });
     expect(res.results).toEqual([]);
+  });
+
+  it('throws the API refusal rather than returning an empty result', async () => {
+    const { fetch } = stubFetch([
+      { match: /by-imdb/, status: 400, body: { error: 'bad_request', message: 'lang: bad code' } },
+    ]);
+    const err = await query({ hint: { imdbId: 'tt0133093' }, fetch }).catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbError);
+    expect(err).toMatchObject({ status: 400, code: 'bad_request', message: 'lang: bad code' });
+  });
+
+  it('throws a transport failure too', async () => {
+    const { fetch } = stubFetch([{ match: /by-imdb/, throws: true }]);
+    const err = await query({ hint: { imdbId: 'tt0133093' }, fetch }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'transport_error' });
+  });
+
+  it('refuses a hint with nothing to look up by, before any request', async () => {
+    const { fetch, calls } = stubFetch([]);
+    for (const hint of [undefined, {}, { season: 1, episode: 1 }, { title: 'x' }]) {
+      const err = await query({ hint, fetch }).catch((e) => e);
+      expect(err, JSON.stringify(hint)).toBeInstanceOf(SubtitleDbError);
+      expect(err.code).toBe('bad_request');
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('maps language tags to corpus codes, one request per language', async () => {
+    const { fetch, calls } = stubFetch(routes());
+    await query({
+      hint: { imdbId: 'tt0133093' },
+      lang: 'en-US',
+      languages: ['pt-BR', 'en'],
+      fetch,
+    });
+    const langs = calls.map((c) => new URL(c.url).searchParams.get('lang'));
+    expect(langs).toEqual(['en', 'pb']);
+  });
+
+  it('sends the key on the lookup and the download', async () => {
+    const { fetch, calls } = stubFetch(routes());
+    const { results } = await query({ hint: { imdbId: 'tt0133093' }, key: 'sdb_k', fetch });
+    await results[0]?.load();
+    expect(calls).toHaveLength(2);
+    for (const c of calls) {
+      expect(new Headers(c.init?.headers).get('authorization')).toBe('Bearer sdb_k');
+    }
   });
 });

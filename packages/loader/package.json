@@ -23,7 +23,7 @@
     "build:cdn": "node build.mjs"
   },
   "dependencies": {
-    "@subtitledb/core": "0.5.1",
+    "@subtitledb/core": "0.5.2",
     "@subtitledb/debug": "0.1.0",
     "@subtitledb/html5": "0.2.1",
     "@subtitledb/players": "0.2.1",

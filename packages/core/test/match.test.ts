@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SubtitleDbClient } from '../src/client.js';
-import { findSubtitles, similarity } from '../src/match.js';
+import { candidateLabel, findSubtitles, similarity } from '../src/match.js';
 import type { BundleSubtitle } from '../src/types.js';
 import { bundleSubtitle, episodeBundle, lookupTitle, movieBundle, stubFetch } from './fixtures.js';
 
@@ -59,6 +59,28 @@ describe('findSubtitles ladder', () => {
     const r = await findSubtitles({ client, hint: { imdbId: 'tt1480055' }, formats: SRT_ONLY });
     expect(r.tier).toBe('explicit-imdb');
     expect(r.title?.name).toContain('Game of Thrones');
+  });
+
+  it('a 400 propagates with the API code: the next rung would send the same parameters', async () => {
+    const { client, calls } = clientWith([
+      { match: /by-tmdb/, status: 400, body: { error: 'bad_request', message: 'bad lang' } },
+      { match: /by-imdb/, body: movieBundle([bundleSubtitle()]) },
+    ]);
+    const err = await findSubtitles({
+      client,
+      hint: { tmdbId: 603, imdbId: 'tt0133093' },
+      formats: SRT_ONLY,
+    }).catch((e) => e);
+    expect(err).toMatchObject({ status: 400, code: 'bad_request', message: 'bad lang' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('labels a candidate with its release name trimmed', () => {
+    const label = (release_name: string) =>
+      candidateLabel({ subtitle: bundleSubtitle({ release_name }), score: 0, reason: '' });
+    expect(label('  The.Matrix.1999.BluRay ')).toBe('English - The.Matrix.1999.BluRay');
+    expect(label('   ')).toBe('English - 1386 lines');
+    expect(label(`${'a'.repeat(39)} b`)).toBe(`English - ${'a'.repeat(39)}`);
   });
 
   it('a tmdb 404 falls through to imdb rather than failing', async () => {

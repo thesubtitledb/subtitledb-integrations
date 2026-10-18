@@ -188,7 +188,7 @@ describe('SubtitleDbClient', () => {
 
   it('follows download_url exactly as returned and never builds a files-host URL', async () => {
     const { fetch, calls } = stubFetch([{ match: /files\.example\.test/, text: '1\nhello\n' }]);
-    const c = new SubtitleDbClient({ fetch });
+    const c = new SubtitleDbClient({ fetch, apiBase: 'https://api.example.test' });
     const got = await c.fetchSubtitleText({
       download_url: 'https://files.example.test/dl/99.srt',
       format: 'srt',
@@ -222,7 +222,11 @@ describe('SubtitleDbClient', () => {
 
   it('appends the antispam id to the download too, so a search ties to its download', async () => {
     const { fetch, calls } = stubFetch([{ match: /files\.example\.test/, text: '1\nhi\n' }]);
-    const c = new SubtitleDbClient({ fetch, antispamId: 'aid-123' });
+    const c = new SubtitleDbClient({
+      fetch,
+      antispamId: 'aid-123',
+      apiBase: 'https://api.example.test',
+    });
     const sub = { download_url: 'https://files.example.test/dl/99.srt', format: 'srt' };
     await c.fetchSubtitleText(sub);
 
@@ -238,6 +242,7 @@ describe('SubtitleDbClient', () => {
     const sub = { download_url: 'https://files.example.test/get/99?ext=srt', format: 'srt' };
     await new SubtitleDbClient({
       fetch,
+      apiBase: 'https://api.example.test',
       client: 'mine',
       downloadClient: 'loader',
     }).fetchSubtitleText(sub);
@@ -283,6 +288,68 @@ describe('SubtitleDbClient', () => {
     }
   });
 
+  it('refuses a download_url off the API hosts before fetching it', async () => {
+    const cases: [string, RegExp][] = [
+      ['https://evil.example/get/5', /on evil.example/],
+      ['https://thesubtitledb.org.evil.example/get/5', /thesubtitledb.org.evil.example/],
+      ['', /empty/],
+      ['not a url', /not a URL/],
+    ];
+    for (const [download_url, message] of cases) {
+      const { fetch, calls } = stubFetch([{ match: /./, text: '1\\nhi\\n' }]);
+      const err = await new SubtitleDbClient({ fetch, key: 'k' })
+        .fetchSubtitleText({ download_url, format: 'srt' })
+        .catch((e) => e);
+      expect(err, download_url).toBeInstanceOf(SubtitleDbError);
+      expect(err.code, download_url).toBe('bad_request');
+      expect(err.message, download_url).toMatch(message);
+      expect(err.message.trimEnd(), download_url).toBe(err.message);
+      expect(calls, download_url).toHaveLength(0);
+    }
+  });
+
+  it('accepts a download_url on the configured apiBase host and its files host', async () => {
+    const { fetch, calls } = stubFetch([{ match: /./, text: '1\\nhi\\n' }]);
+    const c = new SubtitleDbClient({ fetch, apiBase: 'https://api.example.test/api' });
+    await c.fetchSubtitleText({ download_url: 'https://api.example.test/get/5', format: 'srt' });
+    await c.fetchSubtitleText({ download_url: 'https://files.example.test/x', format: 'srt' });
+    // The public hosts stay allowed behind a custom apiBase, such as a local proxy.
+    await c.fetchSubtitleText({
+      download_url: 'https://files.thesubtitledb.org/get/5',
+      format: 'srt',
+    });
+    expect(calls).toHaveLength(3);
+  });
+
+  it('surfaces the API code and message when a download is refused', async () => {
+    const cases: [number, string, string][] = [
+      [401, 'bad_key', 'key not recognised'],
+      [403, 'key_required', 'this download needs a key'],
+      [429, 'rate_limited', 'slow down'],
+    ];
+    for (const [status, error, message] of cases) {
+      const { fetch } = stubFetch([{ match: /get/, status, body: { error, message } }]);
+      const err = await new SubtitleDbClient({ fetch })
+        .fetchSubtitleText({ download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' })
+        .catch((e) => e);
+      expect(err, error).toBeInstanceOf(SubtitleDbError);
+      expect(err).toMatchObject({ status, code: error, message });
+    }
+  });
+
+  it('reports download_failed for a refusal with no readable body, and for a 404', async () => {
+    for (const route of [
+      { match: /get/, status: 401, text: 'nope' },
+      { match: /get/, status: 404, body: { error: 'not_found', message: 'gone' } },
+    ]) {
+      const { fetch } = stubFetch([route]);
+      const err = await new SubtitleDbClient({ fetch })
+        .fetchSubtitleText({ download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' })
+        .catch((e) => e);
+      expect(err).toMatchObject({ status: route.status, code: 'download_failed' });
+    }
+  });
+
   it('refuses a web page or an empty body sent as the subtitle', async () => {
     // A captive portal answers 200. Handed to a player, the page shows as an empty track.
     for (const body of [
@@ -313,7 +380,7 @@ describe('SubtitleDbClient', () => {
     // produce mojibake; the encoding option is for a deployment that sends such bytes.
     const bytes = new Uint8Array([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00]);
     const impl = (async () => new Response(bytes, { status: 200 })) as unknown as typeof fetch;
-    const c = new SubtitleDbClient({ fetch: impl });
+    const c = new SubtitleDbClient({ fetch: impl, apiBase: 'https://api.example.test' });
     const got = await c.fetchSubtitleText(
       { download_url: 'https://files.example.test/dl/1.srt', format: 'srt' },
       { encoding: 'auto' },
@@ -436,6 +503,21 @@ describe('SubtitleDbClient lookup verbs', () => {
     expect(url.searchParams.get('sort')).toBe('downloads');
   });
 
+  it('maps language tags to corpus codes on every lookup, deduplicated, as one comma list', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-/, body: movieBundle([]) }]);
+    const c = new SubtitleDbClient({ fetch });
+    const lang = (i: number) => new URL(calls[i]?.url ?? '').searchParams.get('lang');
+
+    await c.byImdb('tt0944947', { lang: 'en-US' });
+    expect(lang(0)).toBe('en');
+    await c.byTmdb(1399, { languages: ['pt-BR', 'zh-Hant', 'en-US', 'en', 'zh-TW'] });
+    expect(lang(1)).toBe('pb,zt,en');
+    await c.byImdb('tt0944947', { season: 1, episode: 1, lang: 'fr, de', languages: ['FR'] });
+    expect(lang(2)).toBe('fr,de');
+    await c.byTitle('matrix', { languages: [] });
+    expect(lang(3)).toBeNull();
+  });
+
   it('carries limit, offset and the client marker on a lookup', async () => {
     const { fetch, calls } = stubFetch([{ match: /by-tmdb/, body: movieBundle([]) }]);
     const c = new SubtitleDbClient({ fetch, client: 'test/1.0' });
@@ -469,7 +551,7 @@ describe('SubtitleDbClient with a key', () => {
       { match: /\/v1\//, body: movieBundle([]) },
       { match: /files\.example\.test/, text: '1\nhi\n' },
     ]);
-    const c = new SubtitleDbClient({ fetch });
+    const c = new SubtitleDbClient({ fetch, apiBase: 'https://api.example.test' });
     await c.byImdb('tt0133093');
     await c.fetchSubtitleText({ download_url: 'https://files.example.test/get/9', format: 'srt' });
 
@@ -481,7 +563,11 @@ describe('SubtitleDbClient with a key', () => {
       { match: /\/v1\//, body: movieBundle([]) },
       { match: /files\.example\.test/, text: '1\nhi\n' },
     ]);
-    const c = new SubtitleDbClient({ fetch, key: ' sdb_test ' });
+    const c = new SubtitleDbClient({
+      fetch,
+      key: ' sdb_test ',
+      apiBase: 'https://api.example.test',
+    });
     await c.byTmdb(603);
     await c.fetchSubtitleText({ download_url: 'https://files.example.test/get/9', format: 'srt' });
 
@@ -492,11 +578,18 @@ describe('SubtitleDbClient with a key', () => {
     }
   });
 
-  it('refuses search without a key before any request', async () => {
+  it('refuses search without a key before any request, with no status since nothing was sent', async () => {
     const { fetch, calls } = stubFetch([]);
     const c = new SubtitleDbClient({ fetch });
-    await expect(c.search('matrix')).rejects.toMatchObject({ code: 'key_required', status: 401 });
+    await expect(c.search('matrix')).rejects.toMatchObject({ code: 'key_required', status: 0 });
     expect(calls).toHaveLength(0);
+  });
+
+  it('maps the search language tag to the corpus code', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-search/, body: { results: [] } }]);
+    const c = new SubtitleDbClient({ fetch, key: 'k' });
+    await c.search('matrix', { lang: 'pt-BR', languages: ['en-US'] });
+    expect(new URL(calls[0]?.url ?? '').searchParams.get('lang')).toBe('pb,en');
   });
 
   it('searches by-search with the query and filters', async () => {

@@ -6,23 +6,23 @@ import { basename, parseFilename } from './filename.js';
  * a bare video tag hands over a URL and nothing else.
  */
 export interface MediaHint {
-  imdbId?: string;
-  tmdbId?: number;
+  imdbId?: string | undefined;
+  tmdbId?: number | undefined;
   /** For TV, the id of the series rather than the episode, when that is what we hold. */
-  seriesImdbId?: string;
-  title?: string;
+  seriesImdbId?: string | undefined;
+  title?: string | undefined;
   /** For TV, the name of the one episode. Separates it from the rest of the series. */
-  episodeTitle?: string;
-  year?: number;
-  season?: number;
-  episode?: number;
+  episodeTitle?: string | undefined;
+  year?: number | undefined;
+  season?: number | undefined;
+  episode?: number | undefined;
   /**
    * The file's own release name, without the container: the thing a subtitle's
    * release_name has to agree with for the timings to line up.
    */
-  release?: string;
+  release?: string | undefined;
   /** Where the strongest field came from. Diagnostics only. */
-  source?: HintSource;
+  source?: HintSource | undefined;
 }
 
 export type HintSource = 'config' | 'dataset' | 'metadata' | 'filename';

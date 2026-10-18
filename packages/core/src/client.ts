@@ -1,6 +1,8 @@
 import { SubtitleDbAbort, SubtitleDbError } from './errors.js';
+import { corpusLanguage } from './languages.js';
 import { decodeBytes } from './transform.js';
 import type {
+  ApiErrorBody,
   BundleSubtitle,
   HealthResponse,
   LanguageCode,
@@ -32,14 +34,16 @@ import type {
  */
 export const DEFAULT_API_BASE = 'https://api.thesubtitledb.org';
 
+// Every optional option is also `| undefined`, so a caller compiling with
+// exactOptionalPropertyTypes can pass `{ key: process.env.KEY }` as it is.
 export interface ClientOptions {
-  apiBase?: string;
+  apiBase?: string | undefined;
   /** Injected for tests. Defaults to globalThis.fetch. */
-  fetch?: typeof fetch;
+  fetch?: typeof fetch | undefined;
   /** Per-attempt timeout. The total budget is roughly this times (retries + 1). */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
   /** Retries after the first attempt. Only 429, 5xx and transport failures retry. */
-  retries?: number;
+  retries?: number | undefined;
   /**
    * Sent as a `client` query parameter on every request so traffic is attributable
    * in our logs. Deliberately a query parameter and not a header: a custom header
@@ -47,13 +51,13 @@ export interface ClientOptions {
    * of this field is diagnostics, not something worth a round trip. The API ignores
    * unknown query parameters, verified against the live service.
    */
-  client?: string;
+  client?: string | undefined;
   /**
    * Sent as `client` on the subtitle download in place of `client`: the name the API
    * records the download under. It keeps a closed list for our own integrations and
    * records any other name as `other`. Defaults to `client`.
    */
-  downloadClient?: string;
+  downloadClient?: string | undefined;
   /**
    * A per-page-load correlation id, sent as `antispam_id` on every request including
    * the subtitle download. It ties a page's searches to its downloads server-side so
@@ -62,17 +66,17 @@ export interface ClientOptions {
    * `client`, a query parameter to avoid a preflight, and ignored by the API where it
    * is not read.
    */
-  antispamId?: string;
+  antispamId?: string | undefined;
   /**
    * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
    * works without one. A key raises the download limit and is required by search().
    * Sent as a Bearer header, so keep it server-side: a key in page code is public.
    */
-  key?: string;
+  key?: string | undefined;
 }
 
 export interface RequestOptions {
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -90,15 +94,21 @@ export interface RequestOptions {
  */
 export interface LookupParams extends RequestOptions {
   /** Page size of every `subtitles` bucket in the bundle. The API defaults to 20, caps at 100. */
-  limit?: number;
-  offset?: number;
-  /** One ISO code, or up to 16 comma separated. Ignored on a series or season bundle. */
-  lang?: LanguageCode;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  /**
+   * One language, or up to 16 comma separated. Each is mapped to the code the corpus
+   * files it under, so `en-US` asks for `en`, `pt-BR` for `pb` and `zh-TW` for `zt`.
+   * Ignored on a series or season bundle.
+   */
+  lang?: LanguageCode | undefined;
+  /** The same as `lang`, as a list. Both given, the list is appended to `lang`. */
+  languages?: readonly string[] | undefined;
   /** Ignored on a series or season bundle, like `lang`. */
-  format?: string;
-  sort?: SubtitleSort;
+  format?: string | undefined;
+  sort?: SubtitleSort | undefined;
   /** How much TMDB enrichment the bundle's `title` carries. The API defaults to `minimal`. */
-  response_class?: ResponseClass;
+  response_class?: ResponseClass | undefined;
 }
 
 /**
@@ -108,21 +118,36 @@ export interface LookupParams extends RequestOptions {
  */
 /** Filters and paging for search(). */
 export interface SearchParams extends RequestOptions {
-  /** One ISO code, or up to 16 comma separated: titles with subtitles in that language. */
-  lang?: LanguageCode;
-  type?: TitleKind;
-  year?: number;
-  year_from?: number;
-  year_to?: number;
-  sort?: SearchSort;
-  dir?: 'asc' | 'desc';
-  limit?: number;
-  offset?: number;
+  /** One language, or up to 16 comma separated: titles with subtitles in it. Mapped like LookupParams.lang. */
+  lang?: LanguageCode | undefined;
+  /** The same as `lang`, as a list. */
+  languages?: readonly string[] | undefined;
+  type?: TitleKind | undefined;
+  year?: number | undefined;
+  year_from?: number | undefined;
+  year_to?: number | undefined;
+  sort?: SearchSort | undefined;
+  dir?: 'asc' | 'desc' | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
 }
 
 export interface DrillParams extends LookupParams {
-  season?: number;
-  episode?: number;
+  season?: number | undefined;
+  episode?: number | undefined;
+}
+
+/**
+ * The `lang` query value: every tag from `lang` (comma separated) and `languages`, as
+ * corpus codes, deduplicated, in the caller's order. Undefined when nothing was asked.
+ */
+export function langParam(
+  lang: string | undefined,
+  languages: readonly string[] | undefined,
+): string | undefined {
+  const tags = [...(lang ?? '').split(','), ...(languages ?? [])];
+  const codes = [...new Set(tags.map(corpusLanguage).filter(Boolean))];
+  return codes.length ? codes.join(',') : undefined;
 }
 
 const RETRY_BASE_MS = 300;
@@ -299,7 +324,7 @@ export class SubtitleDbClient {
     return {
       limit: p.limit,
       offset: p.offset,
-      lang: p.lang,
+      lang: langParam(p.lang, p.languages),
       format: p.format,
       sort: p.sort,
       response_class: p.response_class,
@@ -387,16 +412,19 @@ export class SubtitleDbClient {
    */
   search(q: string, params: SearchParams = {}): Promise<SearchResponse> {
     if (!this.key) {
+      // Nothing was sent, so no status, the same as every other refusal made here.
       return Promise.reject(
         new SubtitleDbError({
           message: 'search needs an API key: createClient({ key })',
-          status: 401,
           code: 'key_required',
         }),
       );
     }
-    const { signal, ...query } = params;
-    return this.request<SearchResponse>(this.url('/v1/by-search', { q, ...query }), signal);
+    const { signal, lang, languages, ...query } = params;
+    return this.request<SearchResponse>(
+      this.url('/v1/by-search', { q, ...query, lang: langParam(lang, languages) }),
+      signal,
+    );
   }
 
   /**
@@ -456,16 +484,31 @@ export class SubtitleDbClient {
    * `encoding` is the charset the file arrived in, not the one sent. `encoding` here is
    * for a deployment that sends something else.
    *
-   * Only the API's own hosts are read from, and a web page or an empty body is refused:
-   * a captive portal answers 200 as well, and handed to a player as a subtitle it shows
-   * an empty track while everything says it worked.
+   * Only the API's own hosts are read from: a download_url pointing anywhere else is
+   * refused before it is fetched, since the key would go with the request. A web page
+   * or an empty body is refused too: a captive portal answers 200 as well, and handed
+   * to a player as a subtitle it shows an empty track while everything says it worked.
+   *
+   * A refused download carries the API's own code: `bad_key` for a key that is wrong
+   * or revoked, `key_required` where one is needed, `rate_limited` past the hourly
+   * allowance. Anything else that is not a subtitle is `download_failed`.
    */
   async fetchSubtitleText(
     sub: Pick<BundleSubtitle, 'download_url' | 'format'>,
-    opts: RequestOptions & { encoding?: string } = {},
+    opts: RequestOptions & { encoding?: string | undefined } = {},
   ): Promise<{ text: string; format: string }> {
-    const signal = joinSignals(AbortSignal.timeout(this.timeoutMs), opts.signal);
     const url = this.downloadUrl(sub);
+    if (!ours(url, this.apiBase)) {
+      const host = hostOf(url);
+      throw new SubtitleDbError({
+        message: url
+          ? `download_url is ${host ? `on ${host}, not the API's hosts` : 'not a URL'}`
+          : 'download_url is empty',
+        code: 'bad_request',
+        url,
+      });
+    }
+    const signal = joinSignals(AbortSignal.timeout(this.timeoutMs), opts.signal);
     let res: Response;
     try {
       const doFetch = this.doFetch;
@@ -475,10 +518,21 @@ export class SubtitleDbClient {
       throw this.failed(url, cause, 'subtitle download failed');
     }
     if (!res.ok) {
+      // The API says why it refused a download in the same body shape as a lookup:
+      // {"error":"bad_key"} on 401, key_required on 403, rate_limited on 429.
+      let body: Partial<ApiErrorBody> | undefined;
+      if (res.status === 401 || res.status === 403 || res.status === 429) {
+        try {
+          body = (await res.json()) as Partial<ApiErrorBody>;
+        } catch {
+          body = undefined;
+        }
+      }
       throw new SubtitleDbError({
-        message: `subtitle download failed with ${res.status}`,
+        message: body?.message ?? `subtitle download failed with ${res.status}`,
         status: res.status,
-        code: 'download_failed',
+        code: body?.error ?? 'download_failed',
+        hint: body?.hint,
         url,
       });
     }
@@ -486,7 +540,7 @@ export class SubtitleDbClient {
     // checked after. An empty res.url is a fetch that does not report one.
     if (res.url && !ours(res.url, this.apiBase)) {
       throw new SubtitleDbError({
-        message: `subtitle download ended off the API's hosts, at ${new URL(res.url).host}`,
+        message: `subtitle download ended off the API's hosts, on ${hostOf(res.url)}`,
         code: 'download_failed',
         url,
       });
@@ -512,19 +566,29 @@ export class SubtitleDbClient {
   }
 }
 
+/** The public API host and the files host its /get/ redirect goes to. */
+const API_HOSTS = new Set(['api.thesubtitledb.org', 'files.thesubtitledb.org']);
+
 /**
- * True for the API's host and the files host its /get/ redirect goes to, nothing else:
- * api.thesubtitledb.org sends a download on to files.thesubtitledb.org.
+ * True for the API's hosts, the configured apiBase host and its siblings (a
+ * deployment's own files host), nothing else.
  */
 function ours(raw: string, apiBase: string): boolean {
+  const host = hostOf(raw);
+  if (API_HOSTS.has(host)) return true;
+  const base = hostOf(apiBase);
+  if (!host || !base) return false;
+  if (host === base) return true;
+  const root = base.split('.').slice(-2).join('.');
+  return host === root || host.endsWith(`.${root}`);
+}
+
+/** The hostname of a URL, or '' for anything that does not parse as one. */
+function hostOf(raw: string): string {
   try {
-    const host = new URL(raw).hostname;
-    const base = new URL(apiBase).hostname;
-    if (host === base) return true;
-    const root = base.split('.').slice(-2).join('.');
-    return host === root || host.endsWith(`.${root}`);
+    return new URL(raw).hostname;
   } catch {
-    return false;
+    return '';
   }
 }
 
