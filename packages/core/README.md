@@ -25,7 +25,7 @@ const sub = await results[0].load();
 // { text, format: 'vtt', language: 'en', label }
 ```
 
-`hint` takes an IMDb or TMDB id, or a title and year, plus a season and episode for a series. A series' own IMDb id works too, as `seriesImdbId` with a season and episode. TMDB numbers films and shows separately, so give a TMDB id its type: `{ tmdbId: 1396, tmdbType: 'tv' }`. A hint with a season or episode is taken as `tv`. Add the video's release name as `release` and the results that match its timing come first. `languages` takes language tags: `en-US` asks for `en`, `pt-BR` for `pb`, `zh-TW` for `zt`.
+`hint` takes an IMDb or TMDB id, or a title and year, plus a season and episode for a series. A series' own IMDb id works too, as `seriesImdbId` with a season and episode. TMDB numbers films and shows separately, so give a TMDB id its type: `{ tmdbId: 1396, tmdbType: 'tv' }`. A hint with a season or episode is taken as `tv`. Add the video's release name as `release` and the results that match its timing come first. `languages` takes language tags: `en-US` asks for `en`, `pt-BR` for `pb`, `zh-TW` for `zt`, `es-419` or `es-MX` for `ea`.
 
 `query()` throws a `SubtitleDbError` when the API refuses the request, the hint has nothing to look up by, or no title matches the hint (`not_found`). `code` is the API's own code (`bad_request`, `not_found`, `rate_limited`) and `message` its message. A title with no subtitles in the languages asked for returns no results.
 

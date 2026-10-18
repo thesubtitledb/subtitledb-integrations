@@ -168,6 +168,16 @@ def test_pb_comes_back_as_brazilian_portuguese_rather_than_portuguese():
     assert provider.from_api_code("pb") == Language("por", "BR")
 
 
+def test_latin_american_spanish_is_asked_for_as_ea_and_comes_back_as_es_mx():
+    # The API files es-419, es-MX and the other Latin American regions under ea.
+    assert provider.api_code(Language("spa", "MX")) == "ea"
+    assert provider.api_code(Language("spa", "AR")) == "ea"
+    assert provider.api_code(Language("spa", "ES")) == "es"
+    assert provider.api_code(Language("spa")) == "es"
+    assert provider.from_api_code("ea") == Language("spa", "MX")
+    assert Language("spa", "MX") in provider.supported_languages()
+
+
 def test_a_code_babelfish_has_never_heard_of_is_skipped_not_raised():
     assert provider.from_api_code("qq") is None
 
@@ -192,6 +202,15 @@ def test_a_listed_subtitle_carries_the_download_link_and_the_page_link():
     assert subs[0].id == "subtitledb-481207"
     assert subs[0].download_link == "https://api.thesubtitledb.org/get/1"
     assert "481207" in subs[0].page_link
+
+
+def test_the_provider_names_itself_and_its_own_version():
+    # The shared client's version is not the provider's; the agent carries the provider's.
+    p = provider.SubtitleDbProvider()
+    p.initialize()
+    assert p.client.version == provider.VERSION
+    assert p.client.user_agent == (
+        "subtitledb-bazarr/%s (+https://thesubtitledb.org)" % provider.VERSION)
 
 
 def test_a_format_bazarr_cannot_use_never_reaches_it():

@@ -837,11 +837,11 @@ rather than one it is forced into. It stays, because each per-language request i
 small and separately cacheable, and because collapsing it changes behaviour in four
 language ports at once.
 
-Two more things `lang` and `format` will not tell you apart from a filter that matched
-nothing. Both bite on a movie bundle and on an episode drill, and both are **ignored on
-a series or a season bundle**: the tree is served unfiltered by design, so
-`by-imdb/tt0944947?lang=en` returns exactly the bytes of the unfiltered call. Drill to
-`/season/:s/episode/:e` when the filter has to hold.
+`lang`, `format`, `sort`, `limit` and `offset` apply to a bundle's own `subtitles`
+page at every scope, including the show-level page of a series root and the
+season-pack page of a season drill. The `seasons` tree under them takes `limit` only,
+which caps every season and episode page; the other filters do not reach it, so drill
+to `/season/:s/episode/:e` when an episode's files have to be filtered.
 
 **Select** is lazy: one request, one conversion, one blob URL. It happens when the
 viewer picks a subtitle, or immediately when `autoSelect` is set.

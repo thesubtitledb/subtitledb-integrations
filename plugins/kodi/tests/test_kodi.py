@@ -220,6 +220,17 @@ def test_a_row_is_labelled_with_the_language_kodi_can_draw():
     assert item["language_code"] == "pb"
 
 
+@pytest.mark.parametrize(("code", "name"), [
+    ("ea", "Spanish (Latin America)"),
+    ("sp", "Spanish (Spain)"),
+    ("zt", "Chinese (Traditional)"),
+    ("ze", "Chinese and English"),
+])
+def test_a_corpus_code_that_is_not_iso_is_labelled_by_name(code, name):
+    item = logic.list_item(Candidate(subtitle=row(language=code), score=1, reason=""))
+    assert item["language_name"] == name
+
+
 def test_the_right_column_is_the_release_or_a_translated_line_count():
     # Kodi draws the language on the left and hearing impaired as an icon, so neither
     # is repeated, and the words come from strings.po, as Kodi's add-on rules require.
@@ -295,6 +306,22 @@ def test_a_search_asks_in_the_languages_kodi_named_them():
     )
     assert client.langs == ["en", "pb"]
     assert [i["language_name"] for i in items] == ["English", "Portuguese (Brazil)"]
+
+
+def test_a_latin_american_spanish_tag_is_asked_for_as_ea():
+    # The API files es-419, es-MX and the other Latin American regions under ea.
+    class FakeClient:
+        def __init__(self):
+            self.langs = []
+
+        def by_imdb(self, imdb, **kw):
+            self.langs.append(kw.get("lang"))
+            return {"title": {}, "subtitles": {"items": [], "total": 0}}
+
+    client = FakeClient()
+    logic.search(client, {"path": "/m/x.mkv", "title": "x", "imdb": "tt1"},
+                 ["es-MX", "es-ES", "es-419"])
+    assert client.langs == ["ea", "es"]
 
 
 def test_a_search_lists_past_the_first_hundred():

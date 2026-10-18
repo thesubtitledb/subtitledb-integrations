@@ -428,6 +428,19 @@ describe('ranking', () => {
     const r = await findSubtitles({ client, hint: { imdbId: 'tt0133093' }, formats: SRT_ONLY });
     expect(r.candidates.map((c) => c.subtitle.id)).toEqual([3, 5, 9]);
   });
+
+  it('keeps a file with no upload time on record', async () => {
+    // Live, subtitle 3000000128 under tt0133093 has added_at: null (checked 2026-10-18).
+    const undated = bundleSubtitle({ id: 3000000128, added_at: null, release_name: 'The.Matrix' });
+    const subs = [undated, bundleSubtitle({ id: 4 })];
+    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
+
+    const r = await findSubtitles({ client, hint: { imdbId: 'tt0133093' }, formats: SRT_ONLY });
+    const kept = r.candidates.find((c) => c.subtitle.id === 3000000128);
+    expect(r.candidates).toHaveLength(2);
+    expect(kept?.subtitle.added_at).toBeNull();
+    expect(kept && candidateLabel(kept)).toBe('English - The.Matrix');
+  });
 });
 
 describe('language fan-out', () => {

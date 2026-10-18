@@ -335,8 +335,9 @@ export async function findSubtitles(input: MatchOptions): Promise<MatchResult> {
     return { title, candidates, tier, unrenderable: dropped, wrongEpisode: wrong };
   };
 
-  // The drill shared by every verb on every rung. A movie ignores `season`/`episode`;
-  // a series narrows to exactly them.
+  // The drill shared by every verb on every rung. A series narrows to exactly
+  // `season`/`episode`; a movie asked for a season answers 400 (by-tmdb with type
+  // `movie` leaves them off).
   const drill: DrillParams = {
     ...(hint.season !== undefined ? { season: hint.season } : {}),
     ...(hint.episode !== undefined ? { episode: hint.episode } : {}),

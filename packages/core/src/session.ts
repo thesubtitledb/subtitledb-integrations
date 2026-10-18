@@ -3,7 +3,7 @@ import { type ClientOptions, createClient, type SubtitleDbClient } from './clien
 import { CONVERTIBLE, toVtt } from './convert.js';
 import { SubtitleDbAbort, SubtitleDbError } from './errors.js';
 import { type IdentifyOptions, identify, isResolvable, type MediaHint } from './identify.js';
-import { baseLanguage, localeLanguages } from './languages.js';
+import { baseLanguage, corpusLanguage, localeLanguages } from './languages.js';
 import { type Candidate, findSubtitles, type MatchResult, PAGE } from './match.js';
 import {
   type LoadContext,
@@ -345,9 +345,9 @@ export class SubtitleSession {
       return candidates[0] ?? null;
     }
 
-    // A pinned code. Matched on the base subtag so 'en-US' selects the corpus 'en'.
-    // No fallback: a pinned language means that language or nothing.
-    const want = baseLanguage(auto);
+    // A pinned code, read as the corpus code: 'en-US' selects 'en', 'pt-BR' selects
+    // 'pb'. No fallback: a pinned language means that language or nothing.
+    const want = corpusLanguage(auto);
     return candidates.find((c) => baseLanguage(c.subtitle.language) === want) ?? null;
   }
 

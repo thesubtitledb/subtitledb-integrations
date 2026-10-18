@@ -1,15 +1,17 @@
 /**
  * ISO639 code to English display name.
  *
- * Most codes are ordinary ISO639-1. Four are OpenSubtitles conventions with no ISO
+ * Most codes are ordinary ISO639-1. Six are OpenSubtitles conventions with no ISO
  * name, spelled out here so a language menu never shows "PB" to a user who wanted
  * Brazilian Portuguese.
  */
 const NAMES: Record<string, string> = {
   // OpenSubtitles-specific codes, not ISO639.
   pb: 'Portuguese (Brazil)',
-  ze: 'Chinese (bilingual)',
-  zt: 'Chinese (traditional)',
+  ze: 'Chinese and English',
+  zt: 'Chinese (Traditional)',
+  ea: 'Spanish (Latin America)',
+  sp: 'Spanish (Spain)',
   pm: 'Portuguese (Mozambique)',
 
   ar: 'Arabic',
@@ -102,15 +104,49 @@ export function baseLanguage(code: string): string {
 
 /**
  * A caller's language tag as the code the corpus files it under: `en-US` -> `en`,
- * `pt-BR` -> `pb`, `zh-Hant` or `zh-TW` -> `zt`. The API answers 400 for a tag
- * that is not a plain code, so nothing else may reach `lang`.
+ * `pt-BR` -> `pb`, `zh-Hant` or `zh-TW` -> `zt`, `es-419` or `es-MX` -> `ea`. The API
+ * also accepts BCP 47 tags and maps them the same way; mapping here first means each
+ * language is one request and one cache entry, whatever tag the caller spelled it with.
  */
 export function corpusLanguage(code: string): string {
   const tag = code.trim().toLowerCase().replace(/_/g, '-');
   if (tag === 'pt-br') return 'pb';
   if (/^zh-(hant|tw|hk|mo)/.test(tag)) return 'zt';
+  // A script subtag is skipped, as the API does: es-Latn-MX is es-MX.
+  const [base, ...rest] = tag.split('-');
+  const region = rest[0]?.length === 4 ? rest[1] : rest[0];
+  if (base === 'es' && region && LATIN_AMERICAN_SPANISH.has(region)) return 'ea';
   return baseLanguage(tag);
 }
+
+/**
+ * Spanish regions the API files under `ea`, checked live with `?lang=` 2026-10-18. Every
+ * other region, es-ES included, is `es`. 419 is Latin America; the UN subregions
+ * (005, 013, 029) are not on the list.
+ */
+const LATIN_AMERICAN_SPANISH = new Set([
+  '419',
+  'ar',
+  'bo',
+  'cl',
+  'co',
+  'cr',
+  'cu',
+  'do',
+  'ec',
+  'gt',
+  'hn',
+  'mx',
+  'ni',
+  'pa',
+  'pe',
+  'pr',
+  'py',
+  'sv',
+  'us',
+  'uy',
+  've',
+]);
 
 /** Shape of the parts of `navigator` this reads. Injectable so tests need no DOM. */
 export interface LocaleSource {
@@ -119,7 +155,9 @@ export interface LocaleSource {
 }
 
 /**
- * The viewer's preferred languages as base codes, best first, deduplicated.
+ * The viewer's preferred languages as corpus codes, best first, deduplicated. Each
+ * locale gives its corpus code and then its base code as a second choice: `pt-BR`
+ * gives `pb` then `pt`, `es-MX` gives `ea` then `es`, `en-US` gives `en`.
  *
  * Reads `navigator.languages` in a browser and is empty off it (SSR, Node tests) so
  * callers fall back cleanly. `autoSelect: 'locale'` uses it both to fetch the right
@@ -131,8 +169,9 @@ export function localeLanguages(
   const raw = nav?.languages?.length ? nav.languages : nav?.language ? [nav.language] : [];
   const out: string[] = [];
   for (const tag of raw) {
-    const base = baseLanguage(tag);
-    if (base && !out.includes(base)) out.push(base);
+    for (const code of [corpusLanguage(tag), baseLanguage(tag)]) {
+      if (code && !out.includes(code)) out.push(code);
+    }
   }
   return out;
 }

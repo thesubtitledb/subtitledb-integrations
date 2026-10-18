@@ -275,7 +275,7 @@ changes, and a published one never changes.
 | `emby-v*` | the plugin zip | the same |
 | `kodi-v*` | the add-on zip | the add-on's `addon.xml` |
 | `vlc-v*` | `subtitledb.lua` | `S.VERSION` in that file |
-| `bazarr-v*` | the provider, the shared client and `install.py` | `plugins/python/pyproject.toml` |
+| `bazarr-v*` | the provider, the shared client and `install.py` | `VERSION` in `plugins/bazarr/provider.py` |
 
 The CDN serves the release files unchanged, so either copy verifies:
 

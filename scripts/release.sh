@@ -17,7 +17,7 @@
 #   emby-v<ver>      the same version: the zip
 #   kodi-v<ver>      the add-on's addon.xml: the zip Kodi installs
 #   vlc-v<ver>       S.VERSION in plugins/vlc/subtitledb.lua: the script itself
-#   bazarr-v<ver>    plugins/python/pyproject.toml: the provider, the client, install.py
+#   bazarr-v<ver>    VERSION in plugins/bazarr/provider.py: the provider, the client, install.py
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=${GITHUB_REPOSITORY:-thesubtitledb/subtitledb-integrations}
