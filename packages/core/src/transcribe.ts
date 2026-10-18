@@ -163,7 +163,7 @@ export function syntheticCandidate(language: string): Candidate {
     uploader: '',
     hearing_impaired: false,
     fps: null,
-    added_at: '',
+    added_at: null,
     download_url: '',
   };
   return {

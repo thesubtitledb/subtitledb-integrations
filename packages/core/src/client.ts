@@ -51,7 +51,8 @@ export interface ClientOptions {
   antispamId?: string | undefined;
   /**
    * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
-   * works without one. A key raises the download limit and is required by search().
+   * works without one. A key raises the lookup and download limits and is required by
+   * search().
    * Sent as a Bearer header, so keep it server-side: a key in page code is public. With
    * a key, an http `apiBase` or `download_url` is refused (`bad_request`).
    */
@@ -65,40 +66,40 @@ export interface RequestOptions {
 /**
  * Paging and filtering for a single lookup bundle's `subtitles` buckets.
  *
- * Two things about `lang` and `format` that the response cannot tell you apart from a
- * filter that matched nothing:
+ * `limit`, `offset`, `lang`, `format` and `sort` apply to the bundle's own `subtitles`
+ * page at every scope: a movie, an episode drill, and the show-level or season-pack
+ * page of a series root or a season drill. In the `seasons` tree under a series or a
+ * season, only `limit` applies, capping every season and episode page; `offset`, `lang`,
+ * `format` and `sort` do not apply there.
  *
- *   - `lang` NOW TAKES A COMMA LIST, up to 16 codes: `lang=en,fr,de` comes back with all
- *     three. A malformed code answers 400.
- *   - Both filters bite on a MOVIE bundle and on an episode drill, and are IGNORED on a
- *     series or season bundle: the tree is served unfiltered by design, so
- *     `by-imdb/tt0944947?lang=en` returns exactly the bytes of the unfiltered call.
- *     Drill to `/season/:s/episode/:e` when the filter has to hold.
+ * `lang` takes a comma list, up to 16 codes: `lang=en,fr,de` comes back with all three.
+ * A malformed code answers 400; a well-formed code with no files answers 200 with
+ * total 0.
  */
 export interface LookupParams extends RequestOptions {
-  /** Page size of every `subtitles` bucket in the bundle. The API defaults to 20, caps at 100. */
+  /**
+   * Page size of the `subtitles` page and of every page in the `seasons` tree. The API
+   * defaults to 20 and reads anything over 100 as 100.
+   */
   limit?: number | undefined;
+  /** Offset into the `subtitles` page. At most 10000. */
   offset?: number | undefined;
   /**
    * One language, or up to 16 comma separated. Each is mapped to the code the corpus
-   * files it under, so `en-US` asks for `en`, `pt-BR` for `pb` and `zh-TW` for `zt`.
-   * Ignored on a series or season bundle.
+   * files it under, so `en-US` asks for `en`, `pt-BR` for `pb`, `zh-TW` for `zt` and
+   * `es-419` or `es-MX` for `ea`.
+   * Filters the `subtitles` page, not the `seasons` tree.
    */
   lang?: LanguageCode | undefined;
   /** The same as `lang`, as a list. Both given, the list is appended to `lang`. */
   languages?: readonly string[] | undefined;
-  /** Ignored on a series or season bundle, like `lang`. */
+  /** srt, ass, ssa, sub or vtt. Filters the `subtitles` page, not the `seasons` tree. */
   format?: string | undefined;
   sort?: SubtitleSort | undefined;
   /** How much TMDB enrichment the bundle's `title` carries. The API defaults to `minimal`. */
   response_class?: ResponseClass | undefined;
 }
 
-/**
- * A lookup that can resolve to a series, plus the optional slug that narrows it.
- * `season`/`episode` are ignored when the resolved title is a movie -- except that
- * the API answers 400 for a movie asked for a season, matching the site's slugs.
- */
 /** Filters and paging for search(). */
 export interface SearchParams extends RequestOptions {
   /** One language, or up to 16 comma separated: titles with subtitles in it. Mapped like LookupParams.lang. */
@@ -115,6 +116,12 @@ export interface SearchParams extends RequestOptions {
   offset?: number | undefined;
 }
 
+/**
+ * A lookup that can resolve to a series, plus the optional season and episode that
+ * narrow it. A movie has no seasons: by-imdb and the other drillable verbs answer 400
+ * for a movie asked for a season, and `/v1/by-tmdb/movie/:id/season/...` has no route
+ * and answers 404, so byTmdb drops the season and episode when `type` is `movie`.
+ */
 export interface DrillParams extends LookupParams {
   season?: number | undefined;
   episode?: number | undefined;
@@ -332,8 +339,9 @@ export class SubtitleDbClient {
 
   /**
    * Look up a title by TMDB id. TMDB numbers films and shows separately, so pass
-   * `type: 'movie'` or `type: 'tv'`. `season`/`episode` narrow a show and always use
-   * the `tv` path; a film ignores them.
+   * `type: 'movie'` or `type: 'tv'`; the wrong one answers 404. `season`/`episode`
+   * narrow a show and, with no `type`, imply `tv`. With `type: 'movie'` they are not
+   * sent, since the movie path has no seasons and would answer 404.
    */
   async byTmdb(tmdb: string | number, params: TmdbParams = {}): Promise<LookupBundle> {
     const id = Number(tmdb);
@@ -353,8 +361,8 @@ export class SubtitleDbClient {
         params.signal,
       );
     } catch (err) {
-      // An API without the typed paths answers "no route": ask the untyped path with
-      // ?type= instead. Remove once the typed paths are live.
+      // The public API has the typed paths. An older deployment at a custom apiBase
+      // answers "no route" for them: ask its untyped path with ?type= instead.
       if (!noRoute(err)) throw err;
       return this.request<LookupBundle>(
         this.url(`/v1/by-tmdb/${id}${drill}`, { type, ...query }),
@@ -508,7 +516,7 @@ export class SubtitleDbClient {
    *
    * A refused download carries the API's own code and message: `bad_request`,
    * `bad_key` for a key that is wrong or revoked, `key_required` where one is needed,
-   * `rate_limited` past the hourly allowance. Anything else that is not a subtitle is
+   * `rate_limited` past the download allowance. Anything else that is not a subtitle is
    * `download_failed`.
    */
   async fetchSubtitleText(

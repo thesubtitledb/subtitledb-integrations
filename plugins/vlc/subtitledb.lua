@@ -24,7 +24,7 @@
 SubtitleDb = {}
 local S = SubtitleDb
 
-S.VERSION = "0.3.2"
+S.VERSION = "0.3.3"
 S.API_BASE = "https://api.thesubtitledb.org"
 S.FORMATS = { srt = true, ass = true, ssa = true, sub = true, vtt = true }
 
@@ -185,7 +185,8 @@ end
 -- ===========================================================================
 
 S.LANGUAGES = {
-  { "en", "English" }, { "es", "Spanish" }, { "fr", "French" }, { "de", "German" },
+  { "en", "English" }, { "es", "Spanish" }, { "ea", "Spanish (Latin America)" },
+  { "sp", "Spanish (Spain)" }, { "fr", "French" }, { "de", "German" },
   { "it", "Italian" }, { "pt", "Portuguese" }, { "pb", "Portuguese (Brazil)" },
   { "nl", "Dutch" }, { "pl", "Polish" }, { "ru", "Russian" }, { "uk", "Ukrainian" },
   { "cs", "Czech" }, { "sk", "Slovak" }, { "hu", "Hungarian" }, { "ro", "Romanian" },
@@ -194,7 +195,7 @@ S.LANGUAGES = {
   { "ta", "Tamil" }, { "te", "Telugu" }, { "ml", "Malayalam" }, { "th", "Thai" },
   { "vi", "Vietnamese" }, { "id", "Indonesian" }, { "ms", "Malay" }, { "tl", "Tagalog" },
   { "ja", "Japanese" }, { "ko", "Korean" }, { "zh", "Chinese" },
-  { "zt", "Chinese (traditional)" }, { "ze", "Chinese (bilingual)" },
+  { "zt", "Chinese (Traditional)" }, { "ze", "Chinese and English" },
   { "sv", "Swedish" }, { "no", "Norwegian" }, { "da", "Danish" }, { "fi", "Finnish" },
   { "is", "Icelandic" }, { "et", "Estonian" }, { "lv", "Latvian" }, { "lt", "Lithuanian" },
   { "hr", "Croatian" }, { "sr", "Serbian" }, { "bs", "Bosnian" }, { "sl", "Slovenian" },

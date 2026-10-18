@@ -6,10 +6,10 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.3</Version>
+    <Version>0.4.4</Version>
     <!-- What changed in this version, in a sentence or two. Jellyfin shows it in the
          plugin catalog beside the update; change it with the version. -->
-    <PackageReleaseNotes>TMDB ids are looked up by film or show, so a film and a show that share a number no longer get each other's subtitles. Requests carry the plugin's own user agent.</PackageReleaseNotes>
+    <PackageReleaseNotes>Latin American Spanish (es-419, es-MX, es-AR and the other Latin American regions) is asked for as Latin American Spanish, as the API files it, rather than as Spanish.</PackageReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>

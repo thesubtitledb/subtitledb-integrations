@@ -10,7 +10,8 @@ so the zip keeps that layout and installs from wherever it is unpacked:
     subtitledb-bazarr-<version>/python/subtitledb/
     subtitledb-bazarr-<version>/LICENSE
 
-The version is the shared client's, which is most of what ships.
+The version is the provider's own VERSION, the one its User-Agent sends. It is read
+from the file rather than imported, since provider.py imports Bazarr's modules.
 """
 
 from __future__ import annotations
@@ -31,10 +32,10 @@ SKIP = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".DS_Store")
 
 
 def version() -> str:
-    text = (PLUGINS / "python" / "pyproject.toml").read_text(encoding="utf-8")
-    found = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
+    text = (HERE / "provider.py").read_text(encoding="utf-8")
+    found = re.search(r'^VERSION = "([^"]+)"', text, re.MULTILINE)
     if not found:
-        raise SystemExit("no version in plugins/python/pyproject.toml")
+        raise SystemExit("no VERSION in plugins/bazarr/provider.py")
     return found.group(1)
 
 

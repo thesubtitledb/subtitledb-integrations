@@ -438,6 +438,66 @@ describe('autoSelect locale and region tolerance', () => {
     }
   });
 
+  it("'locale' asks a pt-BR viewer for pb then pt, and picks pb", async () => {
+    vi.stubGlobal('navigator', { languages: ['pt-BR'] });
+    try {
+      const pt = [
+        bundleSubtitle({ id: 4, language: 'pt' }),
+        bundleSubtitle({ id: 5, language: 'pb' }),
+      ];
+      const { s, calls } = session(
+        [
+          { match: /by-imdb/, body: movieBundle(pt) },
+          { match: /\/get\/5$/, text: 'x' },
+        ],
+        { autoSelect: 'locale' },
+      );
+      const r = await s.resolve({ imdbId: 'tt0133093' });
+      const langs = calls.map((c) => new URL(c.url).searchParams.get('lang')).filter(Boolean);
+      expect(langs).toEqual(['pb', 'pt']);
+      expect(r.selected?.candidate.subtitle.id).toBe(5);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("'locale' falls back to the base code: an es-MX viewer gets es when there is no ea", async () => {
+    vi.stubGlobal('navigator', { languages: ['es-MX'] });
+    try {
+      const es = [
+        bundleSubtitle({ id: 6, language: 'en' }),
+        bundleSubtitle({ id: 7, language: 'es' }),
+      ];
+      const { s } = session(
+        [
+          { match: /by-imdb/, body: movieBundle(es) },
+          { match: /\/get\/7$/, text: 'x' },
+        ],
+        { autoSelect: 'locale' },
+      );
+      const r = await s.resolve({ imdbId: 'tt0133093' });
+      expect(r.selected?.candidate.subtitle.id).toBe(7);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a pinned regional tag selects its corpus code: pt-BR selects pb, not pt', async () => {
+    const pt = [
+      bundleSubtitle({ id: 4, language: 'pt' }),
+      bundleSubtitle({ id: 5, language: 'pb' }),
+    ];
+    const { s } = session(
+      [
+        { match: /by-imdb/, body: movieBundle(pt) },
+        { match: /\/get\/5$/, text: 'x' },
+      ],
+      { autoSelect: 'pt-BR' },
+    );
+    const r = await s.resolve({ imdbId: 'tt0133093' });
+    expect(r.selected?.candidate.subtitle.id).toBe(5);
+  });
+
   it('a pinned language tolerates a region too: en-US selects en', async () => {
     const { s } = session([page, { match: /\/get\/2$/, text: 'english' }], { autoSelect: 'en-US' });
     const r = await s.resolve({ imdbId: 'tt0133093' });

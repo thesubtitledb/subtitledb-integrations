@@ -1,6 +1,6 @@
 {
   "name": "@subtitledb/loader",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "The script tag. Loads whichever SubtitleDB integration the page turns out to need, and nothing else.",
   "license": "UNLICENSED",
   "type": "module",
@@ -23,7 +23,7 @@
     "build:cdn": "node build.mjs"
   },
   "dependencies": {
-    "@subtitledb/core": "0.5.3",
+    "@subtitledb/core": "0.5.4",
     "@subtitledb/debug": "0.1.0",
     "@subtitledb/html5": "0.2.1",
     "@subtitledb/players": "0.2.1",

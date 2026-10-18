@@ -45,6 +45,10 @@ from subzero.language import Language
 
 logger = logging.getLogger(__name__)
 
+#: This provider's release, sent in the User-Agent. build.py names the zip and the
+#: bazarr-v tag after it. The shared client has its own version, which is not this one.
+VERSION = "0.3.5"
+
 #: What Bazarr can use. The API never converts, so this is a hard filter.
 FORMATS = ["srt", "ass", "ssa", "vtt", "sub"]
 
@@ -125,6 +129,9 @@ def from_api_code(code):
         return None
     if code == "pb":
         return Language("por", "BR")
+    # Latin American Spanish, which Bazarr keeps as es-MX.
+    if code == "ea":
+        return Language("spa", "MX")
     if code in ("zt", "ze"):
         return Language("zho", "TW") if code == "zt" else Language("zho")
     try:
@@ -236,7 +243,7 @@ def supported_languages():
 
     Built from the shared table rather than written out again, and any code
     babelfish will not accept is skipped instead of failing the import: a provider
-    that cannot be loaded is worse than one that offers 70 languages instead of 74.
+    that cannot be loaded is worse than one that offers 66 languages instead of 70.
     """
     from subtitledb.languages import NAMES
 
@@ -266,7 +273,7 @@ class SubtitleDbProvider(Provider):
         self.client = None
 
     def initialize(self):
-        self.client = Client(api_base=self.api_base, client="bazarr")
+        self.client = Client(api_base=self.api_base, client="bazarr", version=VERSION)
 
     def terminate(self):
         self.client = None

@@ -100,6 +100,10 @@ export interface TitleSubtitlesResponse {
   subtitles: Subtitle[];
 }
 
+/**
+ * `/healthz`. The API also sends `clickhouse`, the same value as `store` under an older
+ * name that is going away, so it is left out here on purpose: read `store`.
+ */
 export interface HealthResponse {
   ok: boolean;
   /** State of the data store, such as `up`. */
@@ -156,8 +160,8 @@ export interface BundleSubtitle {
   uploader?: string;
   hearing_impaired: boolean;
   fps: number | null;
-  /** ISO 8601, e.g. "2021-06-04T12:11:09Z". */
-  added_at: string;
+  /** ISO 8601 UTC, e.g. "2021-06-04T12:11:09Z". Null for a file with no upload time on record. */
+  added_at: string | null;
   /** Stable counted redirect on the API host; 302s to the files host. */
   download_url: string;
 }

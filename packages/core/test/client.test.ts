@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { backoffMs, createClient, normaliseImdb, SubtitleDbClient } from '../src/client.js';
 import { SubtitleDbError } from '../src/errors.js';
+import { corpusLanguage } from '../src/languages.js';
 import { movieBundle, stubFetch } from './fixtures.js';
 
 describe('normaliseImdb', () => {
@@ -617,6 +618,23 @@ describe('SubtitleDbClient lookup verbs', () => {
     expect(lang(2)).toBe('fr,de');
     await c.byTitle('matrix', { languages: [] });
     expect(lang(3)).toBeNull();
+  });
+
+  it('maps Spanish regions the way the API does', () => {
+    // Checked live with ?lang= on 2026-10-18: these answer the ea files, the rest es.
+    for (const tag of [
+      'es-419',
+      'es-MX',
+      'es-AR',
+      'es-CO',
+      'es-US',
+      'es-PR',
+      'es_MX',
+      'es-Latn-MX',
+    ])
+      expect(corpusLanguage(tag), tag).toBe('ea');
+    for (const tag of ['es', 'es-ES', 'es-GQ', 'es-013', 'es-Latn', 'ES-es'])
+      expect(corpusLanguage(tag), tag).toBe('es');
   });
 
   it('carries limit, offset and the client marker on a lookup', async () => {

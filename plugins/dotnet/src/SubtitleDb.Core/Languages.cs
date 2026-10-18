@@ -8,15 +8,15 @@ namespace SubtitleDb.Core
     /// Language codes, in every spelling the hosts hand us.
     /// </summary>
     /// <remarks>
-    /// The API speaks two-letter codes with four OpenSubtitles additions (pb, ze, zt,
-    /// pm) that are not ISO at all. The hosts do not: Jellyfin sends ISO639-2 and
+    /// The API speaks two-letter codes with six OpenSubtitles additions (pb, ze, zt,
+    /// ea, sp, pm) that are not ISO at all. The hosts do not: Jellyfin sends ISO639-2 and
     /// sometimes a region, Emby sends the same and occasionally the bibliographic
     /// form (ger, not deu). Brazilian Portuguese is the one that matters most: the
     /// corpus files it under pb, and a plugin that asks for pt hands a Brazilian
     /// viewer European Portuguese and looks broken.
     ///
     /// An unrecognised two-letter code passes through untouched. The corpus carries
-    /// 185 distinct codes and this table names 74: resolving the rest to nothing
+    /// 185 distinct codes and this table names 70: resolving the rest to nothing
     /// would hide subtitles that exist, and resolving them to English would be a lie.
     /// </remarks>
     public static class Languages
@@ -83,10 +83,17 @@ namespace SubtitleDb.Core
                 return named;
             }
 
-            // A region we have no rule for: keep the base language.
             var dash = v.IndexOf('-');
             if (dash > 0)
             {
+                // A script subtag is skipped, as the API does: es-latn-mx is es-mx.
+                var parts = v.Split('-');
+                if (parts.Length >= 3 && parts[1].Length == 4 && parts[1].All(char.IsLetter))
+                {
+                    return ToCode(parts[0] + "-" + parts[2]);
+                }
+
+                // A region we have no rule for: keep the base language.
                 return ToCode(v.Substring(0, dash));
             }
 
