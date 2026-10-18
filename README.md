@@ -135,7 +135,7 @@ import { createClient } from '@subtitledb/core';
 const sdb = createClient({ client: 'my-app/1.0' });
 
 await sdb.byImdb('tt0133093', { lang: 'en' }); // 133093 works too
-await sdb.byTmdb(603);
+await sdb.byTmdb(603, { type: 'movie' }); // /v1/by-tmdb/movie/603, or type: 'tv'
 await sdb.byTitle('the matrix');
 await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE');
 await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
@@ -156,7 +156,7 @@ limit and is what `search` needs; keep it on a server.
 A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTitle`,
 `byReleasename`, `bySubid` and `byInfohash` also say what they matched, in `match`,
 `subtitle` or `torrent`. Every lookup takes `lang` (up to 16, comma separated),
-`format`, `sort` (`lang`, `downloads`, `cues` or `bytes`), `limit` (up to 100),
+`format`, `sort` (`lang`, `cues` or `newest`), `limit` (up to 100),
 `offset`, `response_class` (`minimal`, `standard`, `detailed` or `full`) and `signal`,
 and all but `bySubid` take `season` and `episode`. Client options are `apiBase`,
 `client`, `downloadClient`, `antispamId`, `key`, `timeoutMs` (10000), `retries` (2) and

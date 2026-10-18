@@ -37,6 +37,36 @@ describe('findSubtitles ladder', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('rung 1 takes the typed path: the hint type, else tv for an episode, else untyped', async () => {
+    const { client, calls } = clientWith([{ match: /by-tmdb/, body: movieBundle([]) }]);
+    await findSubtitles({ client, hint: { tmdbId: 1396, tmdbType: 'tv' }, formats: SRT_ONLY });
+    await findSubtitles({ client, hint: { tmdbId: 603, tmdbType: 'movie' }, formats: SRT_ONLY });
+    await findSubtitles({
+      client,
+      hint: { tmdbId: 1396, season: 2, episode: 3 },
+      formats: SRT_ONLY,
+    });
+    await findSubtitles({ client, hint: { tmdbId: 603 }, formats: SRT_ONLY });
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
+      '/v1/by-tmdb/tv/1396',
+      '/v1/by-tmdb/movie/603',
+      '/v1/by-tmdb/tv/1396/season/2/episode/3',
+      '/v1/by-tmdb/603',
+    ]);
+  });
+
+  it('keeps every format when no formats are given', async () => {
+    const { client } = clientWith([
+      {
+        match: /by-imdb/,
+        body: movieBundle([bundleSubtitle({ id: 1 }), bundleSubtitle({ id: 2, format: 'sub' })]),
+      },
+    ]);
+    const r = await findSubtitles({ client, hint: { imdbId: 'tt0133093' } });
+    expect(r.candidates.map((c) => c.subtitle.id)).toEqual([1, 2]);
+    expect(r.unrenderable).toBe(0);
+  });
+
   it('rung 2: resolves an explicit imdb id, which is how media servers arrive', async () => {
     const { client, calls } = clientWith([
       { match: /by-imdb\/tt0133093/, body: movieBundle([bundleSubtitle()]) },

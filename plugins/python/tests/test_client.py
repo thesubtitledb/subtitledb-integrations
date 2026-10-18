@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -96,6 +97,54 @@ def test_by_tmdb_builds_the_verb_path():
     c = client_with([json_response({"title": {}})], calls)
     c.by_tmdb(603)
     assert calls[0].split("?")[0].endswith("/v1/by-tmdb/603")
+
+
+def test_by_tmdb_takes_the_typed_path_and_tv_for_a_season():
+    calls: list[str] = []
+    c = client_with([json_response({"title": {}}) for _ in range(5)], calls)
+    c.by_tmdb(1396, media_type="tv")
+    c.by_tmdb(603, media_type="movie")
+    c.by_tmdb(1396, season=2, episode=3)
+    c.by_tmdb(1396, media_type="tv", season=2)
+    c.by_tmdb(603)
+    assert [urllib.parse.urlsplit(u).path for u in calls] == [
+        "/v1/by-tmdb/tv/1396",
+        "/v1/by-tmdb/movie/603",
+        "/v1/by-tmdb/tv/1396/season/2/episode/3",
+        "/v1/by-tmdb/tv/1396/season/2",
+        "/v1/by-tmdb/603",
+    ]
+
+
+def _no_route(path):
+    body = json.dumps({"error": "not_found", "message": "no route for GET %s" % path})
+    return urllib.error.HTTPError("u", 404, "Not Found", {}, io.BytesIO(body.encode("utf-8")))
+
+
+def test_by_tmdb_falls_back_to_the_untyped_path_while_the_typed_one_has_no_route():
+    calls: list[str] = []
+    c = client_with([
+        _no_route("/v1/by-tmdb/tv/1396/season/2/episode/3"), json_response({"title": {}}),
+        _no_route("/v1/by-tmdb/movie/603"), json_response({"title": {}}),
+    ], calls)
+    c.by_tmdb(1396, season=2, episode=3)
+    c.by_tmdb(603, media_type="movie")
+    split = [urllib.parse.urlsplit(u) for u in calls]
+    assert [s.path for s in split] == [
+        "/v1/by-tmdb/tv/1396/season/2/episode/3", "/v1/by-tmdb/1396/season/2/episode/3",
+        "/v1/by-tmdb/movie/603", "/v1/by-tmdb/603",
+    ]
+    types = [urllib.parse.parse_qs(s.query).get("type") for s in split]
+    assert types == [None, ["tv"], None, ["movie"]]
+
+
+def test_by_tmdb_does_not_fall_back_when_the_title_is_missing():
+    calls: list[str] = []
+    body = b'{"error":"not_found","message":"no title mapped to tmdb id 9"}'
+    c = client_with([urllib.error.HTTPError("u", 404, "Not Found", {}, io.BytesIO(body))], calls)
+    with pytest.raises(SubtitleDbError):
+        c.by_tmdb(9, media_type="tv")
+    assert len(calls) == 1
 
 
 def test_the_imdb_prefix_is_optional_on_the_way_in():

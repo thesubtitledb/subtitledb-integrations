@@ -117,11 +117,56 @@ namespace SubtitleDb.Core
             int offset,
             CancellationToken cancellationToken)
         {
-            return GetAsync<LookupBundle>(
-                "/v1/by-tmdb/" + tmdb.ToString(CultureInfo.InvariantCulture) + Drill(season, episode),
-                PageParameters(language, limit, offset),
-                cancellationToken);
+            return ByTmdbAsync(tmdb, season, episode, null, language, limit, offset, cancellationToken);
         }
+
+        /// <summary>
+        /// By TMDB id, with the numbering it is in: "movie" or "tv", which picks the typed
+        /// path. TMDB numbers films and shows apart, so one id can be both. A season or
+        /// episode means "tv". With neither, the untyped path, kept for existing callers,
+        /// prefers the film.
+        /// </summary>
+        public async Task<LookupBundle> ByTmdbAsync(
+            long tmdb,
+            int? season,
+            int? episode,
+            string? mediaType,
+            string? language,
+            int limit,
+            int offset,
+            CancellationToken cancellationToken)
+        {
+            var id = tmdb.ToString(CultureInfo.InvariantCulture);
+            var type = mediaType ?? (season.HasValue || episode.HasValue ? "tv" : null);
+            var drill = type == "movie" ? string.Empty : Drill(season, episode);
+            var bare = "/v1/by-tmdb/" + id + drill;
+            if (type != "movie" && type != "tv")
+            {
+                return await GetAsync<LookupBundle>(bare, PageParameters(language, limit, offset), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            try
+            {
+                return await GetAsync<LookupBundle>(
+                    "/v1/by-tmdb/" + type + "/" + id + drill,
+                    PageParameters(language, limit, offset),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (SubtitleDbException err) when (NoRoute(err))
+            {
+                // An API without the typed paths answers "no route": ask the untyped path
+                // with ?type= instead. Remove once the typed paths are live.
+                var parameters = PageParameters(language, limit, offset);
+                parameters["type"] = type;
+                return await GetAsync<LookupBundle>(bare, parameters, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>A 404 for a path the API has no route for, not an id it has no title for.</summary>
+        private static bool NoRoute(SubtitleDbException err) =>
+            err.Status == HttpStatusCode.NotFound
+            && err.Message.StartsWith("no route", StringComparison.Ordinal);
 
         public Task<LookupBundle> ByImdbAsync(
             string imdb,
@@ -382,6 +427,8 @@ namespace SubtitleDb.Core
                     using (var request = new HttpRequestMessage(HttpMethod.Get, url))
                     {
                         request.Headers.TryAddWithoutValidation("Accept", "application/json");
+                        // Our own agent, not the host client's ("Jellyfin-Server/10.11.11").
+                        request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
                         // The body is read inside this call, so the timeout covers it too.
                         response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
                     }

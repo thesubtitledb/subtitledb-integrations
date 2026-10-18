@@ -210,6 +210,7 @@ namespace SubtitleDb.Jellyfin
                     && long.TryParse(tmdb, NumberStyles.Integer, CultureInfo.InvariantCulture, out var tmdbId))
                 {
                     hint.TmdbId = tmdbId;
+                    hint.TmdbType = "movie";
                 }
             }
 

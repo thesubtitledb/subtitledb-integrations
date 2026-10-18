@@ -90,7 +90,7 @@ def test_a_film_scraped_from_tmdb_goes_by_its_tmdb_and_imdb_ids():
         "path": "/m/Anatomy.of.a.Fall.2023.1080p.mkv", "title": "Anatomy of a Fall",
         "year": "2023", "imdb": "tt17009710", "imdb_number": "915935", "tmdb": "915935",
     })
-    assert (hint.imdb_id, hint.tmdb_id) == ("tt17009710", 915935)
+    assert (hint.imdb_id, hint.tmdb_id, hint.tmdb_type) == ("tt17009710", 915935, "movie")
 
 
 def test_an_episode_with_no_imdb_id_of_its_own_carries_its_shows():
@@ -104,6 +104,13 @@ def test_an_episode_with_no_imdb_id_of_its_own_carries_its_shows():
     assert (hint.imdb_id, hint.series_imdb_id) == (None, "tt0108778")
     assert (hint.title, hint.season, hint.episode) == ("Friends", 1, 1)
     # An episode's TMDB id is the episode's, not a key the API maps.
+    assert hint.tmdb_id is None
+
+
+def test_an_episode_without_numbers_sends_no_tmdb_id_as_a_film():
+    hint = logic.hint_from({
+        "path": "/tv/Friends.mkv", "title": "Pilot", "tvshow": "Friends", "tmdb": "85987",
+    })
     assert hint.tmdb_id is None
 
 

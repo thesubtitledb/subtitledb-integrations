@@ -4,9 +4,7 @@
  * Single-flight is the part that matters. Because integrations resolve eagerly on
  * player init, a page with several players, or a player that fires its ready event
  * more than once, would otherwise issue the same search several times within a few
- * milliseconds. Collapsing concurrent identical lookups into one in-flight promise
- * is the cheapest protection the client side can offer an API that has no rate
- * limiting of its own yet.
+ * milliseconds. Concurrent identical lookups share one in-flight promise.
  */
 
 export interface CacheOptions {

@@ -13,6 +13,12 @@ namespace SubtitleDb.Core
         public long? TmdbId { get; set; }
 
         /// <summary>
+        /// "movie" or "tv": which TMDB numbering <see cref="TmdbId"/> is in, and so which
+        /// typed path is asked. Null with a season or episode is taken as "tv".
+        /// </summary>
+        public string? TmdbType { get; set; }
+
+        /// <summary>
         /// For TV, the series' IMDb id: what a server holds for the show when the
         /// episode has no id of its own. The ladder drills it to the season and episode.
         /// </summary>

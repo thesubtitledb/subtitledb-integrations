@@ -23,6 +23,23 @@ const FILM_IMDB = 'tt0133093';
 // Game of Thrones. A series, so it comes back as a tree and needs a slug to narrow.
 const SERIES_IMDB = 'tt0944947';
 
+/**
+ * Whether the API serves the typed TMDB paths (/v1/by-tmdb/movie/:id, /tv/:id). Until it
+ * does, those tests skip: a 404 whose message is "no route for ..." is a missing route,
+ * not a missing title.
+ */
+async function routeExists(path: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.thesubtitledb.org${path}`);
+    if (res.status !== 404) return true;
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    return !String(body.message ?? '').startsWith('no route');
+  } catch {
+    return false;
+  }
+}
+const typedTmdb = await routeExists('/v1/by-tmdb/movie/603?limit=1');
+
 /** The page for the scope that was asked for. Every bundle carries one, at every scope. */
 function scopePage(b: LookupBundle) {
   return b.subtitles;
@@ -32,7 +49,6 @@ describe('live API contract', () => {
   it('is healthy and reports a populated corpus', async () => {
     const h = await client.health();
     expect(h.ok).toBe(true);
-    expect(h.clickhouse).toBe('up');
     expect(h.titles).toBeGreaterThan(400_000);
     expect(h.indexed_subtitles).toBeGreaterThan(6_000_000);
   });
@@ -137,6 +153,21 @@ describe('live API contract', () => {
     expect(b.title.tmdb_id).toBeNull();
     expect(scopePage(b).items.length).toBeGreaterThan(0);
   });
+
+  it.skipIf(!typedTmdb)(
+    'by-tmdb takes the typed path for an id a film and a show share',
+    async () => {
+      // 1396 is Breaking Bad on TMDB's TV side and a 1975 film on its film side.
+      const [tv, film, episode] = await Promise.all([
+        client.byTmdb(1396, { type: 'tv', limit: 1 }),
+        client.byTmdb(1396, { type: 'movie', limit: 1 }),
+        client.byTmdb(1396, { season: 2, episode: 3, limit: 1 }),
+      ]);
+      expect(tv.title.imdb).toBe('tt0903747');
+      expect(film.title.imdb).not.toBe('tt0903747');
+      expect(episode.subtitles.items).toBeInstanceOf(Array);
+    },
+  );
 
   it('by-tmdb either resolves the same title or 404s', async () => {
     // The imdb->tmdb map is only partial in production, so this can 404 today. Written

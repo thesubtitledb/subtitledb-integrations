@@ -116,6 +116,17 @@ def test_a_film_hint_carries_the_id_the_year_and_the_release():
     assert hint.release == "Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL"
 
 
+def test_a_tmdb_id_goes_with_its_type():
+    film = Movie(name="/m/x.mkv", title="x", year=2000)
+    film.tmdb_id = "915935"
+    show = Episode(name="/tv/x.mkv", series="x", season=2, episode=3)
+    show.series_tmdb_id = 1396
+    assert (provider.hint_for(film).tmdb_id, provider.hint_for(film).tmdb_type) == (
+        915935, "movie")
+    assert (provider.hint_for(show).tmdb_id, provider.hint_for(show).tmdb_type) == (1396, "tv")
+    assert provider.hint_for(Movie(name="/m/y.mkv", title="y")).tmdb_id is None
+
+
 def test_an_episode_hint_carries_the_series_the_numbers_and_the_episode_title():
     video = Episode(
         name="/tv/Breaking.Bad.S05E14.1080p.BluRay.x264-DEMAND.mkv",

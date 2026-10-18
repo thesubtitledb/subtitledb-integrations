@@ -50,6 +50,7 @@ namespace SubtitleDb.Jellyfin.Tests
 
             Assert.Equal("tt17009710", hint.ImdbId);
             Assert.Equal(915935, hint.TmdbId);
+            Assert.Equal("movie", hint.TmdbType);
             Assert.Equal("Anatomy of a Fall", hint.Title);
             Assert.Equal(2023, hint.Year);
             Assert.Null(hint.Season);

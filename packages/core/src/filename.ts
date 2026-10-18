@@ -15,8 +15,13 @@ export interface ParsedFilename {
   /** Best-effort human title. Empty string when nothing survived the tag stripping. */
   title: string;
   year: number | null;
-  /** Null for an anime-style absolute episode number, which has no season. */
+  /**
+   * Null for an anime-style absolute episode number, which has no season. The first
+   * season of a pack that covers several.
+   */
   season: number | null;
+  /** Every season of a pack such as S01-S10 or Season 1-3, in order. Only present for a range. */
+  seasons?: number[];
   /** The first episode of a multi-episode file such as S02E01E02. */
   episode: number | null;
   /** Every episode of a multi-episode file, in order. Only present when there is more than one. */
@@ -170,6 +175,20 @@ const EPISODE_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * A season pack with no episode: S01-S10, S01-10, Season 1-3, Seasons 1 to 3, then a
+ * single S01 or Season 1. A range keeps its last season in group 2.
+ */
+const SEASON_PATTERNS: RegExp[] = [
+  /\bs(\d{1,2})[\s._]*-[\s._]*s?(\d{1,2})\b/i,
+  /\bseasons?[\s._-]*(\d{1,2})[\s._]*(?:-|to)[\s._]*(\d{1,2})\b/i,
+  /\bs(\d{1,2})\b/i,
+  /\bseason[\s._-]*(\d{1,2})\b/i,
+];
+
+/** "The Complete Series" and the like: the rest is not the title. */
+const PACK = /\b(?:the[\s._-]+)?complete\b/i;
+
+/**
  * The anime convention: `[Group] Title - 1100 [1080p]`, an absolute episode number
  * with no season, after " - " and before the end or the first bracketed tag. An
  * optional v2 marks a re-release.
@@ -228,8 +247,8 @@ function extractGroup(base: string): { rest: string; group: string | null } {
   const candidate = m[1];
 
   // A trailing "-2160p" style token is a tag, not a group, and neither is the
-  // "-E02.720p" tail of a multi-episode name.
-  if (tokenise(candidate).some((t) => isTag(t) || /^e\d{1,3}$/i.test(t))) {
+  // "-E02.720p" tail of a multi-episode name or the "-S03" of a season range.
+  if (tokenise(candidate).some((t) => isTag(t) || /^[es]\d{1,3}$/i.test(t))) {
     return { rest: base, group: null };
   }
 
@@ -289,6 +308,20 @@ export function parseFilename(input: string): ParsedFilename {
     }
   }
 
+  let seasons: number[] | undefined;
+  if (episodeCut === -1) {
+    for (const re of SEASON_PATTERNS) {
+      const m = re.exec(rest);
+      if (m?.[1] === undefined) continue;
+      const first = Number(m[1]);
+      const last = m[2] === undefined ? first : Number(m[2]);
+      season = first;
+      episodeCut = m.index;
+      if (last > first) seasons = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+      break;
+    }
+  }
+
   // No season marker: an anime name carries the group first and an absolute episode
   // number after the title. A number in the year range is a year, not an episode.
   if (episodeCut === -1) {
@@ -322,7 +355,10 @@ export function parseFilename(input: string): ParsedFilename {
 
   // The title ends at whichever comes first: the episode marker, the year, or the
   // first recognised release tag.
-  const cuts = [episodeCut, yearCut].filter((c) => c >= 0);
+  // "Complete" after the title, never as the first word of it.
+  const pack = PACK.exec(rest);
+  const packCut = pack && tokenise(rest.slice(0, pack.index)).length > 0 ? pack.index : -1;
+  const cuts = [episodeCut, yearCut, packCut].filter((c) => c >= 0);
   let cut = cuts.length ? Math.min(...cuts) : rest.length;
 
   const head = rest.slice(0, cut);
@@ -339,6 +375,7 @@ export function parseFilename(input: string): ParsedFilename {
     title: titleCase(titleTokens),
     year,
     season,
+    ...(seasons ? { seasons } : {}),
     episode,
     ...(episodes ? { episodes } : {}),
     group,

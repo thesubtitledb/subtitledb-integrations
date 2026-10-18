@@ -71,6 +71,8 @@ class Hint:
 
     imdb_id: str | None = None
     tmdb_id: int | None = None
+    #: "movie" or "tv": which TMDB numbering ``tmdb_id`` is in. None with a season is "tv".
+    tmdb_type: str | None = None
     series_imdb_id: str | None = None
     title: str | None = None
     episode_title: str | None = None

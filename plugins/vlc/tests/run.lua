@@ -309,6 +309,55 @@ test("an explicit tmdb id leads, and a 404 there falls through to imdb", functio
   ok(asked[1]:find("by-tmdb/603", 1, true) ~= nil, "tmdb was not tried first")
 end)
 
+test("the tmdb rung takes the typed path", function()
+  local asked = {}
+  local saved = S.fetch
+  S.fetch = function(url)
+    asked[#asked + 1] = url
+    return '{"title":{},"subtitles":{"items":[{"id":3,"language":"en","format":"srt","cues":900}]}}'
+  end
+  S.search({ tmdb_id = 603, tmdb_type = "movie" }, { languages = { "en" } })
+  S.search({ tmdb_id = 1396, season = 2, episode = 3 }, { languages = { "en" } })
+  S.search({ tmdb_id = 603 }, { languages = { "en" } })
+  S.fetch = saved
+  ok(asked[1]:find("/v1/by-tmdb/movie/603?", 1, true) ~= nil, "a film missed the movie path")
+  ok(asked[2]:find("/v1/by-tmdb/tv/1396/season/2/episode/3?", 1, true) ~= nil,
+    "an episode missed the tv path")
+  ok(asked[3]:find("/v1/by-tmdb/603?", 1, true) ~= nil, "no type took a typed path")
+end)
+
+test("the tmdb rung falls back to the untyped path while the typed one has no route", function()
+  local asked = {}
+  local saved = S.fetch
+  S.fetch = function(url)
+    asked[#asked + 1] = url
+    if url:find("/v1/by-tmdb/tv/", 1, true) then
+      return '{"error":"not_found","message":"no route for GET /v1/by-tmdb/tv/1396"}'
+    end
+    return '{"title":{},"subtitles":{"items":[{"id":3,"language":"en","format":"srt","cues":900}]}}'
+  end
+  local found, _, info = S.search({ tmdb_id = 1396, season = 2, episode = 3 }, { languages = { "en" } })
+  S.fetch = saved
+  equal(#found, 1)
+  equal(info.tier, "explicit-tmdb")
+  equal(#asked, 2)
+  ok(asked[2]:find("/v1/by-tmdb/1396/season/2/episode/3?", 1, true) ~= nil, "no untyped retry")
+  ok(asked[2]:find("type=tv", 1, true) ~= nil, "the retry lost the type")
+end)
+
+test("a title missing on the typed path is not asked again", function()
+  local asked = {}
+  local saved = S.fetch
+  S.fetch = function(url)
+    asked[#asked + 1] = url
+    return '{"error":"not_found","message":"no title mapped to tmdb id 9"}'
+  end
+  S.search({ tmdb_id = 9, tmdb_type = "movie" }, { languages = { "en" } })
+  S.fetch = saved
+  ok(asked[1]:find("/v1/by-tmdb/movie/9?", 1, true) ~= nil, "the movie path was not asked")
+  ok(asked[2] == nil or asked[2]:find("by-tmdb", 1, true) == nil, "the untyped path was asked")
+end)
+
 test("an episode drills by title on the season and episode numbers", function()
   local asked = {}
   local saved = S.fetch

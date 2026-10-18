@@ -8,8 +8,8 @@ import type { BundleSubtitle, LookupBundle, LookupTitle } from './types.js';
  * Rungs of the match ladder, strongest first. Each falls through to the next.
  *
  * tmdb is the headline key and leads the ladder; imdb sits right behind it, because
- * media servers identify content by IMDb id and the imdb->tmdb map is only partial, so
- * `explicit-tmdb` 404s for many ids and hands off to `explicit-imdb`. An episode with
+ * media servers identify content by IMDb id and not every title has a TMDB id, so
+ * `explicit-tmdb` 404s for some ids and hands off to `explicit-imdb`. An episode with
  * no id of its own goes by its series' id, drilled to the season and episode
  * (`series-imdb`). Free text is the last automatic rung: the server matches the title
  * and drills to the episode, so no ranked list of titles crosses the wire.
@@ -67,7 +67,7 @@ export interface MatchResult {
   /** Subtitles dropped purely because the player cannot render their format. */
   unrenderable: number;
   /**
-   * Subtitles dropped because sub_meta files them under a different episode. Counted
+   * Subtitles dropped because they are filed under a different episode. Counted
    * rather than shown: the wrong episode's lines are worse than no lines.
    */
   wrongEpisode: number;
@@ -82,9 +82,9 @@ export interface RankOptions {
    * Formats this session can put in front of a viewer: what the player parses
    * natively, plus anything the client side converter can reach. A hard filter, not
    * a preference, because handing a player a format it cannot parse produces a
-   * silent empty caption track, the most confusing failure a subtitle plugin has.
+   * silent empty caption track. Omitted, every format is kept.
    */
-  formats: string[];
+  formats?: string[] | undefined;
   /** Prefer, or avoid, hearing-impaired subtitles. Undefined means no preference. */
   hearingImpaired?: boolean | undefined;
   /**
@@ -172,9 +172,7 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
   }
 
   // Release-name agreement is the strongest signal a subtitle matches this exact
-  // encode, and it is a comparison between two release names. Comparing one against
-  // the film's title, as this did before sub_meta made release_name real, could not
-  // agree with anything.
+  // encode.
   const release = s.release_name?.trim();
   if (release && opts.hint.release) {
     const sim = similarity(release, opts.hint.release);
@@ -193,8 +191,7 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
     reasons.push(`season ${opts.hint.season} episode ${opts.hint.episode}`);
   }
 
-  // A subtitle with no cues cannot render. Known corpus defect, tracked as a repo
-  // task; cheap to defend against here.
+  // A subtitle with no cues cannot render.
   if (s.cues === 0) {
     score -= 500;
     reasons.push('no cues');
@@ -204,10 +201,8 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
 }
 
 /**
- * Whether sub_meta files this subtitle under a different episode.
- *
- * A row with no season at all is kept: sub_meta has no entry for every id, and
- * unknown is not wrong.
+ * Whether this subtitle is filed under a different episode. A row with no season is
+ * kept: unknown is not wrong.
  */
 function wrongEpisode(s: BundleSubtitle, hint: MediaHint): boolean {
   if (hint.season === undefined || hint.episode === undefined) return false;
@@ -217,17 +212,15 @@ function wrongEpisode(s: BundleSubtitle, hint: MediaHint): boolean {
 }
 
 /**
- * Filter, score and order.
- *
- * The bundle already sorts a page newest-first and carries no download count, so ties
- * break on the id: two runs of the same query then agree on the order.
+ * Filter, score and order. Ties break on the id, so two runs of the same query agree
+ * on the order.
  */
 export function rank(
   subs: BundleSubtitle[],
   opts: RankOptions,
 ): { candidates: Candidate[]; dropped: number; wrong: number } {
-  const renderable = new Set(opts.formats.map((f) => f.toLowerCase()));
-  const playable = subs.filter((s) => renderable.has(s.format.toLowerCase()));
+  const renderable = opts.formats ? new Set(opts.formats.map((f) => f.toLowerCase())) : null;
+  const playable = renderable ? subs.filter((s) => renderable.has(s.format.toLowerCase())) : subs;
   const dropped = subs.length - playable.length;
 
   // The wrong episode is not a worse match, it is the wrong file: showing it is how
@@ -260,7 +253,6 @@ function isFallthrough(err: unknown): boolean {
  * The scoped subtitle page inside a bundle: the files that belong to exactly what was
  * asked for. The API puts them in the top-level `subtitles` page at every scope, so a
  * drilled episode, a drilled season, a movie and a whole series all read the same way.
- * This used to branch on `'episode' in b` and `'season' in b`; neither key exists.
  */
 function scopedItems(b: LookupBundle): BundleSubtitle[] {
   return b.subtitles.items;
@@ -376,10 +368,16 @@ export async function findSubtitles(input: MatchOptions): Promise<MatchResult> {
     }
   };
 
-  // Rung 1: an explicit TMDB id. tmdb is the headline key. The imdb->tmdb map is only
-  // partial in production, so this 404s for many ids and falls through to imdb.
+  // Rung 1: an explicit TMDB id. Not every title has one, so this 404s for some ids
+  // and falls through to imdb. TMDB numbers films and shows apart, so the typed path
+  // is used: the hint's own type, else `tv` for an episode.
   if (hint.tmdbId !== undefined) {
-    const r = await via((p) => client.byTmdb(hint.tmdbId as number, p), 'explicit-tmdb');
+    const episodic = hint.season !== undefined || hint.episode !== undefined;
+    const type = hint.tmdbType ?? (episodic ? 'tv' : undefined);
+    const r = await via(
+      (p) => client.byTmdb(hint.tmdbId as number, { ...p, ...(type ? { type } : {}) }),
+      'explicit-tmdb',
+    );
     if (r) return r;
   }
 

@@ -158,6 +158,19 @@ namespace SubtitleDb.Tests
         }
 
         [Fact]
+        public async Task ALookupCarriesThePluginsAgentNotTheHosts()
+        {
+            var handler = new StubHandler().On("by-imdb", "{\"title\":{},\"subtitles\":{\"items\":[]}}");
+            var host = new HttpClient(handler);
+            host.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Jellyfin-Server/10.11.11");
+            var client = new SubtitleDbClient(host, "https://api.example.test", "jellyfin");
+
+            await client.ByImdbAsync("tt0133093", null, null, null, 100, 0, CancellationToken.None);
+
+            Assert.Equal(client.UserAgent, handler.Agents[0]);
+        }
+
+        [Fact]
         public async Task ADownloadNamesThePluginInItsQueryAndItsVersionInItsAgent()
         {
             // The query names the plugin to the API, as every lookup does; the agent

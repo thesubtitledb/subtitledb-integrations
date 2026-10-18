@@ -65,13 +65,16 @@ namespace SubtitleDb.Core
 
             options = options ?? new MatchOptions();
 
-            // Rung 1: an explicit TMDB id, the headline key. The map is only partial in
-            // production, so this 404s for many ids and falls through to imdb.
+            // Rung 1: an explicit TMDB id, the headline key. Not every title has one, so
+            // this 404s for some ids and falls through to imdb. TMDB numbers films and
+            // shows apart, so the typed path is used: the hint's own type, else "tv" for
+            // an episode.
             if (hint.TmdbId.HasValue)
             {
+                var type = hint.TmdbType ?? (hint.Season.HasValue || hint.Episode.HasValue ? "tv" : null);
                 var result = await ViaAsync(
                     (lang, limit, offset, ct) => client.ByTmdbAsync(
-                        hint.TmdbId!.Value, hint.Season, hint.Episode, lang, limit, offset, ct),
+                        hint.TmdbId!.Value, hint.Season, hint.Episode, type, lang, limit, offset, ct),
                     hint, options, MatchTier.ExplicitTmdb, cancellationToken).ConfigureAwait(false);
                 if (result != null)
                 {

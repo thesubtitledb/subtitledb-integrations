@@ -63,6 +63,9 @@ def hint_for(video):
             # falls through to the series search when the episode id is missing.
             imdb_id=clean_imdb(getattr(video, "imdb_id", None)),
             series_imdb_id=clean_imdb(getattr(video, "series_imdb_id", None)),
+            # The show's TMDB id, where Bazarr has one: a tv id, drilled to the episode.
+            tmdb_id=clean_tmdb(getattr(video, "series_tmdb_id", None)),
+            tmdb_type="tv",
             title=video.series,
             episode_title=video.title,
             year=video.year,
@@ -72,10 +75,21 @@ def hint_for(video):
         )
     return Hint(
         imdb_id=clean_imdb(getattr(video, "imdb_id", None)),
+        tmdb_id=clean_tmdb(getattr(video, "tmdb_id", None)),
+        tmdb_type="movie",
         title=video.title,
         year=video.year,
         release=stem,
     )
+
+
+def clean_tmdb(value):
+    """A TMDB id as an int, or None for nothing, zero or anything not a number."""
+    try:
+        number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
 
 
 def clean_imdb(value):

@@ -1,11 +1,9 @@
 /**
  * Client side conversion to WebVTT.
  *
- * The corpus is 6,205,000 srt, 130,913 ssa and 98,454 ass against 2,487 vtt, so a
- * player whose subtitle support is a bare `<track src>` can otherwise be handed
- * 0.036% of what we hold. Converting in the browser rather than in the API keeps the
- * API serving exactly what is stored, keeps the bytes edge cacheable under one URL
- * per subtitle, and costs nothing until a track is actually selected.
+ * Almost every subtitle is stored as SRT or ASS, and a player whose subtitle support
+ * is a bare `<track src>` reads only WebVTT. The API serves files as stored, so the
+ * conversion happens here, and only when a track is selected.
  *
  * Deliberately small: this is a format shim, not a subtitle engine. It carries cue
  * timing and text, keeps the inline tags WebVTT shares with SubRip, drops the styling
@@ -47,15 +45,15 @@ const DROP_TAGS = /^\/?font(?:\s[^>]*)?$/i;
 
 /**
  * Everything in neither list is escaped, because a subtitle is untrusted third party
- * text being injected into a document.
+ * text being injected into a document. So is a lone `<` or `>` outside a tag.
  */
 function escapeCueText(s: string): string {
   // Only a bare ampersand. WebVTT decodes character references, so escaping one that
-  // is already a reference shows the viewer "&amp;" where the writer wrote "&", and
-  // SubRip in this corpus is full of "&amp;" and "&#39;" already.
+  // is already a reference shows the viewer "&amp;" where the writer wrote "&".
   return s
     .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
-    .replace(/<([^<>]*)>/g, (whole, inner: string) => {
+    .replace(/<([^<>]*)>|[<>]/g, (whole, inner: string | undefined) => {
+      if (inner === undefined) return whole === '<' ? '&lt;' : '&gt;';
       if (VTT_TAGS.test(inner)) return whole;
       if (DROP_TAGS.test(inner)) return '';
       return `&lt;${inner}&gt;`;

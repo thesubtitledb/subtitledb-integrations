@@ -15,7 +15,7 @@ import type { ClientOptions, SubtitleDbClient } from './client.js';
 import { CONVERTIBLE, toVtt } from './convert.js';
 import { SubtitleDbError } from './errors.js';
 import { isResolvable, type MediaHint } from './identify.js';
-import { type Candidate, candidateLabel, type MatchTier } from './match.js';
+import { type Candidate, candidateLabel, type MatchTier, PAGE } from './match.js';
 import { createSession } from './session.js';
 import { type Cue, parseVtt, rescale, serialize, shift } from './transform.js';
 import type { BundleSubtitle, LanguageCode, LookupTitle } from './types.js';
@@ -41,7 +41,10 @@ export interface QueryConvert {
 }
 
 export interface QueryOptions extends QueryConvert {
-  /** What is playing. Same shape resolve() takes: imdbId, tmdbId, or title/year/season/episode. */
+  /**
+   * What is playing. Same shape resolve() takes: imdbId, tmdbId (with tmdbType), a
+   * seriesImdbId with season and episode, or title/year/season/episode.
+   */
   hint?: MediaHint | undefined;
   /** Preferred languages, best first, as tags (`en-US`, `pt-BR`). Each is fetched and merged. */
   languages?: string[] | undefined;
@@ -144,23 +147,30 @@ async function loadOne(
  *
  * Unlike a session's resolve(), this throws: a caller asking for data wants to know
  * why there is none. A hint with nothing to look up by is refused before any request
- * (`bad_request`); an API refusal carries the API's own code and message.
+ * (`bad_request`); an API refusal carries the API's own code and message; a hint that
+ * matches no title is `not_found`. A title with no subtitles in the languages asked
+ * for is not an error: it returns no results.
  */
 export async function query(opts: QueryOptions): Promise<QueryResult> {
   const hint = opts.hint ?? {};
   if (!isResolvable(hint)) {
     throw new SubtitleDbError({
-      message: 'query needs an imdbId, a tmdbId or a title in hint',
+      message: 'query needs an imdbId, a tmdbId, a seriesImdbId or a title in hint',
       code: 'bad_request',
     });
   }
   const languages = [...(opts.lang ? [opts.lang] : []), ...(opts.languages ?? [])];
+  // One call, so its budget is exactly what it asks for: a lookup per language per
+  // page of `limit`, plus one.
+  const pages = Math.max(1, Math.ceil((opts.limit ?? PAGE) / PAGE));
+  const maxRequests = 1 + Math.max(1, languages.length) * pages;
 
   // resolve() reports and returns empty rather than throwing. The report is kept here
   // and thrown once resolve() has returned, so the caller gets the failure, not [].
   let failure: unknown;
   const session = createSession({
     formats: [...CONVERTIBLE],
+    maxRequests,
     ...(languages.length ? { languages } : {}),
     ...(opts.hearingImpaired !== undefined ? { hearingImpaired: opts.hearingImpaired } : {}),
     ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
@@ -185,8 +195,24 @@ export async function query(opts: QueryOptions): Promise<QueryResult> {
 
   const result = await session.resolve(hint);
   if (failure !== undefined) throw failure;
+  // Every rung answered 404.
+  if (result.tier === 'manual') {
+    throw new SubtitleDbError({
+      message: `no title found for ${describe(hint)}`,
+      status: 404,
+      code: 'not_found',
+    });
+  }
   const results = result.candidates.map((c) => wrap(session.client, c, convert));
   return { hint: result.hint, title: result.title, tier: result.tier, results };
+}
+
+/** The strongest thing a hint looks up by, for a message. */
+function describe(h: MediaHint): string {
+  if (h.imdbId) return `imdbId ${h.imdbId}`;
+  if (h.tmdbId) return `tmdbId ${h.tmdbId}`;
+  if (h.seriesImdbId) return `seriesImdbId ${h.seriesImdbId}`;
+  return `title "${h.title ?? ''}"`;
 }
 
 function wrap(client: SubtitleDbClient, c: Candidate, convert: QueryConvert): QuerySubtitle {

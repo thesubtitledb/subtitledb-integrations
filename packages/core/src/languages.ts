@@ -1,11 +1,9 @@
 /**
  * ISO639 code to English display name.
  *
- * The corpus uses 185 distinct codes, most of them ordinary ISO639-1. Four are
- * OpenSubtitles conventions rather than standards and have no ISO name at all, which
- * is why a plain lookup table leaves them rendering as bare uppercase codes in any
- * UI built on this data. They are spelled out here so a language menu never shows
- * "PB" to a user who wanted Brazilian Portuguese.
+ * Most codes are ordinary ISO639-1. Four are OpenSubtitles conventions with no ISO
+ * name, spelled out here so a language menu never shows "PB" to a user who wanted
+ * Brazilian Portuguese.
  */
 const NAMES: Record<string, string> = {
   // OpenSubtitles-specific codes, not ISO639.
@@ -94,7 +92,7 @@ export function hasLanguageName(code: string): boolean {
 /**
  * Base language subtag, lowercased: `en-US` -> `en`, `pt_BR` -> `pt`, `EN` -> `en`.
  *
- * The corpus stores single codes with no region (`types.ts` LanguageCode), so an
+ * Subtitle languages are single codes with no region (see LanguageCode), so an
  * `autoSelect` of `en-US` can only ever match on the base. This is also how a
  * viewer's `navigator.languages`, which are BCP-47 tags, are compared to it.
  */

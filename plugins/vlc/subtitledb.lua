@@ -24,7 +24,7 @@
 SubtitleDb = {}
 local S = SubtitleDb
 
-S.VERSION = "0.3.1"
+S.VERSION = "0.3.2"
 S.API_BASE = "https://api.thesubtitledb.org"
 S.FORMATS = { srt = true, ass = true, ssa = true, sub = true, vtt = true }
 
@@ -602,6 +602,13 @@ function S.get_json(url)
   return value
 end
 
+--- A miss that may be a path the API has no route for: its message, or VLC's empty
+--- stream for any 404.
+function S.no_route(err)
+  err = err or ""
+  return string.sub(err, 1, 8) == "no route" or string.sub(err, 1, #S.NO_ANSWER) == S.NO_ANSWER
+end
+
 --- The most rows the API returns for one request. More takes an offset.
 S.PAGE = 100
 --- What a search reads per language when the settings do not say.
@@ -688,7 +695,24 @@ function S.search(hint, opts)
   local pages, tier, err, title = nil, "none", nil, nil
 
   if hint.tmdb_id then
-    pages, err, title = via(drill("/v1/by-tmdb/" .. tostring(hint.tmdb_id)))
+    -- TMDB numbers films and shows apart, so the typed path is used: the hint's own
+    -- type, else "tv" for an episode. With neither, the untyped path prefers the film.
+    local kind = hint.tmdb_type or ((hint.season or hint.episode) and "tv") or nil
+    local id = tostring(hint.tmdb_id)
+    local bare = kind == "movie" and "/v1/by-tmdb/" .. id or drill("/v1/by-tmdb/" .. id)
+    if kind == "movie" then
+      pages, err, title = via("/v1/by-tmdb/movie/" .. id)
+    elseif kind == "tv" then
+      pages, err, title = via(drill("/v1/by-tmdb/tv/" .. id))
+    else
+      pages, err, title = via(bare)
+    end
+    -- An API without the typed paths answers "no route", which VLC may show only as no
+    -- answer: ask the untyped path with ?type= instead. Remove once the typed paths
+    -- are live.
+    if not pages and kind and S.no_route(err) then
+      pages, err, title = via(bare, { { "type", kind } })
+    end
     if pages then tier = "explicit-tmdb" end
   end
 

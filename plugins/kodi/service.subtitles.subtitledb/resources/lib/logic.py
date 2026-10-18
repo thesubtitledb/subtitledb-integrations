@@ -160,9 +160,10 @@ def hint_from(info):
         )
     return Hint(
         imdb_id=imdb_of(info),
-        # Only for a film: an episode's TMDB id is the episode's, and the map the API
-        # reads is keyed by the film's.
-        tmdb_id=to_int(info.get("tmdb")),
+        # Only for a film, asked on the movie path: an episode's TMDB id is the
+        # episode's, so a video with a show name but no numbers sends none.
+        tmdb_id=None if info.get("tvshow") else to_int(info.get("tmdb")),
+        tmdb_type="movie",
         title=info.get("title") or info.get("original_title") or None,
         year=to_int(info.get("year")),
         release=video_name(info.get("path")),

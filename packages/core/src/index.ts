@@ -6,6 +6,7 @@ export type {
   LookupParams,
   RequestOptions,
   SearchParams,
+  TmdbParams,
 } from './client.js';
 export {
   backoffMs,
@@ -88,5 +89,6 @@ export type {
   TitleKind,
   TitleMatch,
   TitleSubtitlesResponse,
+  TmdbType,
   TorrentRef,
 } from './types.js';

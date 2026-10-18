@@ -143,6 +143,52 @@ describe('query', () => {
     expect(calls.filter((c) => DOWNLOAD.test(c.url))).toHaveLength(1);
   });
 
+  it('finds an episode by the series id alone, with the season and episode', async () => {
+    const { fetch, calls } = stubFetch([
+      {
+        match: /by-imdb\/tt0903747\/season\/2\/episode\/3/,
+        body: movieBundle([bundleSubtitle({ id: 5 })]),
+      },
+    ]);
+    const res = await query({
+      hint: { seriesImdbId: 'tt0903747', season: 2, episode: 3 },
+      fetch,
+    });
+    expect(res.tier).toBe('series-imdb');
+    expect(res.results).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('throws not_found when no rung finds the title', async () => {
+    const { fetch } = stubFetch([
+      { match: /by-imdb/, status: 404, body: { error: 'not_found', message: 'no title' } },
+    ]);
+    const err = await query({ hint: { imdbId: 'tt9999998' }, fetch }).catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbError);
+    expect(err).toMatchObject({ status: 404, code: 'not_found' });
+    expect(err.message).toContain('tt9999998');
+  });
+
+  it('asks once per language however many languages there are', async () => {
+    const { fetch, calls } = stubFetch(routes());
+    const languages = 'en,fr,de,es,it,pt,nl,sv,no,da,fi,pl,cs,hu,ro,el,tr'.split(',');
+    const res = await query({ hint: { imdbId: 'tt0133093' }, languages, fetch });
+    expect(res.tier).toBe('explicit-imdb');
+    expect(calls).toHaveLength(17);
+  });
+
+  it('refuses an http apiBase when a key is set', async () => {
+    const { fetch, calls } = stubFetch(routes());
+    const err = await query({
+      hint: { imdbId: 'tt0133093' },
+      key: 'k',
+      apiBase: 'http://api.thesubtitledb.org',
+      fetch,
+    }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'bad_request' });
+    expect(calls).toHaveLength(0);
+  });
+
   it('returns no results, not an error, when nothing matched', async () => {
     const { fetch } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
     const res = await query({ hint: { imdbId: 'tt0133093' }, fetch });

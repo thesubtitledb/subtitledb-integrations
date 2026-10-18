@@ -157,7 +157,7 @@ one frozen object and fails if any of them stops honouring it.
 | Option | Default | Meaning |
 |---|---|---|
 | `languages` | none | Preference order, best first. One search request per language. |
-| `hint` | inferred | What is playing: `{ imdbId }`, `{ tmdbId }`, or `{ title, year, season, episode }`. |
+| `hint` | inferred | What is playing: `{ imdbId }`, `{ tmdbId, tmdbType }`, `{ seriesImdbId, season, episode }`, or `{ title, year, season, episode }`. |
 | `autoSelect` | off | `true` picks the top candidate, `'locale'` the viewer's own language, a code like `'en-US'` pins one (matched on the base subtag). |
 | `hearingImpaired` | off | Prefer HI subtitles when ranking. |
 | `transcribe` | off | On-device speech-to-text when the corpus has nothing. `true` for defaults, or `{ when, engine, model, task, device, language, onProgress }`. See below. |
@@ -416,12 +416,18 @@ Every one returns the same `{ title, subtitles }` bundle.
 
 ```js
 await sdb.byImdb('tt0133093');   // 133093, "133093" or "tt0133093"
-await sdb.byTmdb(603);
+await sdb.byTmdb(603, { type: 'movie' });  // GET /v1/by-tmdb/movie/603
 await sdb.byTitle('the matrix'); // free text, server picks the top title
 await sdb.byReleasename('The.Matrix.1999.1080p.BluRay.x264-AMIABLE');
 await sdb.byInfohash('0123456789abcdef0123456789abcdef01234567');
 await sdb.bySubid(1775434752);   // which title does this one file belong to
 ```
+
+TMDB numbers films and shows separately, so a TMDB id goes with its type:
+`/v1/by-tmdb/movie/:id`, or `/v1/by-tmdb/tv/:id` with an optional
+`/season/:s/episode/:e`. `byTmdb(1396, { type: 'tv', season: 2, episode: 3 })` asks
+`/v1/by-tmdb/tv/1396/season/2/episode/3`, and a season or episode alone implies `tv`.
+The untyped `/v1/by-tmdb/:id` is kept for existing callers.
 
 Four add a block saying how they resolved:
 
@@ -502,7 +508,7 @@ Drop `episode` to get the season, drop both to get the series.
 await sdb.byImdb('tt0133093', {
   lang: 'en',                  // one code, or up to 16 comma separated
   format: 'srt',
-  sort: 'cues',                // 'lang' | 'downloads' | 'cues' | 'bytes'
+  sort: 'cues',                // 'lang' | 'cues' | 'newest'
   limit: 50,                   // API defaults to 20, caps at 100
   offset: 0,
   response_class: 'standard',  // 'minimal' | 'standard' | 'detailed' | 'full'
@@ -613,7 +619,7 @@ toVtt(text, 'sub');  // ConvertError: cannot convert sub to vtt
 
 ```js
 await sdb.health();
-// { ok: true, clickhouse: 'up',
+// { ok: true, store: 'up',
 //   titles: 519754, indexed_subtitles: 10702424, tmdb_mappings: 160973 }
 
 sdb.posterUrl('/abc.jpg');         // https://api.thesubtitledb.org/p/w342/abc.jpg
@@ -787,7 +793,7 @@ not a race: each field is taken from the first source that has one, so a page th
 names the title in its metadata and the year in the filename ends up with both.
 
 1. `hint`, when you pass one.
-2. `<video data-imdb-id>`, `data-tmdb-id`, `data-title`, `data-year`, `data-season`, `data-episode`.
+2. `<video data-imdb-id>`, `data-tmdb-id`, `data-tmdb-type` (`movie` or `tv`), `data-title`, `data-year`, `data-season`, `data-episode`.
 3. JSON-LD on the page, then `og:` metadata.
 4. The release filename in `currentSrc`.
 
