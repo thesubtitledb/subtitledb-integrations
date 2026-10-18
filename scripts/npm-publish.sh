@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Publishes @subtitledb/core to npm. ci.yml runs `check` in the build job on every push
-# and pull request, and `publish` in the release job on main.
+# and pull request, and `status` in the release job on main. CI holds no npm credential
+# and never publishes.
 #
 #   npm-publish.sh check     packs the package and fails if a file it needs is missing
-#   npm-publish.sh publish   publishes the version in packages/core/package.json, unless
-#                            npm already has it
-#
-# No token: npm trusts this workflow (ci.yml in thesubtitledb/subtitledb-integrations)
-# as the package's trusted publisher and gives the job a short-lived one over OIDC.
-# Provenance comes from the same identity.
+#   npm-publish.sh status    warns when npm lacks the version in packages/core/package.json
+#   npm-publish.sh publish   publishes that version, unless npm already has it. Run by
+#                            hand after `npm login` and `npm run build`; npm asks for
+#                            the account's second factor.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 pkg=@subtitledb/core
@@ -26,20 +25,27 @@ check() {
   echo "$pkg $ver packs $(wc -l <<< "$files") files"
 }
 
-publish() {
+# 0 when npm has this version, 1 when it does not. Only a 404 means unpublished;
+# anything else is a registry we cannot read, and fails.
+on_npm() {
   local out
-  if out=$(npm view "$pkg@$ver" version 2>&1); then
-    echo "$pkg $ver is on npm"
-    return
-  fi
-  # Only a 404 means unpublished. Anything else is a registry we cannot read, and
-  # publishing blind would fail on an existing version anyway.
-  grep -q E404 <<< "$out" || { echo "$out"; exit 1; }
-  npm publish --workspace "$pkg" --provenance --access public
+  out=$(npm view "$pkg@$ver" version 2>&1) && return 0
+  grep -q E404 <<< "$out" || { echo "$out" >&2; exit 1; }
+  return 1
+}
+
+status() {
+  if on_npm; then echo "$pkg $ver is on npm"; return; fi
+  echo "::warning::$pkg $ver is not on npm yet. Publish it by hand: scripts/npm-publish.sh publish"
+}
+
+publish() {
+  if on_npm; then echo "$pkg $ver is on npm"; return; fi
+  npm publish --workspace "$pkg" --access public
   echo "published $pkg $ver"
 }
 
 case ${1:-} in
-  check | publish) "$1" ;;
-  *) echo "usage: npm-publish.sh check | publish" >&2; exit 2 ;;
+  check | status | publish) "$1" ;;
+  *) echo "usage: npm-publish.sh check | status | publish" >&2; exit 2 ;;
 esac

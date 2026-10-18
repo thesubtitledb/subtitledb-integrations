@@ -285,16 +285,7 @@ jobs:
           TAGS: ${{ steps.plan.outputs.tags }}
         run: scripts/release.sh publish
 
-      # @subtitledb/core goes to npm with no stored token: npm trusts this workflow
-      # file as the package's publisher. A version already on npm is left alone.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-          package-manager-cache: false
-
-      - name: Build @subtitledb/core
-        run: npm ci && npm run build --workspace @subtitledb/core
-
-      - name: Publish @subtitledb/core to npm
-        run: scripts/npm-publish.sh publish
+      # @subtitledb/core is published to npm by hand; CI holds no npm credential.
+      # This step only warns when main carries a version npm does not have yet.
+      - name: Is @subtitledb/core on npm
+        run: scripts/npm-publish.sh status
