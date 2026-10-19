@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -117,17 +120,62 @@ namespace SubtitleDb.Emby.Tests
             // the first case, which is what Emby 4.8 to 4.10 log. It takes the first two
             // off before it asks the provider, so the provider is asked for the bare id.
             var bytes = new byte[] { 1, 2, 3 };
-            using (Prefetched.Hold(searched, bytes))
+            using (Prefetched.Hold(searched, Fetched(), bytes))
             {
-                Assert.Same(bytes, Prefetched.Take("481207"));
+                var held = Prefetched.Take("481207");
+                Assert.NotNull(held);
+                Assert.Equal(bytes, ((MemoryStream)held!.Stream).ToArray());
                 Assert.Null(Prefetched.Take("481207"));
             }
         }
 
         [Fact]
+        public async Task TheSaveAfterALookupOnPlayAsksTheApiNothing()
+        {
+            // Emby's save asks the provider again. What the lookup fetched is handed back
+            // with its format, language and flag, and no by-subid or download goes out:
+            // an id the API does not have would fail the call if one did.
+            var provider = new SubtitleDbSubtitleProvider(DispatchProxy.Create<ILogManager, Nothing>());
+            var bytes = new byte[] { 4, 5, 6 };
+            using (Prefetched.Hold("999999999999", Fetched(), bytes))
+            {
+                var response = await provider.GetSubtitles("999999999999", CancellationToken.None);
+                Assert.Equal("ass", response.Format);
+                Assert.Equal("eng", response.Language);
+                Assert.True(response.IsHearingImpaired);
+                Assert.Equal(bytes, ((MemoryStream)response.Stream).ToArray());
+            }
+        }
+
+        [Fact]
+        public void LogLinesCarryNoPrefixEmbyAlreadyWrites()
+        {
+            // Emby writes the logger's name, SubtitleDB, before every line.
+            var sources = new[] { "PlaybackLookup.cs", "SubtitleDbSubtitleProvider.cs" }
+                .Select(name => File.ReadAllText(Path.Combine(Source(), name)));
+            Assert.DoesNotContain(sources, text => text.Contains("\"SubtitleDB: ", StringComparison.Ordinal));
+        }
+
+        private static string Source()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory != null && !Directory.Exists(Path.Combine(directory.FullName, "src", "SubtitleDb.Emby")))
+            {
+                directory = directory.Parent;
+            }
+
+            return Path.Combine(directory!.FullName, "src", "SubtitleDb.Emby");
+        }
+
+        private static SubtitleResponse Fetched()
+        {
+            return new SubtitleResponse { Format = "ass", Language = "eng", IsHearingImpaired = true };
+        }
+
+        [Fact]
         public void NothingIsHeldOnceTheSaveIsOver()
         {
-            using (Prefetched.Hold("481208", new byte[] { 1 }))
+            using (Prefetched.Hold("481208", Fetched(), new byte[] { 1 }))
             {
             }
 

@@ -14,6 +14,7 @@ from subtitledb import languages
 from subtitledb.match import (
     Hint,
     Options,
+    carries_release,
     rank,
     similarity,
 )
@@ -38,6 +39,12 @@ def test_similarity(case: dict) -> None:
         assert got <= case["max"] + 1e-9, got
 
 
+@pytest.mark.parametrize("case", CASES["carries_release"], ids=lambda c: ident(c, "release"))
+def test_carries_release(case: dict) -> None:
+    got = carries_release(case["release"], case.get("title"), case.get("episode_title"))
+    assert got is case["expect"]
+
+
 @pytest.mark.parametrize("case", CASES["languages"], ids=lambda c: c["input"] or "(empty)")
 def test_language_resolution(case: dict) -> None:
     code = languages.to_code(case["input"])
@@ -49,6 +56,7 @@ def test_language_resolution(case: dict) -> None:
 def test_subtitle_ranking(case: dict) -> None:
     opts_in = case["options"]
     hint = Hint(
+        title=opts_in.get("title"),
         release=opts_in.get("release"),
         season=opts_in.get("season"),
         episode=opts_in.get("episode"),
@@ -62,3 +70,6 @@ def test_subtitle_ranking(case: dict) -> None:
     assert [c.id for c in ranked.candidates] == case["expect_order"]
     if "expect_unrenderable" in case:
         assert ranked.unrenderable == case["expect_unrenderable"]
+    if "expect_same_release" in case:
+        same = [c.id for c in ranked.candidates if "same release" in c.reason]
+        assert same == case["expect_same_release"]

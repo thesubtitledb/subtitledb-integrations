@@ -47,7 +47,7 @@ namespace SubtitleDb.Emby
         public override Guid Id => Guid.Parse("8dd4c65a-eac6-4d61-88c5-779ed9c3539e");
 
         public override string Description =>
-            "Subtitles from the SubtitleDB open index. No account, no key, no quota.";
+            "Subtitles from the SubtitleDB open index. No account and no key.";
 
         /// <summary>
         /// The settings page Emby opens from the plugin's entry, and its script. Emby

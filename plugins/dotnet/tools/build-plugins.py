@@ -126,7 +126,7 @@ def build_jellyfin(dotnet: str, ver: str) -> pathlib.Path:
     meta = {
         "category": "Subtitles",
         "changelog": notes(),
-        "description": "Subtitles from the SubtitleDB open index. No account, no key, no quota.",
+        "description": "Subtitles from the SubtitleDB open index. No account and no key.",
         "guid": GUID,
         "name": "SubtitleDB",
         "overview": "Subtitles from the SubtitleDB open index",

@@ -15,8 +15,8 @@ describe('SingleFlightCache', () => {
   });
 
   it('collapses concurrent identical lookups into one call', async () => {
-    // This is the property that protects an API with no rate limiting from an
-    // eagerly loading plugin: several players resolving the same title in the same
+    // This is the property that keeps an eagerly loading plugin inside the
+    // API's rate limits: several players resolving the same title in the same
     // tick must produce one request, not several.
     let runs = 0;
     const c = new SingleFlightCache<string>();

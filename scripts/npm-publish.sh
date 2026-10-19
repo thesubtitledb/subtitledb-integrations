@@ -3,7 +3,8 @@
 # and pull request, and `status` in the release job on main. CI holds no npm credential
 # and never publishes.
 #
-#   npm-publish.sh check     packs the package and fails if a file it needs is missing
+#   npm-publish.sh check     packs the package and fails if a file it needs is missing,
+#                            or if the built entry lacks an export the README names
 #   npm-publish.sh status    warns when npm lacks the version in packages/core/package.json
 #   npm-publish.sh publish   publishes that version, unless npm already has it. Run by
 #                            hand after `npm login` and `npm run build`; npm asks for
@@ -22,6 +23,15 @@ check() {
     grep -qx "$f" <<< "$files" || { echo "$pkg $ver would ship without $f"; exit 1; }
   done
   if grep -q '\.map$' <<< "$files"; then echo "$pkg $ver would ship source maps"; exit 1; fi
+  # What the README documents has to be importable from the built entry.
+  node --input-type=module -e '
+    const m = await import("./packages/core/dist/index.js");
+    const missing = ["localeLanguages", "corpusLanguage", "languageName", "parseFilename", "query"]
+      .filter((n) => typeof m[n] !== "function");
+    if (missing.length) {
+      console.log("the built entry does not export " + missing.join(", "));
+      process.exit(1);
+    }'
   echo "$pkg $ver packs $(wc -l <<< "$files") files"
 }
 

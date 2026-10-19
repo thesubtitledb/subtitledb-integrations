@@ -179,6 +179,8 @@ parseFilename(name);            // title, year, season, episode, group, tags, co
 basename(pathOrUrl);
 similarity(a, b);               // 0 to 1, how alike two release names are
 languageName('en');             // 'English'
+corpusLanguage('pt-BR');        // 'pb', the code the corpus files a language tag under
+localeLanguages();              // the browser's languages as corpus codes: pt-BR gives ['pb', 'pt']
 hasLanguageName('pb');          // true
 normaliseImdb(133093);          // 'tt0133093'
 backoffMs(attempt, retryAfter); // the retry wait, honouring Retry-After

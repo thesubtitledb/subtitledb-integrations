@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using SubtitleDb.Core;
 using Xunit;
@@ -13,6 +14,19 @@ namespace SubtitleDb.Tests
         public static IEnumerable<object[]> LanguageCases => SharedCases.Section("languages");
 
         public static IEnumerable<object[]> SubtitleRanking => SharedCases.Section("subtitle_ranking");
+
+        public static IEnumerable<object[]> ReleaseCases => SharedCases.Section("carries_release");
+
+        [Theory]
+        [MemberData(nameof(ReleaseCases))]
+        internal void CarriesReleaseAgrees(Case testCase)
+        {
+            var element = testCase.Element;
+            var expected = element.GetProperty("expect").GetBoolean();
+            Assert.Equal(
+                expected,
+                Matcher.CarriesRelease(Text(element, "release"), Text(element, "title"), Text(element, "episode_title")));
+        }
 
         [Theory]
         [MemberData(nameof(Similarity))]
@@ -48,6 +62,7 @@ namespace SubtitleDb.Tests
             var optionsElement = testCase.Get("options")!.Value;
             var hint = new Hint
             {
+                Title = Text(optionsElement, "title"),
                 Release = Text(optionsElement, "release"),
                 Season = Number(optionsElement, "season"),
                 Episode = Number(optionsElement, "episode"),
@@ -95,6 +110,20 @@ namespace SubtitleDb.Tests
             if (unrenderable.HasValue)
             {
                 Assert.Equal(unrenderable.Value, ranked.Unrenderable);
+            }
+
+            var same = testCase.Get("expect_same_release");
+            if (same.HasValue)
+            {
+                var wantSame = new List<long>();
+                foreach (var id in same.Value.EnumerateArray())
+                {
+                    wantSame.Add(id.GetInt64());
+                }
+
+                Assert.Equal(
+                    wantSame,
+                    ranked.Candidates.Where(c => c.Reason.Contains("same release")).Select(c => c.Subtitle.Id).ToList());
             }
         }
 

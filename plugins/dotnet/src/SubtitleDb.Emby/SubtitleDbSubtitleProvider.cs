@@ -80,7 +80,7 @@ namespace SubtitleDb.Emby
                 }
 
                 _logger.Info(
-                    "SubtitleDB: {0} candidates for {1}, {2} unrenderable, {3} for another episode",
+                    "{0} candidates for {1}, {2} unrenderable, {3} for another episode",
                     found.Candidates.Count,
                     request.MediaPath ?? string.Empty,
                     found.Unrenderable,
@@ -92,7 +92,7 @@ namespace SubtitleDb.Emby
             {
                 // An API that is down or slow is not an error in Emby, so one line and
                 // no stack trace. Nothing found is the honest answer.
-                _logger.Warn("SubtitleDB: search failed for {0}: {1}", request.MediaPath ?? string.Empty, err.Message);
+                _logger.Warn("search failed for {0}: {1}", request.MediaPath ?? string.Empty, err.Message);
                 return new RemoteSubtitleInfo[0];
             }
         }
@@ -102,6 +102,14 @@ namespace SubtitleDb.Emby
             if (!long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var subtitleId))
             {
                 throw new ArgumentException("not a SubtitleDB id: " + id, nameof(id));
+            }
+
+            // The lookup on play fetched it a moment ago and is saving it now: no second
+            // lookup, no second download.
+            var held = Prefetched.Take(id);
+            if (held != null)
+            {
+                return held;
             }
 
             var client = Client();
@@ -115,10 +123,8 @@ namespace SubtitleDb.Emby
             }
 
             // The published URL, not one rebuilt from the id: it redirects to wherever
-            // the file lives today, and that address is not ours to keep. Unless the
-            // lookup on play fetched it a moment ago and is saving it now.
-            var bytes = Prefetched.Take(id)
-                ?? await client.DownloadAsync(row.DownloadUrl!, cancellationToken).ConfigureAwait(false);
+            // the file lives today, and that address is not ours to keep.
+            var bytes = await client.DownloadAsync(row.DownloadUrl!, cancellationToken).ConfigureAwait(false);
 
             return new SubtitleResponse
             {

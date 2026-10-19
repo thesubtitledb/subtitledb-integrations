@@ -37,6 +37,7 @@ const sub = await results[0].load();
 | `load()` | Downloads one result. With `convertTo: 'vtt'` it converts SRT and ASS to WebVTT. `offsetMs` shifts the timings and `fps` changes the frame rate; the offset is applied first, then the rescale, so it is given in the subtitle's own time. |
 | `createClient()` | The API itself. `byImdb`, `byTmdb`, `byTitle`, `byReleasename`, `byInfohash` and `bySubid` each return a title with its subtitles. `byTmdb` takes `type: 'movie'` or `'tv'` and asks `/v1/by-tmdb/movie/:id` or `/v1/by-tmdb/tv/:id`; a season or episode implies `tv`. The untyped `/v1/by-tmdb/:id` is kept for existing callers. `sort` is `lang` (the default), `cues` or `newest`. |
 | `parseFilename()` | Reads the title, year, season, episode and release from a video file name. |
+| `localeLanguages()` | The browser's languages as the codes the corpus uses, best first: `pt-BR` gives `pb`, then `pt`. |
 | `toVtt()` | Converts SRT or ASS text to WebVTT. |
 | `parseVtt()`, `shift()`, `rescale()`, `serialize()` | Timing helpers. `shift()` and `rescale()` take the cues from `parseVtt()`, not text. |
 
@@ -55,7 +56,7 @@ Everything above is free and needs no key. A free key from [your account](https:
 | | No key | With a key |
 |---|---|---|
 | Lookups | 300 a minute per IP address | 1,800 a minute |
-| Downloads | 200 an hour per IP address | 5,000 an hour, 10,000 a day |
+| Downloads | 200 an hour per IP address | 100,000 a day |
 | Text search | Not included | `client.search()` |
 
 ```js
