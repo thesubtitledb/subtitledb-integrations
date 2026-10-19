@@ -105,6 +105,23 @@ namespace SubtitleDb.Tests
         }
 
         [Fact]
+        public async Task A503WaitsOutItsRetryAfterThenRetries()
+        {
+            var handler = new RetryHandler(1, HttpStatusCode.ServiceUnavailable, TimeSpan.FromSeconds(7));
+            var waits = new System.Collections.Generic.List<TimeSpan>();
+            var client = new SubtitleDbClient(new HttpClient(handler), "https://api.example.test")
+            {
+                Delay = (d, __) => { waits.Add(d); return Task.CompletedTask; },
+            };
+
+            var bundle = await client.ByImdbAsync("tt1", null, null, null, 100, 0, CancellationToken.None);
+
+            Assert.Equal(2, handler.Attempts);
+            Assert.Equal(new[] { TimeSpan.FromSeconds(7) }, waits);
+            Assert.Single(bundle.ScopedItems());
+        }
+
+        [Fact]
         public async Task A500ThatNeverStopsGivesUpWithTheServerMessage()
         {
             var handler = new StubHandler().On(
@@ -392,14 +409,18 @@ namespace SubtitleDb.Tests
             }
         }
 
-        /// <summary>Fails the first <c>n</c> attempts with a 500, then answers.</summary>
+        /// <summary>Fails the first <c>n</c> attempts with a 500 (or the given status), then answers.</summary>
         private sealed class RetryHandler : HttpMessageHandler
         {
             private readonly int _failures;
+            private readonly HttpStatusCode _status;
+            private readonly TimeSpan? _retryAfter;
 
-            public RetryHandler(int failures)
+            public RetryHandler(int failures, HttpStatusCode status = HttpStatusCode.InternalServerError, TimeSpan? retryAfter = null)
             {
                 _failures = failures;
+                _status = status;
+                _retryAfter = retryAfter;
             }
 
             public int Attempts { get; private set; }
@@ -411,11 +432,17 @@ namespace SubtitleDb.Tests
                 Attempts++;
                 if (Attempts <= _failures)
                 {
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    var failed = new HttpResponseMessage(_status)
                     {
                         Content = new StringContent("{\"message\":\"busy\"}"),
                         RequestMessage = request,
-                    });
+                    };
+                    if (_retryAfter.HasValue)
+                    {
+                        failed.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(_retryAfter.Value);
+                    }
+
+                    return Task.FromResult(failed);
                 }
 
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)

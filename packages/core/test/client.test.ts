@@ -150,6 +150,21 @@ describe('SubtitleDbClient', () => {
     expect(n).toBe(2);
   });
 
+  it('waits out a 503 Retry-After and retries', async () => {
+    let n = 0;
+    const impl = (async () => {
+      n++;
+      if (n === 1) return new Response('{}', { status: 503, headers: { 'retry-after': '0' } });
+      return new Response(JSON.stringify(movieBundle([])), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const c = new SubtitleDbClient({ fetch: impl, retries: 1 });
+    const got = await c.byImdb(133093);
+    expect(got.title.imdb).toBe('tt0133093');
+    expect(n).toBe(2);
+    expect(backoffMs(0, '7')).toBe(7000);
+  });
+
   it('survives a transport failure with no readable body', async () => {
     // The API rejects wrong-host requests before its CORS hook runs, so browsers see
     // an opaque network error. Nothing may depend on reading a body here.

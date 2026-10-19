@@ -55,9 +55,9 @@ Portuguese is `pb`, and `pt` is European Portuguese.
 
 ## When the API is busy or down
 
-A 429, or no answer after the client's retries, reaches Bazarr as TooManyRequests or
-ServiceUnavailable. After five of those in two minutes Bazarr pauses the provider, for
-an hour after a 429 and 20 minutes otherwise. A subtitle that is gone (404) is skipped
+An overloaded API answers 503. That, or no answer after the client's retries, reaches
+Bazarr as ServiceUnavailable. After five of those in two minutes Bazarr pauses the
+provider for 20 minutes. A subtitle that is gone (404) is skipped
 for the next best.
 
 ## Build and test

@@ -150,8 +150,8 @@ const keyed = createClient({ key: process.env.SUBTITLEDB_KEY });
 await keyed.search('the matrix', { lang: 'en' });
 ```
 
-Every call works without a key. A key, sent as a Bearer header, raises the download
-limit and is what `search` needs; keep it on a server.
+Every call works without a key except `search`, which needs one, sent as a Bearer
+header; keep it on a server. There are no rate limits.
 
 A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTitle`,
 `byReleasename`, `bySubid` and `byInfohash` also say what they matched, in `match`,
@@ -163,7 +163,7 @@ and all but `bySubid` take `season` and `episode`. Client options are `apiBase`,
 `fetch`.
 
 A failed request throws `SubtitleDbError` with `status` and `code`, and an aborted
-`signal` throws `SubtitleDbAbort`. Only a 429, a 5xx or a network failure is retried. An
+`signal` throws `SubtitleDbAbort`. Only a 5xx or a network failure is retried; an overloaded API answers 503 and its Retry-After sets the wait. An
 IMDb id the index does not know answers 404 `not_found`, so it throws. An id with
 subtitles filed under it but no title behind them answers with an empty `title.name`.
 
