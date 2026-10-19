@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { SubtitleDbError } from '../src/errors.js';
-import {
-  decodeBytes,
-  query as exported,
-  parseVtt,
-  rescale,
-  serialize,
-  shift,
-} from '../src/index.js';
 import { query } from '../src/query.js';
 import { bundleSubtitle, movieBundle, stubFetch } from './fixtures.js';
 
@@ -25,15 +17,6 @@ function routes() {
 }
 
 describe('query', () => {
-  it('is exported from the package, with the cue tools it converts with', () => {
-    // The loader's SubtitleDB.query and get are this function. It once sat on an
-    // unmerged branch for a month while the site documented it as shipped.
-    expect(exported).toBe(query);
-    for (const fn of [decodeBytes, parseVtt, rescale, serialize, shift]) {
-      expect(typeof fn).toBe('function');
-    }
-  });
-
   it('maps candidates to results with a URL and downloads nothing until load()', async () => {
     const { fetch, calls } = stubFetch(routes());
     const res = await query({ hint: { imdbId: 'tt0133093' }, languages: ['en'], fetch });

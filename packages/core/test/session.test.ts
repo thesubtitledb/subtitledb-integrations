@@ -202,7 +202,7 @@ describe('failure handling', () => {
 describe('request budget', () => {
   it('stops making requests once the ceiling is reached', async () => {
     // The budget exists because eager loading multiplies traffic across every player
-    // on every page, against an API that rate limits each address.
+    // on every page.
     const onError = vi.fn();
     const { s, calls } = session([{ match: /by-imdb/, body: movieBundle([bundleSubtitle()]) }], {
       maxRequests: 2,

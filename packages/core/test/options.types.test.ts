@@ -15,7 +15,7 @@ const tsc = join(here, '../../../node_modules/typescript/bin/tsc');
  */
 function consumer(index: string): string {
   return `
-import { createClient, createSession, query } from '${index}';
+import { createClient, createSession, localeLanguages, query, type LocaleSource } from '${index}';
 declare const s: string | undefined;
 declare const n: number | undefined;
 declare const b: boolean | undefined;
@@ -37,6 +37,10 @@ void query({
   apiBase: s, clientName: s, downloadClient: s, antispamId: s,
 });
 createSession({ formats: [], languages: undefined, key: s, apiBase: s, autoSelect: undefined, limit: n, maxRequests: n, hearingImpaired: b, convertTo: undefined, onError: undefined, transcribe: undefined });
+const nav: LocaleSource = { languages: ['pt-BR'] };
+void localeLanguages(nav);
+// @ts-expect-error it takes navigator, not navigator.languages
+void localeLanguages(['pt-BR']);
 `;
 }
 

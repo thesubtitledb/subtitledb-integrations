@@ -444,11 +444,10 @@ describe('ranking', () => {
 });
 
 describe('language fan-out', () => {
-  // Regression, found against the live API. `lang` takes a single ISO code; a comma
-  // separated list is accepted, ignored, and the default sort=lang then returns the
-  // alphabetically earliest languages. The Matrix has 715 subtitles, so limit=100
-  // came back ar through de with no English at all, while the client believed it had
-  // asked for English. One request per language is the fix.
+  // One request per language gives each language its own page. A comma list shares one
+  // `limit` across every code, filled in the API's order, so `fr,en` with limit=100 can
+  // come back all English. It began as a live regression: The Matrix came back ar
+  // through de with no English at all, while the client believed it had asked for it.
   function fanFetch(byLang: Record<string, BundleSubtitle[]>) {
     const asked: (string | undefined)[] = [];
     const client = {

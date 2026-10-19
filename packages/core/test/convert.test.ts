@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assToVtt, ConvertError, srtToVtt, toVtt } from '../src/convert.js';
+import {
+  assToVtt,
+  CONVERTIBLE,
+  ConvertError,
+  srtToVtt,
+  subtitleMime,
+  toVtt,
+} from '../src/convert.js';
 
 // The srt sample is shaped from a real download off the API: CRLF endings, a BOM,
 // sequence numbers, comma decimal separators, and an <i> tag. All four are things a
@@ -148,6 +155,109 @@ describe('toVtt', () => {
 
   it('refuses formats it cannot parse instead of guessing', () => {
     expect(() => toVtt('anything', 'sub')).toThrow(ConvertError);
+  });
+
+  it('reads the format name in any case', () => {
+    // A row's format and a player's declared formats come from different hands.
+    expect(toVtt(SRT, 'SRT')).toContain('00:00:01.000 --> 00:00:04.500');
+    expect(toVtt(ASS, 'ASS')).toContain('00:00:01.000 --> 00:00:04.500');
+    expect(toVtt('WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n', 'VTT')).toContain('hi');
+  });
+
+  it('returns WebVTT text as it was, markup included', () => {
+    // Already-VTT is never re-escaped: & and <c> are the author's, and valid.
+    const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<c.yellow>Tom & Jerry</c>\n';
+    expect(toVtt(vtt, 'vtt')).toBe(vtt);
+  });
+
+  it('converts every format CONVERTIBLE names, and nothing else', () => {
+    // The session keeps a candidate it cannot render only when CONVERTIBLE says it can.
+    const samples: Record<string, string> = {
+      srt: SRT,
+      vtt: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n',
+      ass: ASS,
+      ssa: ASS,
+    };
+    expect([...CONVERTIBLE].sort()).toEqual(Object.keys(samples).sort());
+    for (const f of CONVERTIBLE) expect(toVtt(samples[f] as string, f), f).toMatch(/^WEBVTT/);
+  });
+});
+
+describe('srt edge cases', () => {
+  it('reads a cue with no sequence number', () => {
+    expect(srtToVtt('00:00:01,000 --> 00:00:02,000\nhi\n')).toContain(
+      '00:00:01.000 --> 00:00:02.000\nhi',
+    );
+  });
+
+  it('skips a cue with no text instead of emitting an empty one', () => {
+    const vtt = srtToVtt(
+      '1\n00:00:01,000 --> 00:00:02,000\n\n2\n00:00:03,000 --> 00:00:04,000\nhi\n',
+    );
+    expect(vtt).not.toContain('00:00:01.000');
+    expect(vtt).toContain('00:00:03.000 --> 00:00:04.000\nhi');
+  });
+
+  it('keeps cue text off the timing line when the file adds coordinates there', () => {
+    const vtt = srtToVtt('1\n00:00:01,000 --> 00:00:02,000  X1:10 X2:20\nhi\n');
+    expect(vtt).toContain('00:00:01.000 --> 00:00:02.000\nhi');
+    expect(vtt).not.toContain('X1:');
+  });
+});
+
+describe('ass edge cases', () => {
+  const events = (format: string, ...dialogue: string[]) =>
+    ['[Events]', `Format: ${format}`, ...dialogue.map((d) => `Dialogue: ${d}`)].join('\n');
+
+  it('escapes markup and arrows in dialogue the same way as srt', () => {
+    const vtt = assToVtt(
+      events(
+        'Layer, Start, End, Style, Text',
+        '0,0:00:01.00,0:00:02.00,Default,go --> 3 > 2 <i>x</i>',
+      ),
+    );
+    expect(vtt).toContain('go --&gt; 3 &gt; 2 <i>x</i>');
+    expect(vtt.match(/-->/g)).toHaveLength(1);
+  });
+
+  it('expands \\n to a line break and \\h to a no-break space', () => {
+    const vtt = assToVtt(events('Start, End, Text', '0:00:01.00,0:00:02.00,one\\ntwo\\hthree'));
+    expect(vtt).toContain('one\ntwo three');
+  });
+
+  it('reads an SSA v4 file with its Marked field', () => {
+    const vtt = toVtt(
+      events(
+        'Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+        'Marked=0,0:00:01.50,0:00:02.00,Default,NTP,0000,0000,0000,,Hello, world',
+      ),
+      'ssa',
+    );
+    expect(vtt).toContain('00:00:01.500 --> 00:00:02.000\nHello, world');
+  });
+
+  it('ignores Dialogue lines outside [Events] and skips an empty line of dialogue', () => {
+    const vtt = assToVtt(
+      [
+        '[Script Info]',
+        'Dialogue: 0,0:00:09.00,0:00:10.00,Default,,0,0,0,,not an event',
+        events('Start, End, Text', '0:00:01.00,0:00:02.00,{\\an8}', '0:00:03.00,0:00:04.00,kept'),
+      ].join('\n'),
+    );
+    expect(vtt).not.toContain('not an event');
+    expect(vtt).not.toContain('00:00:01.000');
+    expect(vtt).toContain('kept');
+  });
+});
+
+describe('subtitleMime', () => {
+  it('names the type a player picks its parser from', () => {
+    expect(subtitleMime('vtt')).toBe('text/vtt');
+    expect(subtitleMime('VTT')).toBe('text/vtt');
+    expect(subtitleMime('ass')).toBe('text/x-ssa');
+    expect(subtitleMime('ssa')).toBe('text/x-ssa');
+    expect(subtitleMime('srt')).toBe('text/plain');
+    expect(subtitleMime('sub')).toBe('text/plain');
   });
 });
 
