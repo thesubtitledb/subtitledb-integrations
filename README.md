@@ -6,6 +6,9 @@ for Jellyfin, Emby, Kodi, VLC and Bazarr. None of them needs a key or an account
 
 ## Script tag
 
+No install and no key. Add the script, point it at the player, and the subtitles appear in
+the player's captions menu.
+
 ```html
 <video id="v" controls src="film.mp4"></video>
 <script src="https://cdn.thesubtitledb.org/latest/subtitle-helper.js"></script>
@@ -18,17 +21,75 @@ for Jellyfin, Emby, Kodi, VLC and Bazarr. None of them needs a key or an account
 </script>
 ```
 
-The script is about 3 KB gzipped and loads player code only when the page needs it. The
-same build is an ES module at `latest/subtitle-helper.esm.js`. Use `/v/<version>/` in
-place of `/latest/` to pin a version.
+The script is about 3 KB gzipped and loads player code only when the page needs it. Use
+`/v/<version>/` in place of `/latest/` to pin a version; `latest/subtitle-helper.esm.js`
+is the same build as an ES module. [docs/cdn.md](docs/cdn.md) covers pinning, CSP,
+self-hosting and the debugger.
+
+### Every option
+
+```js
+SubtitleDB.attach(player, {
+  hint: { imdbId: 'tt0133093' },
+  languages: ['en', 'fr'],
+  autoSelect: 'locale',
+  hearingImpaired: false,
+  maxTracks: 30,
+  limit: 100,
+  convert: true,
+  formats: ['vtt'],
+  player: 'videojs',
+  strict: false,
+  transcribe: false,
+  cacheTtlMs: 300000,
+  maxRequests: 12,
+  apiBase: 'https://api.thesubtitledb.org',
+  clientName: 'my-site',
+  fetch: window.fetch,
+  debug_key: 'sdbg_...',
+  onResolved(result) {},
+  onSelected(loaded) {},
+  onDegraded(info) {},
+  onError(err) {},
+});
+```
+
+| Option | Default | What it does |
+|---|---|---|
+| `hint` | read from the page | What is playing: `{ imdbId }`, `{ tmdbId }`, or `{ title, year, season, episode }`. Left out, it is read from the video's source and the page |
+| `languages` | every language | Languages to fetch, best first |
+| `autoSelect` | off | Show a subtitle without the viewer picking one: `true` for the best match, `'locale'` for the viewer's own languages, or a code such as `'en'` |
+| `hearingImpaired` | `false` | Rank hearing impaired subtitles first |
+| `maxTracks` | `30` | Most subtitles offered in the menu |
+| `limit` | `100` | Subtitles asked for per language |
+| `convert` | `true` | Convert srt, ass and ssa to WebVTT in the browser |
+| `formats` | `['vtt']` | Formats the player renders itself. ArtPlayer adds srt, ass and ssa |
+| `player` | detected | Name the player binding instead of detecting it |
+| `strict` | `false` | Throw when a player is found but its captions menu cannot be reached |
+| `transcribe` | `false` | Speech to text on the device when nothing matches. See [transcription](docs/documentation.md#transcription) |
+| `cacheTtlMs` | `300000` | How long a lookup is reused, in milliseconds |
+| `maxRequests` | `12` | Most network calls for the life of the attach |
+| `apiBase` | `https://api.thesubtitledb.org` | The API to call |
+| `clientName` | none | Sent as `client` on lookups, so we can tell your site apart |
+| `fetch` | `window.fetch` | Your own fetch |
+| `debug_key` | none | Script tag only. Reports this video to the [playback debugger](docs/cdn.md#playback-debugger) |
+| `onResolved` | none | Called after every lookup, including one that found nothing |
+| `onSelected` | none | Called when a subtitle is fetched and handed to the player |
+| `onDegraded` | none | Called when a player is found but its captions menu is not |
+| `onError` | none | Called on every failure. Errors never escape `attach` |
+
+A lookup offers subtitles and shows none until `autoSelect` picks one, `select()` is
+called, or the viewer turns one on.
+
+### Methods
 
 | `SubtitleDB.` | What it does |
 |---|---|
-| `attach(target, options)` | Adds subtitles to the player's captions menu and returns a [handle](#handle) |
+| `attach(target, options)` | Adds subtitles to the player and returns a [handle](#handle) |
 | `query(options)` | The ranked subtitles as data, each with `url`, `label`, `language`, `load()`, `blobUrl()` and `track()` |
 | `get(options)` | The best match, already loaded, or `null` |
 | `toBlobUrl(loaded)`, `toTrack(loaded)` | A loaded subtitle as an object URL or a `<track>` |
-| `debug(key, options)` | Reports playback of every video on the page to the [playback debugger](docs/cdn.md#playback-debugger) |
+| `debug(key, options)` | Reports every video on the page to the playback debugger |
 | `preload()` | Fetches the player code ahead of time |
 | `setBasePath(path)` | Loads the code from your own copy of the files |
 | `version` | The version that loaded |
@@ -38,46 +99,8 @@ const sub = await SubtitleDB.get({ hint: { imdbId: 'tt0133093' }, convertTo: 'vt
 if (sub) video.append(sub.track);
 ```
 
-`query` and `get` take `hint`, `languages`, `hearingImpaired` and `limit`. They convert
-on load with `convertTo: 'vtt'`, `encoding`, `offsetMs`, `fps: { from, to }` and
-`cues: true`. [docs/cdn.md](docs/cdn.md) covers pinning, CSP, self-hosting and the
-debugger.
-
-## Options
-
-`attach` takes the same options for every player:
-
-```js
-SubtitleDB.attach(player, {
-  // or { tmdbId }, or { title, year, season, episode }; read from the page if left out
-  hint: { imdbId: 'tt0133093' },
-  languages: ['en', 'fr'],       // best first
-  autoSelect: true,              // or 'locale', or a code such as 'en-US'
-  hearingImpaired: false,        // rank hearing impaired subtitles first
-  maxTracks: 30,                 // most subtitles offered
-  limit: 100,                    // subtitles asked for per language, 100 per request
-  convert: true,                 // srt, ass and ssa to WebVTT in the browser
-  formats: ['vtt'],              // what the player renders itself; ArtPlayer adds srt, ass, ssa
-  player: 'videojs',             // skip detection
-  strict: false,                 // throw when a player is found but its menu cannot be reached
-  transcribe: false,             // speech to text on the device when nothing matches
-  cacheTtlMs: 300000,            // how long a lookup is reused
-  maxRequests: 12,               // network calls for the life of the attach
-  apiBase: 'https://api.thesubtitledb.org',
-  clientName: 'my-site',         // sent as `client` on lookups
-  fetch: window.fetch,
-  debug_key: 'sdbg_...',         // script tag only: the debugger for this video
-  onResolved(result) {},         // after every lookup, also one that found nothing
-  onSelected(loaded) {},         // a subtitle was fetched and handed to the player
-  onDegraded(info) {},           // a player was found but its captions menu was not
-  onError(err) {},
-});
-```
-
-`transcribe: true` runs Whisper in the browser through transformers.js. It also takes
-`{ when, engine, model, task, device, language, source, onProgress }`. Nothing downloads
-until a viewer picks the transcription. See
-[docs/documentation.md](docs/documentation.md#transcription).
+`query` and `get` take `hint`, `languages`, `hearingImpaired` and `limit`, and convert on
+load with `convertTo: 'vtt'`, `encoding`, `offsetMs`, `fps: { from, to }` and `cues: true`.
 
 ## Handle
 
@@ -95,9 +118,6 @@ await handle.select(track);  // fetch, convert and show one
 await handle.refresh();      // look up again
 handle.destroy();            // remove the tracks and stop
 ```
-
-A lookup offers subtitles and shows none. One shows when `autoSelect` picks it, when
-`select()` is called, or when the viewer turns it on in the player's menu.
 
 ## Players
 
@@ -151,7 +171,8 @@ await keyed.search('the matrix', { lang: 'en' });
 ```
 
 Every call works without a key except `search`, which needs one, sent as a Bearer
-header; keep it on a server. There are no rate limits.
+header; keep it on a server. Lookups have no rate limits; downloads allow 1,000 an
+hour without a key and 100,000 a day with one.
 
 A lookup returns `{ title, subtitles: { total, limit, offset, items } }`. `byTitle`,
 `byReleasename`, `bySubid` and `byInfohash` also say what they matched, in `match`,
@@ -167,36 +188,10 @@ A failed request throws `SubtitleDbError` with `status` and `code`, and an abort
 IMDb id the index does not know answers 404 `not_found`, so it throws. An id with
 subtitles filed under it but no title behind them answers with an empty `title.name`.
 
-```js
-// the ranked list attach uses
-findSubtitles({ client, hint, languages, formats, hearingImpaired, limit });
-candidateLabel(candidate);      // 'English - HI - The.Matrix.1999.1080p.BluRay'
-query(options);                 // what SubtitleDB.query wraps
-createSession(options);         // the lookup state behind a handle
-identify({ config, element, src, doc }); // what is playing, from ids, the element or the file name
-elementIdentity(video);         // the options identify reads off a <video>
-isResolvable(hint);             // is there enough to look anything up
-parseFilename(name);            // title, year, season, episode, group, tags, container
-basename(pathOrUrl);
-similarity(a, b);               // 0 to 1, how alike two release names are
-languageName('en');             // 'English'
-corpusLanguage('pt-BR');        // 'pb', the code the corpus files a language tag under
-localeLanguages();              // the browser's languages as corpus codes: pt-BR gives ['pb', 'pt']
-hasLanguageName('pb');          // true
-normaliseImdb(133093);          // 'tt0133093'
-backoffMs(attempt, retryAfter); // the retry wait, honouring Retry-After
-toVtt(text, 'srt');             // also srtToVtt and assToVtt; CONVERTIBLE lists the formats
-subtitleMime('ass');            // 'text/x-ssa'
-decodeBytes(bytes, 'auto');     // bytes to text in their own charset
-serialize(rescale(shift(parseVtt(vtt), -500), 23.976, 25)); // cue edits
-new SingleFlightCache({ ttlMs, maxEntries }); // get, set, pending, resolve(key, fn), delete, clear
-```
-
-Core also exports `SubtitleDbClient`, `SubtitleSession`, `ConvertError`,
-`UnknownPlayerError`, `PlayerNotReachableError` and `DEFAULT_API_BASE`; the handle
-registry the adapters share
-(`registerHandle`, `handleFor`, `handleForAny`, `EMPTY_RESULT`); and the transcription
-contract (`resolveTranscribe`, `syntheticCandidate`, `DEFAULT_MODELS`, `SYNTHETIC_ID`).
+Core also exports what `attach` is built from: the ranking (`findSubtitles`, `query`,
+`createSession`), page and file name identification (`identify`, `parseFilename`),
+language codes, format conversion (`toVtt`, `decodeBytes`, cue `shift` and `rescale`),
+the request cache and the error classes; `packages/core/src/index.ts` lists each one.
 
 ### @subtitledb/players
 
