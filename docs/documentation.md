@@ -595,7 +595,7 @@ answers with `name: ''`, `tmdb_id: null` and those rows:
 So check `title.name` before you trust the list. This is the single easiest way to
 show a viewer subtitles for the wrong film.
 
-Only 429, 5xx and transport failures retry. `SubtitleDbAbort` is what an aborted
+Only 5xx and transport failures retry. An overloaded API answers 503 with Retry-After, and the retry waits that long. `SubtitleDbAbort` is what an aborted
 `signal` throws, and it is not a `SubtitleDbError`.
 
 Retry spacing is exported, if you are building your own loop:

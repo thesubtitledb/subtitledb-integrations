@@ -5,7 +5,7 @@ import type { ApiErrorBody } from './types.js';
  *
  * `status` is the HTTP status when the API answered, and `code` is then the `error`
  * field of its body: `not_found`, `bad_request`, `bad_key` (the key is wrong or
- * revoked), `key_required`, `rate_limited`. A download that answered something other
+ * revoked), `key_required`. A download that answered something other
  * than a subtitle is `download_failed`.
  *
  * `status` is 0 when no answer was read, and `code` says why: `transport_error` (the

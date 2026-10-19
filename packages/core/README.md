@@ -27,7 +27,7 @@ const sub = await results[0].load();
 
 `hint` takes an IMDb or TMDB id, or a title and year, plus a season and episode for a series. A series' own IMDb id works too, as `seriesImdbId` with a season and episode. TMDB numbers films and shows separately, so give a TMDB id its type: `{ tmdbId: 1396, tmdbType: 'tv' }`. A hint with a season or episode is taken as `tv`. Add the video's release name as `release` and the results that match its timing come first. `languages` takes language tags: `en-US` asks for `en`, `pt-BR` for `pb`, `zh-TW` for `zt`, `es-419` or `es-MX` for `ea`.
 
-`query()` throws a `SubtitleDbError` when the API refuses the request, the hint has nothing to look up by, or no title matches the hint (`not_found`). `code` is the API's own code (`bad_request`, `not_found`, `rate_limited`) and `message` its message. A title with no subtitles in the languages asked for returns no results.
+`query()` throws a `SubtitleDbError` when the API refuses the request, the hint has nothing to look up by, or no title matches the hint (`not_found`). `code` is the API's own code (`bad_request`, `not_found`) and `message` its message. A title with no subtitles in the languages asked for returns no results.
 
 ## What it does
 
@@ -49,22 +49,16 @@ const { title, subtitles } = await client.byImdb('tt0133093', { lang: 'en' });
 const { text } = await client.fetchSubtitleText(subtitles.items[0]);
 ```
 
-## Free, and more with a key
+## Free, and search with a key
 
-Everything above is free and needs no key. A free key from [your account](https://thesubtitledb.org/account/keys) adds:
-
-| | No key | With a key |
-|---|---|---|
-| Lookups | 300 a minute per IP address | 1,800 a minute |
-| Downloads | 200 an hour per IP address | 100,000 a day |
-| Text search | Not included | `client.search()` |
+Everything above is free, needs no key and has no rate limits. Text search, `client.search()`, needs a free key from [your account](https://thesubtitledb.org/account/keys); that is all a key does.
 
 ```js
 const client = createClient({ key: process.env.SUBTITLEDB_KEY });
 const { results } = await client.search('breaking bad', { lang: 'en' });
 ```
 
-The key goes in a request header, and only over https: with a key, an `http://` `apiBase` or `download_url` is refused with `bad_request`. Use it on a server, not in page code, where anyone can read it. A key that is wrong or revoked is refused with `bad_key`, never ignored. Every refusal is a `SubtitleDbError` whose `code` is the API's: `bad_key` on a lookup or download, `key_required` where a key is needed (`search()` throws it before sending anything), `rate_limited` past the allowance. A download that answers with something other than a subtitle is `download_failed`.
+The key goes in a request header, and only over https: with a key, an `http://` `apiBase` or `download_url` is refused with `bad_request`. Use it on a server, not in page code, where anyone can read it. A key that is wrong or revoked is refused with `bad_key`, never ignored. Every refusal is a `SubtitleDbError` whose `code` is the API's: `bad_key` on a lookup or download, `key_required` where a key is needed (`search()` throws it before sending anything). An overloaded API answers 503, which is retried after its Retry-After. A download that answers with something other than a subtitle is `download_failed`.
 
 The playback debugger for your own site takes its own debug key, from the Debugger tab at [thesubtitledb.org/developer](https://thesubtitledb.org/developer). It reports startup time, stalls and errors from your viewers.
 

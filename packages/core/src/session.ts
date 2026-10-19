@@ -89,8 +89,8 @@ export interface SessionOptions {
 
   /**
    * Hard ceiling on API requests for the lifetime of this session. Eager loading
-   * multiplies traffic by every player on every page, and the API's allowance is per
-   * address, so the client side carries a budget of its own.
+   * multiplies traffic by every player on every page, so the client side carries a
+   * budget of its own.
    */
   maxRequests?: number | undefined;
 

@@ -51,8 +51,7 @@ export interface ClientOptions {
   antispamId?: string | undefined;
   /**
    * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
-   * works without one. A key raises the lookup and download limits and is required by
-   * search().
+   * works without one. search() needs one; nothing else does.
    * Sent as a Bearer header, so keep it server-side: a key in page code is public. With
    * a key, an http `apiBase` or `download_url` is refused (`bad_request`).
    */
@@ -515,9 +514,8 @@ export class SubtitleDbClient {
    * too: a captive portal also answers 200.
    *
    * A refused download carries the API's own code and message: `bad_request`,
-   * `bad_key` for a key that is wrong or revoked, `key_required` where one is needed,
-   * `rate_limited` past the download allowance. Anything else that is not a subtitle is
-   * `download_failed`.
+   * `bad_key` for a key that is wrong or revoked, `key_required` where one is needed.
+   * Anything else that is not a subtitle is `download_failed`.
    */
   async fetchSubtitleText(
     sub: Pick<BundleSubtitle, 'download_url' | 'format'>,
