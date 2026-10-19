@@ -164,7 +164,8 @@ and all but `bySubid` take `season` and `episode`. Client options are `apiBase`,
 
 A failed request throws `SubtitleDbError` with `status` and `code`, and an aborted
 `signal` throws `SubtitleDbAbort`. Only a 429, a 5xx or a network failure is retried. An
-IMDb id the index does not know returns an empty `title.name` rather than a 404.
+IMDb id the index does not know answers 404 `not_found`, so it throws. An id with
+subtitles filed under it but no title behind them answers with an empty `title.name`.
 
 ```js
 // the ranked list attach uses
