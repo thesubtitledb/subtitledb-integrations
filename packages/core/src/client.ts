@@ -553,7 +553,7 @@ export class SubtitleDbClient {
     }
     if (!res.ok) {
       // The API says why it refused a download in the same body shape as a lookup:
-      // bad_request on 400, bad_key on 401, key_required on 403, rate_limited on 429.
+      // bad_request on 400, bad_key on 401, key_required on 403, and any 429 a proxy sends.
       let body: Partial<ApiErrorBody> | undefined;
       if ([400, 401, 403, 429].includes(res.status)) {
         try {
