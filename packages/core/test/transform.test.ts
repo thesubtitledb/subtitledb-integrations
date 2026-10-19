@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ConvertError } from '../src/convert.js';
 import { decodeBytes, parseVtt, rescale, serialize, shift } from '../src/transform.js';
 
 const VTT = `WEBVTT
@@ -82,6 +83,27 @@ describe('decodeBytes', () => {
   });
 
   it('throws a ConvertError on an unknown charset', () => {
-    expect(() => decodeBytes(new Uint8Array([1]), 'not-a-charset')).toThrow();
+    expect(() => decodeBytes(new Uint8Array([1]), 'not-a-charset')).toThrow(ConvertError);
+  });
+
+  it('sniffs UTF-16BE from its byte-order mark', () => {
+    expect(decodeBytes(new Uint8Array([0xfe, 0xff, 0x00, 0x68, 0x00, 0x69]))).toBe('hi');
+  });
+
+  it('reads plain UTF-8 under auto, accents included', () => {
+    expect(decodeBytes(new TextEncoder().encode('café'), 'auto')).toBe('café');
+  });
+});
+
+describe('serialize timing', () => {
+  it('writes hours, rounds a rescaled time to the millisecond, and clamps below zero', () => {
+    const vtt = serialize([{ start: 3_723_004.4, end: 3_723_999.6, text: 'a' }]);
+    expect(vtt).toBe('WEBVTT\n\n01:02:03.004 --> 01:02:04.000\na\n');
+    expect(serialize([{ start: -5, end: 10, text: 'b' }])).toContain('00:00:00.000 --> ');
+  });
+
+  it('parses CRLF, a BOM and a comma separator, as some VTT in the corpus has', () => {
+    const cues = parseVtt('﻿WEBVTT\r\n\r\n00:00:01,500 --> 00:00:02,000\r\nhi\r\n');
+    expect(cues).toEqual([{ start: 1500, end: 2000, text: 'hi' }]);
   });
 });

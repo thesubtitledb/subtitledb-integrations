@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { hasLanguageName, languageName, localeLanguages } from '../src/languages.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  corpusLanguage,
+  hasLanguageName,
+  languageName,
+  localeLanguages,
+} from '../src/languages.js';
 
 describe('languageName', () => {
   it('names the six corpus codes that are not ISO', () => {
@@ -35,15 +40,69 @@ describe('localeLanguages', () => {
     expect(localeLanguages({ language: 'es-419' })).toEqual(['ea', 'es']);
     expect(localeLanguages({})).toEqual([]);
   });
+
+  it('prefers the list over the single language, and falls back on an empty list', () => {
+    expect(localeLanguages({ languages: ['de-DE'], language: 'fr-FR' })).toEqual(['de']);
+    expect(localeLanguages({ languages: [], language: 'fr-FR' })).toEqual(['fr']);
+  });
+
+  it('skips an empty tag rather than asking for language ""', () => {
+    expect(localeLanguages({ languages: ['', ' ', 'en-GB'] })).toEqual(['en']);
+  });
+
+  it('reads the global navigator by default, and is empty without one', () => {
+    vi.stubGlobal('navigator', { languages: ['zh-HK', 'en'] });
+    try {
+      expect(localeLanguages()).toEqual(['zt', 'zh', 'en']);
+      // SSR and workers with no navigator: callers fall back to their own default.
+      vi.stubGlobal('navigator', undefined);
+      expect(localeLanguages()).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
-describe('the package entry', () => {
-  it('exports localeLanguages and its LocaleSource type', async () => {
-    // The entry itself, not languages.ts: a helper the entry does not export cannot be
-    // imported from @subtitledb/core at all. npm-publish.sh check does the same
-    // against the built dist.
-    const entry = await import('../src/index.js');
-    const nav: import('../src/index.js').LocaleSource = { languages: ['pt-BR'] };
-    expect(entry.localeLanguages(nav)).toEqual(['pb', 'pt']);
+describe('corpusLanguage', () => {
+  it('files every spelling of a language under one corpus code', () => {
+    // One request and one cache entry per language, however the caller spells it.
+    const cases: [string, string][] = [
+      ['en', 'en'],
+      ['EN', 'en'],
+      [' en-US ', 'en'],
+      ['en_GB', 'en'],
+      ['pt-BR', 'pb'],
+      ['pt_BR', 'pb'],
+      ['PT-br', 'pb'],
+      ['pt-PT', 'pt'],
+      ['pt', 'pt'],
+      ['zh-TW', 'zt'],
+      ['zh_TW', 'zt'],
+      ['zh-HK', 'zt'],
+      ['zh-MO', 'zt'],
+      ['zh-Hant', 'zt'],
+      ['zh-Hant-TW', 'zt'],
+      ['zh-CN', 'zh'],
+      ['zh-Hans', 'zh'],
+      ['es-Latn-MX', 'ea'],
+      ['es-Latn-ES', 'es'],
+      ['sr-Latn', 'sr'],
+      ['', ''],
+    ];
+    for (const [tag, code] of cases) expect(corpusLanguage(tag), tag).toBe(code);
+  });
+});
+
+describe('languageName fallbacks', () => {
+  it('reads a code in any case and with stray spaces', () => {
+    expect(languageName(' EN ')).toBe('English');
+    expect(languageName('PB')).toBe('Portuguese (Brazil)');
+    expect(hasLanguageName(' Fr ')).toBe(true);
+  });
+
+  it('shows an unknown code uppercased and says it has no name for it', () => {
+    // Unknown passes through rather than resolving to some other language.
+    expect(languageName('qq')).toBe('QQ');
+    expect(hasLanguageName('qq')).toBe(false);
   });
 });

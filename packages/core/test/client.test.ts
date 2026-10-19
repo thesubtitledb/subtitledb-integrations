@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { backoffMs, createClient, normaliseImdb, SubtitleDbClient } from '../src/client.js';
-import { SubtitleDbError } from '../src/errors.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  backoffMs,
+  createClient,
+  DEFAULT_API_BASE,
+  normaliseImdb,
+  SubtitleDbClient,
+} from '../src/client.js';
+import { SubtitleDbAbort, SubtitleDbError } from '../src/errors.js';
 import { corpusLanguage } from '../src/languages.js';
 import { movieBundle, stubFetch } from './fixtures.js';
 
@@ -78,8 +84,6 @@ describe('SubtitleDbClient', () => {
 
     const url = new URL(calls[0]?.url ?? '');
     expect(url.pathname).toBe('/v1/by-imdb/tt0133093');
-    // One code. The API drops a comma list and answers with every language, so callers
-    // fan out one request per language rather than believing a list filtered.
     expect(url.searchParams.get('lang')).toBe('en');
     expect(url.searchParams.get('limit')).toBe('5');
     // A query parameter, not a header: a custom header would force a CORS preflight
@@ -162,7 +166,6 @@ describe('SubtitleDbClient', () => {
     const got = await c.byImdb(133093);
     expect(got.title.imdb).toBe('tt0133093');
     expect(n).toBe(2);
-    expect(backoffMs(0, '7')).toBe(7000);
   });
 
   it('survives a transport failure with no readable body', async () => {
@@ -609,17 +612,6 @@ describe('SubtitleDbClient lookup verbs', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('passes the API message on a 400 through unchanged', async () => {
-    const message = 'lang takes ISO 639 codes, e.g. lang=en or lang=en,fr';
-    const { fetch } = stubFetch([
-      { match: /by-imdb/, status: 400, body: { error: 'bad_request', message } },
-    ]);
-    const err = await new SubtitleDbClient({ fetch })
-      .byImdb('tt0133093', { lang: 'en,fr,de,es,it,pt,nl,sv,no,da,fi,pl,cs,hu,ro,el,tr' })
-      .catch((e) => e);
-    expect(err).toMatchObject({ status: 400, code: 'bad_request', message });
-  });
-
   it('maps language tags to corpus codes on every lookup, deduplicated, as one comma list', async () => {
     const { fetch, calls } = stubFetch([{ match: /by-/, body: movieBundle([]) }]);
     const c = new SubtitleDbClient({ fetch });
@@ -740,5 +732,268 @@ describe('SubtitleDbClient with a key', () => {
     expect(url.searchParams.get('year')).toBe('1999');
     expect(url.searchParams.get('limit')).toBe('5');
     expect(header(calls[0]?.init)).toBe('Bearer sdb_test');
+  });
+});
+
+describe('every lookup verb, id by id', () => {
+  const path = (url: string | undefined) => new URL(url ?? '').pathname;
+
+  it('pads every imdb spelling to the same path', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
+    const c = new SubtitleDbClient({ fetch });
+    for (const id of [133093, '133093', 'tt0133093', ' TT133093 ']) await c.byImdb(id);
+    expect(calls.map((x) => path(x.url))).toEqual(Array(4).fill('/v1/by-imdb/tt0133093'));
+  });
+
+  it('takes a tmdb or subtitle id as a string or a number', async () => {
+    // Players and data attributes hand over strings; the path must not change.
+    const { fetch, calls } = stubFetch([{ match: /by-/, body: movieBundle([]) }]);
+    const c = new SubtitleDbClient({ fetch });
+    await c.byTmdb('603', { type: 'movie' });
+    await c.byTmdb('1396', { type: 'tv', season: 1, episode: 2 });
+    await c.bySubid('481207');
+    expect(calls.map((x) => path(x.url))).toEqual([
+      '/v1/by-tmdb/movie/603',
+      '/v1/by-tmdb/tv/1396/season/1/episode/2',
+      '/v1/by-subid/481207',
+    ]);
+  });
+
+  it('trims a pasted infohash as well as lowercasing it', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-infohash/, body: movieBundle([]) }]);
+    await new SubtitleDbClient({ fetch }).byInfohash('  ABCDEF0123456789\n');
+    expect(path(calls[0]?.url)).toBe('/v1/by-infohash/abcdef0123456789');
+  });
+
+  it('keeps the bucket query on a drilled episode', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
+    await new SubtitleDbClient({ fetch }).byImdb('tt0903747', {
+      season: 1,
+      episode: 1,
+      lang: 'en',
+      format: 'srt',
+      limit: 1,
+      response_class: 'standard',
+    });
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.pathname).toBe('/v1/by-imdb/tt0903747/season/1/episode/1');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      lang: 'en',
+      format: 'srt',
+      limit: '1',
+      response_class: 'standard',
+    });
+  });
+
+  it('asks health at /healthz, outside /v1', async () => {
+    const body = { ok: true, store: 'up' };
+    const { fetch, calls } = stubFetch([{ match: /healthz/, body }]);
+    expect(await new SubtitleDbClient({ fetch }).health()).toEqual(body);
+    expect(calls[0]?.url).toBe('https://api.thesubtitledb.org/healthz');
+  });
+
+  it('sends search filters as query parameters, and never the signal or the list', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-search/, body: { results: [] } }]);
+    const c = new SubtitleDbClient({ fetch, key: 'k' });
+    await c.search('matrix', {
+      type: 'movie',
+      year_from: 1990,
+      year_to: 2000,
+      sort: 'year',
+      dir: 'asc',
+      offset: 20,
+      languages: ['en'],
+      signal: new AbortController().signal,
+    });
+    const url = new URL(calls[0]?.url ?? '');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: 'matrix',
+      type: 'movie',
+      year_from: '1990',
+      year_to: '2000',
+      sort: 'year',
+      dir: 'asc',
+      offset: '20',
+      lang: 'en',
+    });
+  });
+});
+
+describe('construction', () => {
+  it('defaults to the public API host', () => {
+    const c = createClient({ fetch: stubFetch([]).fetch });
+    expect(c).toBeInstanceOf(SubtitleDbClient);
+    expect(c.apiBase).toBe(DEFAULT_API_BASE);
+  });
+
+  it('refuses to build without any fetch, rather than failing on the first lookup', () => {
+    vi.stubGlobal('fetch', undefined);
+    try {
+      expect(() => createClient()).toThrow(SubtitleDbError);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('treats a blank key as no key', async () => {
+    // `key: process.env.KEY ?? ''` must not send "Bearer " or unlock search.
+    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
+    const c = createClient({ fetch, key: '   ', apiBase: 'http://localhost:8787' });
+    await c.byImdb('tt0133093');
+    expect(new Headers(calls[0]?.init?.headers).has('authorization')).toBe(false);
+    await expect(c.search('x')).rejects.toMatchObject({ code: 'key_required' });
+  });
+
+  it('returns null for a missing poster path of any kind', () => {
+    const c = createClient({ fetch: stubFetch([]).fetch });
+    expect(c.posterUrl(undefined)).toBeNull();
+    expect(c.posterUrl('')).toBeNull();
+  });
+});
+
+describe('lookup errors and retries', () => {
+  it('maps each refusal the docs list onto status, code and message', async () => {
+    const cases: [number, string, string][] = [
+      [400, 'bad_request', 'lang takes ISO 639 codes'],
+      [401, 'bad_key', 'key not recognised'],
+      [404, 'not_found', 'no title for imdb id 98765432'],
+      [503, 'unavailable', 'try again shortly'],
+    ];
+    for (const [status, error, message] of cases) {
+      const { fetch } = stubFetch([{ match: /by-imdb/, status, body: { error, message } }]);
+      const err = await new SubtitleDbClient({ fetch, retries: 0 })
+        .byImdb('tt0133093')
+        .catch((e) => e);
+      expect(err, error).toBeInstanceOf(SubtitleDbError);
+      expect(err, error).toMatchObject({ status, code: error, message });
+      expect(err.retryable, error).toBe(status === 503);
+    }
+  });
+
+  it('names an error with no readable body by its status', async () => {
+    // A proxy in front of the API answers with HTML, not the API's JSON.
+    const { fetch } = stubFetch([{ match: /by-imdb/, status: 502, text: '<html>bad gateway' }]);
+    const err = await new SubtitleDbClient({ fetch, retries: 0 }).byImdb(1).catch((e) => e);
+    expect(err).toMatchObject({ status: 502, code: 'http_error' });
+    expect(err.message).toBe('request failed with 502');
+  });
+
+  it('does not retry a refusal: asking again sends the same request', async () => {
+    for (const status of [400, 401]) {
+      const { fetch, calls } = stubFetch([{ match: /by-imdb/, status, body: {} }]);
+      await new SubtitleDbClient({ fetch, retries: 3 }).byImdb(1).catch(() => {});
+      expect(calls, String(status)).toHaveLength(1);
+    }
+  });
+
+  it('retries a 429 and a 5xx, and gives up after the configured retries', async () => {
+    for (const status of [429, 500, 503]) {
+      const { fetch, calls } = stubFetch([
+        { match: /by-imdb/, status, body: {}, headers: { 'retry-after': '0' } },
+      ]);
+      const err = await new SubtitleDbClient({ fetch, retries: 2 }).byImdb(1).catch((e) => e);
+      expect(err, String(status)).toMatchObject({ status });
+      // The first attempt plus two retries.
+      expect(calls, String(status)).toHaveLength(3);
+    }
+  });
+
+  it('retries a transport failure the configured number of times', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-imdb/, throws: true }]);
+    const err = await new SubtitleDbClient({ fetch, retries: 1 }).byImdb(1).catch((e) => e);
+    expect(err).toMatchObject({ code: 'transport_error' });
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe('aborting', () => {
+  it('throws SubtitleDbAbort for a signal already aborted, and sends nothing', async () => {
+    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
+    const ac = new AbortController();
+    ac.abort();
+    const err = await new SubtitleDbClient({ fetch })
+      .byImdb(1, { signal: ac.signal })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbAbort);
+    // Kept apart so an adapter can ignore an abort without swallowing real failures.
+    expect(err).not.toBeInstanceOf(SubtitleDbError);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('throws SubtitleDbAbort, not transport_error, when aborted mid-request', async () => {
+    const ac = new AbortController();
+    const impl = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        ac.abort();
+      })) as unknown as typeof fetch;
+    const err = await new SubtitleDbClient({ fetch: impl })
+      .byTitle('matrix', { signal: ac.signal })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbAbort);
+  });
+
+  it('stops waiting out a Retry-After when aborted', async () => {
+    // Without this a player torn down during a 503 holds its retry for up to 8 s.
+    const ac = new AbortController();
+    let n = 0;
+    const impl = (async () => {
+      n++;
+      setTimeout(() => ac.abort(), 0);
+      return new Response('{}', { status: 503, headers: { 'retry-after': '8' } });
+    }) as unknown as typeof fetch;
+    const started = Date.now();
+    const err = await new SubtitleDbClient({ fetch: impl, retries: 2 })
+      .byImdb(1, { signal: ac.signal })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbAbort);
+    expect(n).toBe(1);
+    expect(Date.now() - started).toBeLessThan(4000);
+  });
+
+  it('throws SubtitleDbAbort from an aborted download', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const impl = (async (_url: string, init?: RequestInit) => {
+      if (init?.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+      return new Response('1\nhi\n');
+    }) as unknown as typeof fetch;
+    const err = await new SubtitleDbClient({ fetch: impl })
+      .fetchSubtitleText(
+        { download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' },
+        { signal: ac.signal },
+      )
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SubtitleDbAbort);
+  });
+});
+
+describe('download failures', () => {
+  const sub = { download_url: 'https://api.thesubtitledb.org/get/5', format: 'srt' };
+
+  it('reports a failed download as transport_error and does not retry it', async () => {
+    const { fetch, calls } = stubFetch([{ match: /get/, throws: true }]);
+    const err = await new SubtitleDbClient({ fetch, retries: 3 })
+      .fetchSubtitleText(sub)
+      .catch((e) => e);
+    expect(err).toMatchObject({ status: 0, code: 'transport_error' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports a 5xx download as download_failed with its status', async () => {
+    const { fetch } = stubFetch([
+      { match: /get/, status: 500, body: { error: 'internal', message: 'x' } },
+    ]);
+    const err = await new SubtitleDbClient({ fetch }).fetchSubtitleText(sub).catch((e) => e);
+    // Only a 400, 401, 403 or 429 body is the API's own refusal; a 500 body is not read.
+    expect(err).toMatchObject({ status: 500, code: 'download_failed' });
+    expect(err.message).toBe('subtitle download failed with 500');
+  });
+
+  it('replaces a client name already on download_url instead of adding a second', () => {
+    const c = new SubtitleDbClient({ client: 'mine' });
+    const url = new URL(c.downloadUrl({ download_url: `${sub.download_url}?client=old&x=1` }));
+    expect(url.searchParams.getAll('client')).toEqual(['mine']);
+    expect(url.searchParams.get('x')).toBe('1');
   });
 });
