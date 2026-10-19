@@ -34,7 +34,13 @@ export type {
 export { EMPTY_RESULT } from './handle.js';
 export type { HintSource, IdentifyOptions, MediaHint } from './identify.js';
 export { elementIdentity, identify, isResolvable } from './identify.js';
-export { corpusLanguage, hasLanguageName, languageName } from './languages.js';
+export type { LocaleSource } from './languages.js';
+export {
+  corpusLanguage,
+  hasLanguageName,
+  languageName,
+  localeLanguages,
+} from './languages.js';
 export type { Candidate, MatchOptions, MatchResult, MatchTier } from './match.js';
 export { candidateLabel, findSubtitles, similarity } from './match.js';
 export type {

@@ -43,7 +43,9 @@ up by the first of these that finds it:
 - the series' IMDb id, with the season and episode
 - the series name, season and episode, with the episode title to choose between episodes
 
-A subtitle recorded against the playing file's release ranks first. Subtitles filed
+A subtitle recorded against the playing file's release ranks first. A file named only
+for its title, year or episode, such as `The Matrix (1999).mkv`, names no release, so
+nothing is matched to it by release name. Subtitles filed
 under another episode, or in a format the host cannot show, are left out. Each result
 shows the release name (or the line count when there is none) and its language, and a
 same-release subtitle is marked as matching your file. The result's comment says why it

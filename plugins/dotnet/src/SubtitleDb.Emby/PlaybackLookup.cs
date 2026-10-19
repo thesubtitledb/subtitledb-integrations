@@ -142,7 +142,7 @@ namespace SubtitleDb.Emby
             }
             catch (Exception err)
             {
-                _logger.Error("SubtitleDB: the lookup on play did not start: {0}", err);
+                _logger.Error("the lookup on play did not start: {0}", err);
             }
         }
 
@@ -156,11 +156,11 @@ namespace SubtitleDb.Emby
                     var said = await LookUpCoreAsync(video, timeout.Token).ConfigureAwait(false);
                     if (said.StartsWith("saved", StringComparison.Ordinal))
                     {
-                        _logger.Info("SubtitleDB: {0} started playing, {1}", video.Path, said);
+                        _logger.Info("{0} started playing, {1}", video.Path, said);
                     }
                     else
                     {
-                        _logger.Debug("SubtitleDB: {0} started playing, {1}", video.Path, said);
+                        _logger.Debug("{0} started playing, {1}", video.Path, said);
                     }
                 }
             }
@@ -170,17 +170,17 @@ namespace SubtitleDb.Emby
             }
             catch (SubtitleDbException err)
             {
-                _logger.Warn("SubtitleDB: the lookup on play failed for {0}: {1}", video.Path, err.Message);
+                _logger.Warn("the lookup on play failed for {0}: {1}", video.Path, err.Message);
             }
             catch (OperationCanceledException)
             {
-                _logger.Warn("SubtitleDB: the lookup on play gave up on {0} after 2 minutes", video.Path);
+                _logger.Warn("the lookup on play gave up on {0} after 2 minutes", video.Path);
             }
             catch (Exception err)
             {
                 // An Emby whose library or subtitle calls differ from the ones this was
                 // built against lands here, with the playback itself untouched.
-                _logger.Error("SubtitleDB: the lookup on play failed for {0}: {1}", video.Path, err);
+                _logger.Error("the lookup on play failed for {0}: {1}", video.Path, err);
             }
         }
 
@@ -194,6 +194,7 @@ namespace SubtitleDb.Emby
 
             var providers = _subtitles.GetSupportedProviders(video).Select(p => p.Name).ToList();
             var seriesIds = (video as Episode)?.Series?.ProviderIds;
+            SubtitleResponse? fetched = null;
             var spoken = options.SkipSubtitlesIfAudioTrackMatches
                 ? OnPlay.Spoken(video.GetMediaStreams()
                     .Where(s => s.Type == MediaStreamType.Audio)
@@ -210,7 +211,7 @@ namespace SubtitleDb.Emby
                 },
                 async (id, token) =>
                 {
-                    var fetched = await _subtitles.GetRemoteSubtitles(id, token).ConfigureAwait(false);
+                    fetched = await _subtitles.GetRemoteSubtitles(id, token).ConfigureAwait(false);
                     using (fetched.Stream)
                     using (var copy = new MemoryStream())
                     {
@@ -225,8 +226,9 @@ namespace SubtitleDb.Emby
                 {
                     // Emby has no call that saves bytes it is handed: it asks the provider
                     // for the subtitle again, as its search dialog's download does. The
-                    // provider hands back these bytes, so a play downloads the file once.
-                    using (Prefetched.Hold(id, bytes))
+                    // provider hands back what was fetched, so a play looks the file up
+                    // and downloads it once.
+                    using (Prefetched.Hold(id, fetched!, bytes))
                     {
                         await _subtitles.DownloadSubtitles(video, id, options, token).ConfigureAwait(false);
                     }

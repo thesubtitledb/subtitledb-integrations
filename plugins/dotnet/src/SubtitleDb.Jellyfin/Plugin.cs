@@ -30,7 +30,7 @@ namespace SubtitleDb.Jellyfin
         public override Guid Id => Guid.Parse("e8067282-ad64-415a-b9ed-9057e6679483");
 
         public override string Description =>
-            "Subtitles from the SubtitleDB open index. No account, no key, no quota.";
+            "Subtitles from the SubtitleDB open index. No account and no key.";
 
         public IEnumerable<PluginPageInfo> GetPages()
         {

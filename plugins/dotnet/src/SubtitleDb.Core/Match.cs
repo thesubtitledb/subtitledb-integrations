@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SubtitleDb.Core
 {
@@ -199,6 +200,29 @@ namespace SubtitleDb.Core
             return grams;
         }
 
+        private static readonly Regex Marker = new Regex(
+            @"^((19|20)\d\d|s\d+(e\d+)*|e\d+|\d+x\d+)$", RegexOptions.CultureInvariant);
+
+        private static readonly Regex Noise = new Regex(
+            @"^(\d+|tt\d+|(imdb|tmdb|tvdb)(id)?)$", RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// Whether a file name says anything about the encode beyond title, year and
+        /// episode. "The Matrix (1999)" does not, so a subtitle named "The.Matrix.1999"
+        /// agrees with it on the title alone, which is not a release match. The title's
+        /// and episode title's words are skipped, then everything up to the first year
+        /// or episode marker (S01E02, 1x02), which is still the title when the host gave
+        /// none.
+        /// </summary>
+        public static bool CarriesRelease(string? release, string? title = null, string? episodeTitle = null)
+        {
+            var skip = new HashSet<string>(
+                (Normalise(title) + " " + Normalise(episodeTitle)).Split(' '), StringComparer.Ordinal);
+            var words = Normalise(release).Split(' ').Where(w => w.Length > 0 && !skip.Contains(w)).ToList();
+            var cut = words.FindIndex(w => Marker.IsMatch(w));
+            return words.Skip(cut + 1).Any(w => !Marker.IsMatch(w) && !Noise.IsMatch(w));
+        }
+
         /// <summary>
         /// Whether sub_meta files this row under a different episode. A row with no
         /// season at all is kept: sub_meta has no entry for every id, and unknown is
@@ -253,9 +277,11 @@ namespace SubtitleDb.Core
             }
 
             // Release-name agreement is the strongest signal a subtitle matches this
-            // exact encode, and it is a comparison between two release names.
+            // exact encode, when the file's name says which encode it is.
             var release = (row.ReleaseName ?? string.Empty).Trim();
-            if (release.Length > 0 && !string.IsNullOrWhiteSpace(hint.Release))
+            if (release.Length > 0
+                && !string.IsNullOrWhiteSpace(hint.Release)
+                && CarriesRelease(hint.Release, hint.Title, hint.EpisodeTitle))
             {
                 var similarity = Similarity(release, hint.Release);
                 if (similarity >= ExactRelease)

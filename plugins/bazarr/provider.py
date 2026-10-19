@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 #: This provider's release, sent in the User-Agent. build.py names the zip and the
 #: bazarr-v tag after it. The shared client has its own version, which is not this one.
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 
 #: What Bazarr can use. The API never converts, so this is a hard filter.
 FORMATS = ["srt", "ass", "ssa", "vtt", "sub"]
@@ -256,7 +256,7 @@ def supported_languages():
 
 
 class SubtitleDbProvider(Provider):
-    """No key, no account, no quota."""
+    """No key and no account."""
 
     languages = supported_languages()
     video_types = (Episode, Movie)

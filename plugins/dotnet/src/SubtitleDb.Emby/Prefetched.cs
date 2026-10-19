@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.IO;
+using MediaBrowser.Controller.Subtitles;
 
 namespace SubtitleDb.Emby
 {
@@ -8,24 +10,35 @@ namespace SubtitleDb.Emby
     /// </summary>
     /// <remarks>
     /// Emby saves a subtitle only by asking the provider for it again, and each ask
-    /// is a download. The lookup holds the bytes it already has for that one save.
+    /// is a lookup and a download. The lookup holds what it already has, the file and
+    /// what the provider said about it, for that one save.
     /// </remarks>
     internal static class Prefetched
     {
-        private static readonly ConcurrentDictionary<string, byte[]> Held = new ConcurrentDictionary<string, byte[]>();
+        private static readonly ConcurrentDictionary<string, SubtitleResponse> Held =
+            new ConcurrentDictionary<string, SubtitleResponse>();
 
-        /// <summary>Holds <paramref name="bytes"/> for <paramref name="id"/> until disposed.</summary>
-        public static IDisposable Hold(string id, byte[] bytes)
+        /// <summary>
+        /// Holds <paramref name="bytes"/> and the format, language and hearing-impaired
+        /// flag of <paramref name="fetched"/> for <paramref name="id"/> until disposed.
+        /// </summary>
+        public static IDisposable Hold(string id, SubtitleResponse fetched, byte[] bytes)
         {
             var key = Bare(id);
-            Held[key] = bytes;
+            Held[key] = new SubtitleResponse
+            {
+                Format = fetched.Format,
+                Language = fetched.Language,
+                IsHearingImpaired = fetched.IsHearingImpaired,
+                Stream = new MemoryStream(bytes),
+            };
             return new Release(key);
         }
 
-        /// <summary>The bytes held for <paramref name="id"/>, once, or null.</summary>
-        public static byte[]? Take(string id)
+        /// <summary>The subtitle held for <paramref name="id"/>, once, or null.</summary>
+        public static SubtitleResponse? Take(string id)
         {
-            return Held.TryRemove(Bare(id), out var bytes) ? bytes : null;
+            return Held.TryRemove(Bare(id), out var held) ? held : null;
         }
 
         /// <summary>

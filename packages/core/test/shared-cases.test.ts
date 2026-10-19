@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { hasLanguageName, languageName } from '../src/languages.js';
-import { rank, similarity } from '../src/match.js';
+import { carriesRelease, rank, similarity } from '../src/match.js';
 import type { BundleSubtitle, LanguageCode } from '../src/types.js';
 import { bundleSubtitle } from './fixtures.js';
 
@@ -33,9 +33,18 @@ interface LanguageCase {
   name: string | null;
 }
 
+interface ReleaseCase {
+  release: string;
+  title?: string;
+  episode_title?: string;
+  expect: boolean;
+  why?: string;
+}
+
 interface SubtitleCase {
   why: string;
   options: {
+    title?: string;
     languages?: string[];
     formats?: string[];
     hearing_impaired?: boolean;
@@ -46,11 +55,13 @@ interface SubtitleCase {
   subtitles: Partial<BundleSubtitle>[];
   expect_order: number[];
   expect_unrenderable?: number;
+  expect_same_release?: number[];
 }
 
 interface Cases {
   similarity: SimilarityCase[];
   languages: LanguageCase[];
+  carries_release: ReleaseCase[];
   subtitle_ranking: SubtitleCase[];
 }
 
@@ -65,6 +76,14 @@ describe('similarity', () => {
       const got = similarity(c.a, c.b);
       if (c.min !== undefined) expect(got).toBeGreaterThanOrEqual(c.min - 1e-9);
       if (c.max !== undefined) expect(got).toBeLessThanOrEqual(c.max + 1e-9);
+    });
+  }
+});
+
+describe('carries a release', () => {
+  for (const c of cases.carries_release) {
+    it(c.why ?? c.release, () => {
+      expect(carriesRelease(c.release, c.title, c.episode_title)).toBe(c.expect);
     });
   }
 });
@@ -96,6 +115,7 @@ describe('subtitle ranking', () => {
       );
       const { candidates, dropped } = rank(subs, {
         hint: {
+          ...(c.options.title !== undefined ? { title: c.options.title } : {}),
           ...(c.options.release !== undefined ? { release: c.options.release } : {}),
           ...(c.options.season !== undefined ? { season: c.options.season } : {}),
           ...(c.options.episode !== undefined ? { episode: c.options.episode } : {}),
@@ -109,6 +129,10 @@ describe('subtitle ranking', () => {
 
       expect(candidates.map((x) => x.subtitle.id)).toEqual(c.expect_order);
       if (c.expect_unrenderable !== undefined) expect(dropped).toBe(c.expect_unrenderable);
+      if (c.expect_same_release !== undefined) {
+        const same = candidates.filter((x) => x.reason.includes('same release'));
+        expect(same.map((x) => x.subtitle.id)).toEqual(c.expect_same_release);
+      }
     });
   }
 });

@@ -147,6 +147,37 @@ export function similarity(a: string, b: string): number {
   return total === 0 ? 0 : (2 * overlap) / total;
 }
 
+/** A year, or an episode marker: S01, S01E02, S01E02E03, E02, 1x02. */
+function isMarker(w: string): boolean {
+  return /^(19|20)\d\d$/.test(w) || /^(s\d+(e\d+)*|e\d+|\d+x\d+)$/.test(w);
+}
+
+/** Says nothing about the encode: a marker, a bare number or a library id tag. */
+function isNoise(w: string): boolean {
+  return isMarker(w) || /^(\d+|tt\d+|(imdb|tmdb|tvdb)(id)?)$/.test(w);
+}
+
+/**
+ * Whether a file name says anything about the encode beyond title, year and episode:
+ * a source, a resolution, a group. "The Matrix (1999)" does not, so a subtitle named
+ * "The.Matrix.1999" agrees with it on the title alone, which is not a release match.
+ * The title's and episode title's words are skipped, then everything up to the first
+ * year or episode marker, which is still the title when the host gave none.
+ */
+export function carriesRelease(
+  release: string | undefined,
+  title?: string | undefined,
+  episodeTitle?: string | undefined,
+): boolean {
+  const skip = new Set(`${normalise(title ?? '')} ${normalise(episodeTitle ?? '')}`.split(' '));
+  let words = normalise(release ?? '')
+    .split(' ')
+    .filter((w) => w && !skip.has(w));
+  const cut = words.findIndex(isMarker);
+  if (cut >= 0) words = words.slice(cut + 1);
+  return words.some((w) => !isNoise(w));
+}
+
 function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; reason: string } {
   const reasons: string[] = [];
   let score = 0;
@@ -172,10 +203,11 @@ function scoreSubtitle(s: BundleSubtitle, opts: RankOptions): { score: number; r
   }
 
   // Release-name agreement is the strongest signal a subtitle matches this exact
-  // encode.
+  // encode, when the file's name says which encode it is.
   const release = s.release_name?.trim();
-  if (release && opts.hint.release) {
-    const sim = similarity(release, opts.hint.release);
+  const { hint } = opts;
+  if (release && hint.release && carriesRelease(hint.release, hint.title, hint.episodeTitle)) {
+    const sim = similarity(release, hint.release);
     if (sim >= EXACT_RELEASE) {
       score += 60;
       reasons.push('same release');

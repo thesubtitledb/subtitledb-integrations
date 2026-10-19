@@ -4,8 +4,8 @@
 --[[
  SubtitleDB for VLC
 
- Subtitles from the SubtitleDB open index, inside VLC. No account, no key, no
- quota, so there is no login anywhere in this extension.
+ Subtitles from the SubtitleDB open index, inside VLC. No account and no key, so
+ there is no login anywhere in this extension.
 
  One file, because that is how VLC installs an extension: drop it in the
  extensions directory and it appears under View. Everything it needs is here,
@@ -24,7 +24,7 @@
 SubtitleDb = {}
 local S = SubtitleDb
 
-S.VERSION = "0.3.4"
+S.VERSION = "0.3.5"
 S.API_BASE = "https://api.thesubtitledb.org"
 S.FORMATS = { srt = true, ass = true, ssa = true, sub = true, vtt = true }
 
@@ -399,6 +399,47 @@ function S.similarity(a, b)
   return (2 * overlap) / total
 end
 
+--- A year, or an episode marker: S01, S01E02, S01E02E03, E02, 1x02.
+local function is_marker(w)
+  if w:match("^19%d%d$") or w:match("^20%d%d$") or w:match("^e%d+$") or w:match("^%d+x%d+$") then
+    return true
+  end
+  local rest = w:match("^s%d+(.*)$")
+  while rest and rest ~= "" do rest = rest:match("^e%d+(.*)$") end
+  return rest == ""
+end
+
+--- Says nothing about the encode: a marker, a bare number or a library id tag.
+local function is_noise(w)
+  return is_marker(w) or w:match("^%d+$") ~= nil or w:match("^tt%d+$") ~= nil
+    or w == "imdb" or w == "imdbid" or w == "tmdb" or w == "tmdbid"
+    or w == "tvdb" or w == "tvdbid"
+end
+
+--- Whether a file name says anything about the encode beyond title, year and episode.
+--- "The Matrix (1999)" does not, so a subtitle named "The.Matrix.1999" agrees with it
+--- on the title alone, which is not a release match. The title's and episode title's
+--- words are skipped, then everything up to the first year or episode marker, which
+--- is still the title when the host gave none.
+function S.carries_release(release, title, episode_title)
+  local skip = {}
+  for w in string.gmatch(S.normalise(title) .. " " .. S.normalise(episode_title), "%S+") do
+    skip[w] = true
+  end
+  local words = {}
+  for w in string.gmatch(S.normalise(release), "%S+") do
+    if not skip[w] then words[#words + 1] = w end
+  end
+  local from = 1
+  for i, w in ipairs(words) do
+    if is_marker(w) then from = i + 1 break end
+  end
+  for i = from, #words do
+    if not is_noise(words[i]) then return true end
+  end
+  return false
+end
+
 local function wrong_episode(row, hint)
   if not hint.season or not hint.episode then return false end
   local season, episode = S.get(row, "season"), S.get(row, "episode")
@@ -429,7 +470,8 @@ function S.score_subtitle(row, hint, opts)
     end
   end
   local release = S.get(row, "release_name")
-  if release and release ~= "" and hint.release then
+  if release and release ~= "" and hint.release
+      and S.carries_release(hint.release, hint.title, hint.episode_title) then
     local sim = S.similarity(release, hint.release)
     if sim >= 0.95 then
       score = score + 60
@@ -1201,7 +1243,7 @@ function show_help()
   close_dlg()
   dlg = vlc.dialog("SubtitleDB help")
   dlg:add_label("<b>Subtitles from the SubtitleDB open index.</b>", 1, 1, 4, 1)
-  dlg:add_label("There is no account, no key and no quota. Nothing to sign up for.", 1, 2, 4, 1)
+  dlg:add_label("There is no account and no key. Nothing to sign up for.", 1, 2, 4, 1)
   dlg:add_label("<b>Search this file</b> uses what the file name says: the title,"
     .. " the year, and the season and episode when it has them.", 1, 3, 4, 1)
   dlg:add_label("<b>Search by name</b> ignores the IMDb id and searches the title"

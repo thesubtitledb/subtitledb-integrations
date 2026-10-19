@@ -118,11 +118,20 @@ test("similarity agrees with the other languages", function()
   end
 end)
 
+test("a file name carries a release the way it does everywhere else", function()
+  for _, case in ipairs(cases.carries_release) do
+    current = "carries release: " .. (case.why or case.release)
+    equal(S.carries_release(case.release, S.get(case, "title"), S.get(case, "episode_title")),
+          case.expect)
+  end
+end)
+
 test("subtitles rank the way they do everywhere else", function()
   for _, case in ipairs(cases.subtitle_ranking) do
     current = "subtitle ranking: " .. case.why
     local options = case.options
     local hint = {
+      title = S.get(options, "title"),
       release = S.get(options, "release"),
       season = S.get(options, "season"),
       episode = S.get(options, "episode"),
@@ -141,6 +150,14 @@ test("subtitles rank the way they do everywhere else", function()
     end
     if S.get(case, "expect_unrenderable") then
       equal(unrenderable, case.expect_unrenderable)
+    end
+    if S.get(case, "expect_same_release") then
+      local same = {}
+      for _, candidate in ipairs(ranked) do
+        if string.find(candidate.reason, "same release", 1, true) then same[#same + 1] = candidate.id end
+      end
+      equal(#same, #case.expect_same_release, "same release count")
+      for i, want in ipairs(case.expect_same_release) do equal(same[i], want, "same release " .. i) end
     end
   end
 end)

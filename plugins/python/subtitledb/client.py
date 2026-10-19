@@ -25,7 +25,7 @@ from dataclasses import dataclass
 DEFAULT_API_BASE = "https://api.thesubtitledb.org"
 
 #: This library's version, which Bazarr ships as its own. pyproject.toml carries it too.
-VERSION = "0.3.6"
+VERSION = "0.3.7"
 
 RETRY_BASE_S = 0.3
 MAX_BACKOFF_S = 8.0

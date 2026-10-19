@@ -333,6 +333,14 @@ import { candidateLabel } from '@subtitledb/core';
 candidateLabel(candidate); // "English - HI - The.Matrix.1999.1080p.BluRay"
 ```
 
+The viewer's languages as the codes the corpus files them under, best first, which is
+what `autoSelect: 'locale'` asks for:
+
+```js
+import { localeLanguages } from '@subtitledb/core';
+localeLanguages(); // ['pb', 'pt', 'en'] in a browser set to pt-BR, then en
+```
+
 The converter is exported too, for a page that fetches subtitle text itself:
 
 ```js

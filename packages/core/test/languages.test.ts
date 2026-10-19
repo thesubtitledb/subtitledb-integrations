@@ -36,3 +36,14 @@ describe('localeLanguages', () => {
     expect(localeLanguages({})).toEqual([]);
   });
 });
+
+describe('the package entry', () => {
+  it('exports localeLanguages and its LocaleSource type', async () => {
+    // The entry itself, not languages.ts: a helper the entry does not export cannot be
+    // imported from @subtitledb/core at all. npm-publish.sh check does the same
+    // against the built dist.
+    const entry = await import('../src/index.js');
+    const nav: import('../src/index.js').LocaleSource = { languages: ['pt-BR'] };
+    expect(entry.localeLanguages(nav)).toEqual(['pb', 'pt']);
+  });
+});

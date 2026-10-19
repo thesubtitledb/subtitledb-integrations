@@ -8,8 +8,8 @@
     "quietly giving Kodi users a different pick from Jellyfin users.",
     "",
     "Title resolution is the server's job now (the by-* lookup verbs), so only the",
-    "client-side rules live here: language names, release-name similarity and subtitle",
-    "ranking. Scores are never asserted. Ordering and thresholds are, because a Dice",
+    "client-side rules live here: language names, release-name similarity, whether a",
+    "file name carries a release at all, and subtitle ranking. Scores are never asserted. Ordering and thresholds are, because a Dice",
     "coefficient in Lua and one in C# agree on which is larger long before they agree",
     "on the seventh decimal place."
   ],
@@ -77,6 +77,29 @@
     { "input": "", "code": null, "name": null }
   ],
 
+  "carries_release": [
+    { "release": "The Matrix (1999)", "title": "The Matrix", "expect": false, "why": "title and year only" },
+    { "release": "The Matrix (1999)", "expect": false, "why": "no title given: the words before the year are the title" },
+    { "release": "The Matrix (1999)", "title": "Matrix", "expect": false, "why": "a title the host spells differently" },
+    { "release": "The.Matrix.1999.1080p.BluRay.x264-GROUP", "title": "The Matrix", "expect": true },
+    { "release": "The.Matrix.1999.1080p.BluRay.x264-GROUP", "expect": true, "why": "release details, no title given" },
+    { "release": "Inception.2160p.WEB-DL", "title": "Inception", "expect": true, "why": "no year" },
+    { "release": "Inception", "title": "Inception", "expect": false, "why": "the title alone" },
+    { "release": "Blade Runner 2049 (2017)", "title": "Blade Runner 2049", "expect": false, "why": "a year in the title" },
+    { "release": "2001 A Space Odyssey (1968)", "title": "2001: A Space Odyssey", "expect": false },
+    { "release": "The Matrix (1999) [imdbid-tt0133093]", "title": "The Matrix", "expect": false, "why": "a library id tag" },
+    { "release": "Fargo S01E02", "title": "Fargo", "expect": false, "why": "show and episode only" },
+    {
+      "release": "Fargo - S01E02 - The Rooster Prince",
+      "title": "Fargo",
+      "episode_title": "The Rooster Prince",
+      "expect": false,
+      "why": "the episode title is not a release detail"
+    },
+    { "release": "Fargo.S01E02.720p.HDTV.x264-KILLERS", "title": "Fargo", "expect": true },
+    { "release": "", "title": "Fargo", "expect": false, "why": "no name at all" }
+  ],
+
   "subtitle_ranking": [
     {
       "why": "language preference order beats everything below it",
@@ -109,6 +132,31 @@
         { "id": 2, "language": "en", "format": "srt", "cues": 900, "release_name": "Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL" }
       ],
       "expect_order": [2, 1]
+    },
+    {
+      "why": "a file named for its title and year has no release to match, so no name wins",
+      "options": { "languages": ["en"], "formats": ["srt"], "title": "The Matrix", "release": "The Matrix (1999)" },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900 },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "release_name": "The.Matrix.1999" }
+      ],
+      "expect_order": [1, 2],
+      "expect_same_release": []
+    },
+    {
+      "why": "a file named for its release still matches the subtitle made for it",
+      "options": {
+        "languages": ["en"],
+        "formats": ["srt"],
+        "title": "The Matrix",
+        "release": "The.Matrix.1999.1080p.BluRay.x264-GROUP"
+      },
+      "subtitles": [
+        { "id": 1, "language": "en", "format": "srt", "cues": 900 },
+        { "id": 2, "language": "en", "format": "srt", "cues": 900, "release_name": "The.Matrix.1999.1080p.BluRay.x264-GROUP" }
+      ],
+      "expect_order": [2, 1],
+      "expect_same_release": [2]
     },
     {
       "why": "a file with no cues renders as an empty track, which is worse than no track",

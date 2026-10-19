@@ -27,7 +27,7 @@ namespace SubtitleDb.Core
     }
 
     /// <summary>
-    /// The SubtitleDB open API. No key, no account, no quota, so there is nothing to
+    /// The SubtitleDB open API. No key and no account, so there is nothing to
     /// configure but the base URL, which exists so a test can point somewhere else.
     /// </summary>
     /// <remarks>

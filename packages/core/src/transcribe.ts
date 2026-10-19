@@ -16,8 +16,8 @@ import type { BundleSubtitle } from './types.js';
  * When the transcription row is offered.
  *
  *   'no-match'  the corpus returned nothing renderable for this title. The default:
- *               the fallback exists for exactly the "no key, no account, no quota,
- *               and still no captions" case.
+ *               the fallback exists for exactly the "no key, no account, and still no
+ *               captions" case.
  *   'always'    offered alongside whatever the corpus found.
  *   'off'       never. Same as leaving `transcribe` unset; here so a config object can
  *               disable it without being rewritten to a boolean.

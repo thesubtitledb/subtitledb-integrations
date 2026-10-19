@@ -6,10 +6,10 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.4</Version>
+    <Version>0.4.5</Version>
     <!-- What changed in this version, in a sentence or two. Jellyfin shows it in the
          plugin catalog beside the update; change it with the version. -->
-    <PackageReleaseNotes>Latin American Spanish (es-419, es-MX, es-AR and the other Latin American regions) is asked for as Latin American Spanish, as the API files it, rather than as Spanish.</PackageReleaseNotes>
+    <PackageReleaseNotes>A file named only for its title and year, such as The Matrix (1999).mkv, is no longer marked as matching a subtitle by release name, so a perfect-match download skips it. Emby looks a subtitle up once when it saves one on play.</PackageReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>
