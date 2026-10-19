@@ -6,10 +6,13 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.5</Version>
-    <!-- What changed in this version, in a sentence or two. Jellyfin shows it in the
-         plugin catalog beside the update; change it with the version. -->
-    <PackageReleaseNotes>A file named only for its title and year, such as The Matrix (1999).mkv, is no longer marked as matching a subtitle by release name, so a perfect-match download skips it. Emby looks a subtitle up once when it saves one on play.</PackageReleaseNotes>
+    <Version>0.4.6</Version>
+    <!-- What changed in this version, in a sentence or two, for both hosts. Stamped
+         into the assemblies; change it with the version. -->
+    <PackageReleaseNotes>No change in behaviour. The Jellyfin catalog's notes for 0.4.2 and 0.4.5 no longer describe a change made only to Emby.</PackageReleaseNotes>
+    <!-- What Jellyfin shows in its plugin catalog beside the update. Jellyfin only:
+         an Emby-only change does not belong here. -->
+    <JellyfinReleaseNotes>No change in behaviour. The notes for 0.4.2 and 0.4.5 no longer describe a change made only to Emby.</JellyfinReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>

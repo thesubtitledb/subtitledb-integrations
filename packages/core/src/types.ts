@@ -51,7 +51,10 @@ export interface Subtitle {
   id: number;
   imdb: string;
   language: LanguageCode;
-  /** Stored format. The API never converts, so this is what you will receive. */
+  /**
+   * Stored format: srt, ass, ssa, sub, vtt, txt, smi, sami, mpl, tmp or usf. The API never
+   * converts, so this is what you will receive.
+   */
   format: string;
   title: string;
   year: number;

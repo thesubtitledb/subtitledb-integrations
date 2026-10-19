@@ -77,7 +77,19 @@ def version() -> str:
 
 def notes() -> str:
     """What changed in this version. Jellyfin shows it in its catalog beside the update."""
-    return prop("PackageReleaseNotes")
+    return prop("JellyfinReleaseNotes")
+
+
+# Catalog notes corrected after release. These two came from the notes both hosts
+# share and named a change made only to Emby. A released manifest cannot change, so
+# the next one lists them corrected.
+CHANGELOG_FIXES = {
+    "0.4.5": "A file named only for its title and year, such as The Matrix (1999).mkv, is no"
+             " longer marked as matching a subtitle by release name, so a perfect-match"
+             " download skips it.",
+    "0.4.2": "A subtitle is no longer saved on play in the language the audio is already in,"
+             " when the library is set to skip it.",
+}
 
 
 def publish(project: pathlib.Path, framework: str, out: pathlib.Path, dotnet: str) -> None:
@@ -190,7 +202,9 @@ def earlier(history: pathlib.Path | None, guid: str, ver: str) -> list[dict]:
     (package,) = json.loads(history.read_text(encoding="utf-8"))
     if package["guid"] != guid:
         raise SystemExit("%s is the repository of another plugin, %s" % (history, package["guid"]))
-    return [entry for entry in package["versions"] if entry["version"] != ver]
+    return [dict(entry, changelog=CHANGELOG_FIXES[entry["version"]])
+            if entry["version"] in CHANGELOG_FIXES else entry
+            for entry in package["versions"] if entry["version"] != ver]
 
 
 def main() -> int:

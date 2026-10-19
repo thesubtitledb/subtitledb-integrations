@@ -22,7 +22,7 @@
     "typecheck": "tsc -b tsconfig.json --force"
   },
   "dependencies": {
-    "@subtitledb/core": "0.5.7"
+    "@subtitledb/core": "0.5.8"
   },
   "peerDependencies": {
     "artplayer": ">=5"

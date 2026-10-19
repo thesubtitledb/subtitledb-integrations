@@ -53,9 +53,17 @@ def test_the_version_is_the_one_in_the_build_props():
 def test_each_version_says_what_changed():
     # Jellyfin shows the changelog beside an update. Empty, an update reads as nothing.
     props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
-    written = props.split("<PackageReleaseNotes>")[1].split("</PackageReleaseNotes>")[0]
+    written = props.split("<JellyfinReleaseNotes>")[1].split("</JellyfinReleaseNotes>")[0]
     assert build.notes() == " ".join(written.split())
     assert len(build.notes()) > 20
+
+
+def test_the_jellyfin_notes_are_not_the_shared_ones():
+    # The shared notes named an Emby-only change, and Jellyfin's catalog showed it.
+    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
+    shared = props.split("<PackageReleaseNotes>")[1].split("</PackageReleaseNotes>")[0]
+    assert "Emby looks" not in build.notes()
+    assert build.notes() != " ".join(shared.split())
 
 
 def test_only_our_own_assemblies_are_published(tmp_path):
@@ -166,6 +174,28 @@ def test_a_version_built_again_replaces_its_earlier_entry(tmp_path, monkeypatch)
     versions = manifest(repo)["versions"]
     assert [v["version"] for v in versions] == ["0.1.0", "0.0.9"]
     assert versions[0]["checksum"] != "old-0.1.0"
+
+
+def test_earlier_notes_that_named_emby_are_listed_corrected(tmp_path, monkeypatch):
+    # 0.4.5 and 0.4.2 shipped with an Emby-only sentence in Jellyfin's catalog.
+    path = tmp_path / "earlier.json"
+    path.write_text(json.dumps([{
+        "guid": build.GUID,
+        "name": "SubtitleDB",
+        "versions": [
+            {"version": "0.4.5", "changelog": "Skips it. Emby looks a subtitle up once."},
+            {"version": "0.4.4", "changelog": "Latin American Spanish."},
+            {"version": "0.4.2", "changelog": "Skip it. Emby downloads a subtitle once."},
+        ],
+    }]), encoding="utf-8")
+
+    versions = manifest(built_repo(tmp_path / "dist", monkeypatch, history=path))["versions"]
+
+    by = {v["version"]: v["changelog"] for v in versions[1:]}
+    assert by["0.4.5"] == build.CHANGELOG_FIXES["0.4.5"]
+    assert by["0.4.2"] == build.CHANGELOG_FIXES["0.4.2"]
+    assert by["0.4.4"] == "Latin American Spanish."
+    assert not any("Emby" in text for text in by.values())
 
 
 def test_history_from_another_plugin_fails_the_repository(tmp_path, monkeypatch):
