@@ -135,11 +135,14 @@ describe('live API contract', () => {
   });
 
   it('404s an unmapped id with a readable body', async () => {
-    // by-tmdb is the verb that 404s cleanly on an id it cannot resolve. by-imdb does NOT:
-    // an id with rows but no title row answers 200 with a partial title (below).
+    // by-imdb 404s too, except an id with rows but no title row, which answers 200
+    // with a partial title (below).
     const err = await client.byTmdb(999_999_999).catch((e) => e);
     expect(err.status).toBe(404);
     expect(typeof err.message).toBe('string');
+    const imdb = await client.byImdb('tt98765432').catch((e) => e);
+    expect(imdb.status).toBe(404);
+    expect(imdb.code).toBe('not_found');
   });
 
   it('answers an id with rows but no metadata with an empty title, not a 404', async () => {

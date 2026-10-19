@@ -576,8 +576,15 @@ await sdb.byImdb('nope');
 // SubtitleDbError: not an imdb id: nope   (status 0, code bad_request)
 ```
 
-An IMDb id nobody has mapped does **not** 404. It answers with `name: ''`,
-`tmdb_id: null` and whatever rows happen to be filed under it:
+An IMDb id the index does not know answers 404:
+
+```js
+await sdb.byImdb('tt98765432');
+// SubtitleDbError: no title for imdb id 98765432   (status 404, code not_found)
+```
+
+An id with subtitles filed under it but no title behind them does **not** 404. It
+answers with `name: ''`, `tmdb_id: null` and those rows:
 
 ```js
 (await sdb.byImdb('tt9999999')).title;

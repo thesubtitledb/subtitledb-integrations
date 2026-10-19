@@ -321,20 +321,20 @@ Every release is also published at an immutable path, which never changes and is
 cached for a year:
 
 ```html
-<script src="https://cdn.thesubtitledb.org/v/0.8.2/subtitle-helper.js"></script>
+<script src="https://cdn.thesubtitledb.org/v/<version>/subtitle-helper.js"></script>
 ```
 
-Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`, or
-`sdb.js` for 0.1.0. The old `latest/` names redirect to the new one.
+Take `<version>` from [`/versions.json`](https://cdn.thesubtitledb.org/versions.json),
+which lists every published version, oldest first, so the last entry is the current
+release. Versions before 0.5.0 keep the name they shipped with: `subtitle-finder.js`,
+or `sdb.js` for 0.1.0. The old `latest/` names redirect to the new one.
 
-Published versions are listed at
-[`/versions.json`](https://cdn.thesubtitledb.org/versions.json), and each one carries
-a `/v/<version>/manifest.json` giving the exact byte size and a `sha384` hash of both
-entry files, so you can add Subresource Integrity:
+Each version carries a `/v/<version>/manifest.json` giving the exact byte size and a
+`sha384` hash of both entry files, so you can add Subresource Integrity:
 
 ```html
 <script
-  src="https://cdn.thesubtitledb.org/v/0.8.2/subtitle-helper.js"
+  src="https://cdn.thesubtitledb.org/v/<version>/subtitle-helper.js"
   integrity="sha384-..."
   crossorigin="anonymous"
 ></script>
