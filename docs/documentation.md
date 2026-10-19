@@ -528,9 +528,11 @@ await sdb.byImdb('tt0133093', {
 
 `limit` and `offset` page the `subtitles` bucket, not the title.
 
-`lang` and `format` bite on a movie and on an episode drill. They are **ignored** on
-a series or season bundle, which the API serves whole by design. A client that ranks
-a series bundle has to filter locally, because the filter it asked for did not run.
+`lang` and `format` filter a bundle's own `subtitles` page at every scope. The
+`seasons` tree is not filtered, so a client that ranks a whole series filters it locally.
+
+`format` takes one stored format: srt, ass, ssa, sub, vtt, txt, smi, sami, mpl, tmp or
+usf. The API never converts. The players convert srt, ass and ssa to WebVTT in the browser.
 
 One shared `limit` covers every code in a `lang` list, filled in the API's order, so
 `lang: 'fr,en'` with `limit: 100` can come back 100 English and no French. Issue one

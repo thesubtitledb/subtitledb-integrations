@@ -92,7 +92,10 @@ export interface LookupParams extends RequestOptions {
   lang?: LanguageCode | undefined;
   /** The same as `lang`, as a list. Both given, the list is appended to `lang`. */
   languages?: readonly string[] | undefined;
-  /** srt, ass, ssa, sub or vtt. Filters the `subtitles` page, not the `seasons` tree. */
+  /**
+   * One stored format: srt, ass, ssa, sub, vtt, txt, smi, sami, mpl, tmp or usf. Filters
+   * the `subtitles` page, not the `seasons` tree.
+   */
   format?: string | undefined;
   sort?: SubtitleSort | undefined;
   /** How much TMDB enrichment the bundle's `title` carries. The API defaults to `minimal`. */
