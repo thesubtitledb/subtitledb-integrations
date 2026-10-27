@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type Cue,
   CueStore,
+  held,
   isJunk,
   type Segment,
   segmentsToCues,
@@ -144,5 +145,39 @@ describe('trimToSpeech', () => {
     expect(trimToSpeech([cue(10.1, 11.9)], spans)[0]).toMatchObject({ start: 10.1, end: 11.9 });
     expect(trimToSpeech([cue(13, 14)], spans)[0]).toMatchObject({ start: 13, end: 14 });
     expect(trimToSpeech([cue(13, 14)], [])[0]).toMatchObject({ start: 13, end: 14 });
+  });
+});
+
+describe('held', () => {
+  const cue = (start: number, end: number, text: string): Cue => ({
+    start,
+    end,
+    text,
+    tier: 'live',
+  });
+
+  it('keeps a short line up long enough to read', () => {
+    const [a, b] = held([cue(10, 10.6, 'Ah!'), cue(20, 20.8, 'Who is hungry for some lunch now?')]);
+    expect(a?.end).toBeCloseTo(11.2);
+    // 33 characters at 17 a second.
+    expect(b?.end).toBeCloseTo(20 + 33 / 17);
+  });
+
+  it('closes a short gap and never runs into the next line', () => {
+    const [a, b, c] = held([
+      cue(0, 2, 'One line here.'),
+      cue(2.5, 3, 'Go!'),
+      cue(3.4, 6, 'Then a third.'),
+    ]);
+    expect(a?.end).toBe(2.5);
+    expect(b?.end).toBe(3.4);
+    expect(c?.end).toBe(6);
+  });
+
+  it('leaves a gap the screen should show, and the heard times alone', () => {
+    const heard = [cue(0, 2, 'First line.'), cue(10, 12, 'After a pause.')];
+    const [a] = held(heard);
+    expect(a?.end).toBe(2);
+    expect(heard[0]?.end).toBe(2);
   });
 });

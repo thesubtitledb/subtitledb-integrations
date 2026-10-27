@@ -9,6 +9,7 @@ import {
   parseSidx,
   pickAudio,
   samplesBetween,
+  sampleTable,
 } from '../src/audio/mp4.js';
 import { media } from './fixtures.js';
 
@@ -133,5 +134,55 @@ describe('sidx', () => {
       firstOffset: 0,
       refs: [{ size: 4096, dur: 20000 }],
     });
+  });
+});
+
+describe('sample table', () => {
+  const u32 = (n: number[]) => {
+    const b = new Uint8Array(n.length * 4);
+    const v = new DataView(b.buffer);
+    for (const [i, x] of n.entries()) v.setUint32(i * 4, x);
+    return b;
+  };
+  const box = (type: string, ...parts: Uint8Array[]) => {
+    const body = parts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(8 + body);
+    out.set(u32([8 + body]));
+    out.set(new TextEncoder().encode(type), 4);
+    let p = 8;
+    for (const part of parts) {
+      out.set(part, p);
+      p += part.length;
+    }
+    return out;
+  };
+
+  // A phone or screen recording interleaves audio per video frame, so its stsc has a
+  // run for nearly every chunk. Read once per chunk, that was 150k x 150k steps.
+  it('maps 150k chunks with a run each in one pass', () => {
+    const chunks = 150_000;
+    const per = (c: number) => (c % 2 ? 2 : 1);
+    const runs: number[] = [];
+    let samples = 0;
+    for (let c = 0; c < chunks; c++) {
+      runs.push(c + 1, per(c), 1);
+      samples += per(c);
+    }
+    const stbl = box(
+      'stbl',
+      box('stts', u32([0, 1, samples, 1024])),
+      box('stsc', u32([0, chunks].concat(runs))),
+      box('stsz', u32([0, 0, samples].concat(new Array<number>(samples).fill(10)))),
+      box('stco', u32([0, chunks].concat(Array.from({ length: chunks }, (_, c) => c * 1000)))),
+    );
+    const root = boxes(stbl)[0];
+    if (!root) throw new Error('no stbl');
+    const t0 = performance.now();
+    const s = sampleTable(stbl, root);
+    expect(performance.now() - t0).toBeLessThan(2000);
+    expect(s).toHaveLength(225_000);
+    expect(s.slice(0, 4).map((x) => x.offset)).toEqual([0, 1000, 1010, 2000]);
+    expect(s[3]?.dts).toBe(3 * 1024);
+    expect(s.at(-1)?.offset).toBe((chunks - 1) * 1000 + 10);
   });
 });
