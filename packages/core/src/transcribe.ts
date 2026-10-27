@@ -5,7 +5,7 @@
  * Core stays engine-agnostic. It knows how to *offer* a transcription (a synthetic
  * candidate in the picker) and how to *ask for one* (call the injected `transcriber`
  * when that candidate is selected), and nothing about whisper or WASM. The engine is
- * loaded lazily, so none of it downloads until a viewer actually clicks the row. See
+ * loaded lazily, so no model downloads until a viewer actually clicks the row. See
  * the CDN loader for the wiring. The engine is SubBot (`@subtitledb/subbot`).
  */
 import type { Candidate } from './match.js';
@@ -44,6 +44,7 @@ export interface TranscribeProgress {
 
 /** What the engine is doing, for a page that shows it. */
 export type TranscribeState =
+  | { state: 'warm'; model: boolean }
   | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
@@ -53,9 +54,10 @@ export type TranscribeState =
 /**
  * Opt-in, on-device speech-to-text. Off by default, and `true` means every default.
  *
- * The invariant that makes this safe to leave on: nothing heavy loads until a viewer
- * selects the transcription row. Offering it costs a placeholder in a menu; the engine
- * chunk and the model download only on an explicit select.
+ * The invariant that makes this safe to leave on: no model downloads until a viewer
+ * selects the transcription row. Offering it costs a placeholder in a menu and, where
+ * the engine supports it, a warm-up that compiles the engine and loads a model this
+ * device already has; the download itself waits for the select.
  */
 export interface TranscribeOptions {
   when?: TranscribeWhen;
@@ -127,8 +129,14 @@ export interface TranscribeRequest {
  * The CDN loader wires this to a function that loads the engine lazily; a page
  * bundling its own engine passes one directly.
  * Returns WebVTT text, which rides the same blob-URL path as a fetched subtitle.
+ *
+ * `warm`, when the engine has one, is called each time the row is offered, so the
+ * engine can be ready before the click. It must not download a model: the row being
+ * on screen is not a request for one.
  */
-export type Transcriber = (req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>;
+export type Transcriber = ((req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>) & {
+  warm?: (config: ResolvedTranscribe) => void;
+};
 
 /** Extra context for {@link SubtitleSession.load}, only read for a synthetic candidate. */
 export interface LoadContext {

@@ -16,15 +16,23 @@ import type { AsrOptions, FromAsr, ToAsr } from './protocol.js';
 
 type Post = (m: FromAsr, transfer?: Transferable[]) => void;
 
+type Init = Extract<ToAsr, { type: 'init' }>;
+type Progress = (what: 'wasm' | 'model' | 'vad') => (loaded: number, total: number) => void;
+
 export class AsrRole {
   private mod: SubbotModule | null = null;
   private vadLoaded = false;
+  private assets: Init | null = null;
+  private engine: Promise<void> | null = null;
+  private loading = false;
+  private loaded = false;
 
   constructor(private readonly post: Post) {}
 
   async handle(m: ToAsr): Promise<void> {
     try {
       if (m.type === 'init') await this.init(m);
+      else if (m.type === 'load') await this.load();
       else if (m.type === 'transcribe') this.transcribe(m.id, m.pcm, m.t0, m.opts);
       else if (m.type === 'vad') this.vad(m.id, m.pcm, m.t0);
       else if (m.type === 'detect') this.detect(m.id, m.pcm);
@@ -34,22 +42,49 @@ export class AsrRole {
     }
   }
 
-  private async init(m: Extract<ToAsr, { type: 'init' }>): Promise<void> {
-    const progress = (what: 'wasm' | 'model' | 'vad') => (loaded: number, total: number) =>
-      this.post({ type: 'progress', what, loaded, total });
-    // The model is the long download; the engine is compiled and its heap grown
-    // while that is in flight, so a cached model is in memory within a few hundred
-    // milliseconds of this message.
-    const modelP = fetchCached(m.modelUrl, m.cacheName, progress('model'));
-    const vadP = m.vadUrl
-      ? fetchCached(m.vadUrl, m.cacheName, progress('vad'))
-      : Promise.resolve(null);
+  private readonly progress: Progress = (what) => (loaded, total) =>
+    this.post({ type: 'progress', what, loaded, total });
+
+  /**
+   * Two phases, so a worker can be started before anyone has asked for a model: the
+   * engine comes up on `init`, the model on `load`, or on `init` itself with `load`
+   * set, in which case the fetch overlaps the compile.
+   */
+  private async init(m: Init): Promise<void> {
+    this.assets = m;
+    const fetching = m.load ? this.fetchModels(m) : null;
+    this.engine = this.compile(m);
+    await this.engine;
+    if (fetching) {
+      this.loading = true;
+      await this.finishLoad(fetching);
+    }
+  }
+
+  private async load(): Promise<void> {
+    if (this.loading) return;
+    this.loading = true;
+    const m = this.assets;
+    if (!m || !this.engine) throw new Error('ASR worker loaded before init');
+    const fetching = this.fetchModels(m);
+    await this.engine;
+    await this.finishLoad(fetching);
+  }
+
+  private fetchModels(m: Init): Promise<[Uint8Array, Uint8Array | null]> {
+    return Promise.all([
+      fetchCached(m.modelUrl, m.cacheName, this.progress('model')),
+      m.vadUrl ? fetchCached(m.vadUrl, m.cacheName, this.progress('vad')) : null,
+    ]);
+  }
+
+  private async compile(m: Init): Promise<void> {
     // The engine is not fetched by hand: given its URL the glue streams it through
     // WebAssembly.instantiateStreaming, which compiles as the bytes arrive and, in
     // Chromium, keeps the optimised code in the code cache against the URL. The next
     // run then starts on fast code rather than on the baseline tier for its first
     // seconds, which is most of the first window. The HTTP cache holds the file.
-    const engine = progress('wasm');
+    const engine = this.progress('wasm');
     engine(0, 1);
     const mod = await createSubbot({
       // Never let the glue look for the .wasm next to a blob: URL.
@@ -62,16 +97,22 @@ export class AsrRole {
     // dozen the allocator would ask for one by one under the load.
     const name = /ggml-([\w.-]+)\.bin/.exec(m.modelUrl)?.[1] ?? '';
     mod.reserve((MODEL_BYTES[name] ?? 100_000_000) + 64_000_000);
-    const [model, vad] = await Promise.all([modelP, vadP]);
+    this.mod = mod;
+  }
+
+  private async finishLoad(fetching: Promise<[Uint8Array, Uint8Array | null]>): Promise<void> {
+    const mod = this.mod;
+    if (!mod) throw new Error('ASR engine missing');
+    const [model, vad] = await fetching;
     if (!mod.load_model(model, true)) throw new Error('whisper could not read the model file');
     if (vad && !mod.load_vad(vad)) throw new Error('whisper could not read the VAD model');
     this.vadLoaded = Boolean(vad);
-    this.mod = mod;
+    this.loaded = true;
     this.post({ type: 'ready' });
   }
 
   private need(): SubbotModule {
-    if (!this.mod) throw new Error('ASR worker used before init');
+    if (!this.mod || !this.loaded) throw new Error('ASR worker used before its model loaded');
     return this.mod;
   }
 

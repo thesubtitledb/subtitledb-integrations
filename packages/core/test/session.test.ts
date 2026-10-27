@@ -521,6 +521,19 @@ describe('on-device transcription', () => {
     expect(r.candidates[0]?.subtitle.id).toBe(SYNTHETIC_ID);
   });
 
+  it('warms the engine when the row is offered, and not when it is withheld', async () => {
+    const transcriber = Object.assign(vi.fn(vtt), { warm: vi.fn() });
+    const { s } = session([EMPTY], { transcribe: { quality: 'fast' }, transcriber });
+    await s.resolve({ imdbId: 'tt0133093' });
+    expect(transcriber.warm).toHaveBeenCalledWith(expect.objectContaining({ quality: 'fast' }));
+    expect(transcriber).not.toHaveBeenCalled();
+
+    const quiet = Object.assign(vi.fn(vtt), { warm: vi.fn() });
+    const { s: t } = session([BY_IMDB], { transcribe: true, transcriber: quiet });
+    await t.resolve({ imdbId: 'tt0133093' });
+    expect(quiet.warm).not.toHaveBeenCalled();
+  });
+
   it('does not offer one without a transcriber, so a dead row is never shown', async () => {
     const { s } = session([EMPTY], { transcribe: true });
     const r = await s.resolve({ imdbId: 'tt0133093' });

@@ -27,7 +27,7 @@ describe('AsrWorker', () => {
       (_what, l) => progress.push(l),
       () => {},
     );
-    expect(sent[0]).toMatchObject({ type: 'init', role: 'asr', modelUrl: 'm' });
+    expect(sent[0]).toMatchObject({ type: 'init', role: 'asr', modelUrl: 'm', load: true });
     w.answer({ type: 'progress', what: 'model', loaded: 5, total: 10 });
     w.answer({ type: 'ready' });
     await a.ready;

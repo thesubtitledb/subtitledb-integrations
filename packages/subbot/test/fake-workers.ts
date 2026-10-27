@@ -29,6 +29,8 @@ export interface FakeOptions {
 export interface FakeLog {
   spawned: number;
   terminated: number;
+  /** `load` messages: models asked for after the engine, by a worker taken over warm. */
+  loads: number;
   windows: Array<{ model: string; t0: number; t1: number }>;
   reads: Array<[number, number]>;
 }
@@ -60,9 +62,8 @@ class FakeWorker implements WorkerLike {
       this.role = m.role;
       if (m.role === 'asr') {
         this.model = /ggml-(.+)\.bin/.exec(m.modelUrl)?.[1] ?? m.modelUrl;
-        this.reply({ type: 'progress', what: 'model', loaded: 10, total: 100 }, 1);
-        this.reply({ type: 'progress', what: 'model', loaded: 100, total: 100 }, 2);
-        this.reply({ type: 'ready' }, 3);
+        this.reply({ type: 'progress', what: 'wasm', loaded: 1, total: 1 }, 1);
+        if (m.load) this.loadModel();
       } else {
         if (this.o.audioError) {
           this.reply({ type: 'error', message: 'cannot open', code: this.o.audioError }, 1);
@@ -79,6 +80,11 @@ class FakeWorker implements WorkerLike {
           1,
         );
       }
+      return;
+    }
+    if (m.type === 'load') {
+      this.log.loads++;
+      this.loadModel();
       return;
     }
     if (this.role === 'audio') {
@@ -112,6 +118,12 @@ class FakeWorker implements WorkerLike {
     }
   }
 
+  private loadModel(): void {
+    this.reply({ type: 'progress', what: 'model', loaded: 10, total: 100 }, 1);
+    this.reply({ type: 'progress', what: 'model', loaded: 100, total: 100 }, 2);
+    this.reply({ type: 'ready' }, 3);
+  }
+
   terminate(): void {
     this.dead = true;
     this.log.terminated++;
@@ -121,7 +133,7 @@ class FakeWorker implements WorkerLike {
 }
 
 export function fakeSpawn(o: FakeOptions): { spawn: Spawn; log: FakeLog } {
-  const log: FakeLog = { spawned: 0, terminated: 0, windows: [], reads: [] };
+  const log: FakeLog = { spawned: 0, terminated: 0, loads: 0, windows: [], reads: [] };
   const spawn: Spawn = () => {
     log.spawned++;
     return new FakeWorker(o, log);

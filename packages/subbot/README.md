@@ -21,9 +21,16 @@ least it can (a window of a flat MP4 is a few Range requests), and decodes with 
 browser's `AudioDecoder`. Nothing is decoded ahead of a request. HLS and DASH segments
 are read as fragmented MP4 or MPEG-TS; WebM segments are not.
 
-The live ASR worker runs the small model on short windows from the playhead: three
+The live ASR worker runs the small model on short windows from the playhead: two
 seconds first, then six, thirty seconds of lead at most. Its first window is what
 sets the time to the first cue.
+
+It is started before the click. When the session offers the transcription row it
+calls the engine's `warm`, and `src/warm.ts` spawns the live worker then: the engine
+is compiled and its heap grown, and the model loaded into it when a past run left it
+in the Cache API. A model that is not there is not downloaded, that waits for the
+select. The run that follows takes the worker over, so the click pays for the first
+window alone. One warm worker per page, dropped after five minutes without a select.
 
 The quality pool, up to three workers with the bigger model, re-does every window in
 fifteen second pieces, nearest the playhead first and then from the start of the

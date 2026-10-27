@@ -72,7 +72,7 @@ export interface LivePlan {
   lead: number;
 }
 
-export const LIVE: LivePlan = { first: 3, step: 6, lead: 30 };
+export const LIVE: LivePlan = { first: 2, step: 6, lead: 30 };
 export const QUALITY_WINDOW = 15;
 
 /**

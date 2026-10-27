@@ -4,6 +4,8 @@
  * `runTranscription` is the engine contract from `@subtitledb/core`: a request built
  * by the session on a synthetic select, WebVTT back when the whole file is done,
  * cues on the element's own track from the first seconds in between.
+ * `warmTranscription` is its optional `warm`: called when the row is offered, it gets
+ * the engine ready without downloading anything heavy.
  */
 import type { TranscribeRequest } from '@subtitledb/core';
 import { type RunDeps, Subbot } from './subbot.js';
@@ -35,8 +37,9 @@ export {
   qualityWorkers,
 } from './schedule.js';
 export type { RunDeps, SubbotState } from './subbot.js';
-export { Subbot } from './subbot.js';
+export { Subbot, tiersFor, warmTranscription } from './subbot.js';
 export { cuesToVtt, formatTimestamp } from './vtt.js';
+export { dropWarm, takeWarm, WARM_TTL_MS, warmUp } from './warm.js';
 export type { Spawn, WorkerLike } from './workers.js';
 export { AsrWorker, AudioWorker, spawnFrom } from './workers.js';
 

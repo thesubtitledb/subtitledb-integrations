@@ -34,6 +34,8 @@ interface Report {
   complete: boolean;
   error: string | null;
   vtt: string | null;
+  /** The warm-up's report, before the select: true with the model already in memory. */
+  warm: boolean | null;
 }
 
 // A minute of Sintel through both tiers on one WASM thread is a few minutes of work.
@@ -73,16 +75,16 @@ async function report(): Promise<Report> {
  * fixed time.
  */
 async function run(player: string, warm: boolean, at?: number) {
-  await page.evaluate(
-    async ([p, a]) => {
-      const w = window as unknown as {
-        __subbot: { mount: (p: string) => Promise<void>; select: (at?: number) => Promise<void> };
-      };
-      await w.__subbot.mount(p);
-      await w.__subbot.select(a);
-    },
-    [player, at] as const,
-  );
+  type Page = {
+    __subbot: { mount: (p: string) => Promise<void>; select: (at?: number) => Promise<void> };
+  };
+  await page.evaluate(async (p) => (window as unknown as Page).__subbot.mount(p), player);
+  // The row is in the menu and the engine warms behind it. A viewer takes a moment to
+  // reach the row; this waits for the warm-up to report, which on a warm run means the
+  // model is already in memory when the select comes.
+  await expect.poll(async () => (await report()).warm, { timeout: 30_000 }).not.toBeNull();
+  const warmed = (await report()).warm;
+  await page.evaluate(async (a) => (window as unknown as Page).__subbot.select(a), at);
 
   await expect
     .poll(async () => (await report()).firstCueMs, { timeout: 120_000, message: 'no cue appeared' })
@@ -93,7 +95,7 @@ async function run(player: string, warm: boolean, at?: number) {
     `${player}: first cue ${r.firstCueMs} ms after select${warm ? '' : ' (cold: model download included)'}`,
   );
   console.log(`${player}: first cue ${r.firstCueLead} ms ahead of the playhead`);
-  console.log(`${player}: states ${JSON.stringify(r.marks)}`);
+  console.log(`${player}: states ${JSON.stringify(r.marks)} warm-up had the model: ${warmed}`);
   // Cold runs only print: the download sits between the click and the first cue.
   if (warm && at !== undefined) {
     expect(r.firstCueMs ?? Number.POSITIVE_INFINITY).toBeLessThan(FIRST_CUE_MS);

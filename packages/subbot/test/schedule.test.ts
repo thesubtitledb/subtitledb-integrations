@@ -27,7 +27,7 @@ describe('nextLive', () => {
   const audio = (t: number) => t + 100;
 
   it('starts with a short window at the playhead', () => {
-    expect(nextLive(10, new Intervals(), audio, 600, LIVE, true)).toEqual({ t0: 10, t1: 13 });
+    expect(nextLive(10, new Intervals(), audio, 600, LIVE, true)).toEqual({ t0: 10, t1: 12 });
   });
 
   it('then takes the step and stops at the lead', () => {

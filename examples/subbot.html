@@ -131,7 +131,7 @@
 
       let handle = null;
       let seekTo = null;
-      let report = { player: null, state: 'idle', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null };
+      let report = { player: null, state: 'idle', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null };
       let selectedAt = 0;
 
       function setState(s) {
@@ -205,7 +205,7 @@
           handle = null;
         }
         for (const b of el('players').querySelectorAll('button')) b.classList.toggle('on', b.dataset.player === name);
-        report = { player: name, state: 'mounting', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null };
+        report = { player: name, state: 'mounting', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null };
         selectedAt = 0;
         el('status').replaceChildren();
         el('lines').replaceChildren();
@@ -239,6 +239,10 @@
               } else if (s.state === 'error') {
                 report.error = s.error.message;
                 setState(`error: ${s.error.message}`);
+              } else if (s.state === 'warm') {
+                // Before any select: the engine got ready while the row sat in the menu.
+                report.warm = s.model;
+                row('warm', s.model ? 'engine and model ready before the select' : 'engine ready, model not on this device yet');
               } else setState(s.state);
             },
           },

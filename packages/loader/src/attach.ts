@@ -16,6 +16,7 @@
  * and anything it flags goes the long way round to get the real answer.
  */
 
+import type { Transcriber } from '@subtitledb/core';
 import type { AttachHandle, AttachOptions } from '@subtitledb/players';
 import { isVideoElement, looksOwned } from '@subtitledb/players/marks';
 import { basePath } from './base.js';
@@ -99,16 +100,24 @@ export function attach(
 
   // Wire the transcription engine lazily. `transcribe` is the page's declarative
   // request; this is the engine behind it, and it is the loader's job because only the
-  // loader owns chunk(). The subbot chunk, its worker and the models load on the first
-  // synthetic select and never before: this closure is not called until then.
+  // loader owns chunk(). The models load on the first synthetic select and never
+  // before. The chunk, its worker and the engine load when the row is offered, so the
+  // click that follows pays for the first window alone; a model a past run left on
+  // this device is loaded then too.
   if (options.transcribe && !opts.transcriber) {
-    opts.transcriber = (req) =>
-      chunk('subbot', moduleUrl).then((m) =>
-        m.runTranscription(req, {
-          workerUrl: basePath(moduleUrl) + __SDB_CHUNKS__['subbot-worker'],
-          wasmUrl: `${basePath(moduleUrl)}subbot.wasm`,
-        }),
-      );
+    const deps = () => ({
+      workerUrl: basePath(moduleUrl) + __SDB_CHUNKS__['subbot-worker'],
+      wasmUrl: `${basePath(moduleUrl)}subbot.wasm`,
+    });
+    const run: Transcriber = (req) =>
+      chunk('subbot', moduleUrl).then((m) => m.runTranscription(req, deps()));
+    run.warm = (cfg) => {
+      // Best effort: a warm-up that fails changes nothing, the select loads from scratch.
+      chunk('subbot', moduleUrl)
+        .then((m) => m.warmTranscription(cfg, deps()))
+        .catch(() => {});
+    };
+    opts.transcriber = run;
   }
 
   const handle = deferHandle(async (): Promise<AttachHandle> => {

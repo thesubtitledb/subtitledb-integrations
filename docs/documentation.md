@@ -185,9 +185,11 @@ convert what this player cannot render. Setting `formats` yourself overrides bot
 
 `transcribe` adds a fallback for a title the corpus has nothing for: the video's own
 audio, transcribed on the device, offered as one more row in the picker. It is off by
-default, and the invariant that makes it safe to leave on is that nothing heavy loads
-until a viewer selects that row. Offering it costs a placeholder in a menu; the engine
-and the models download only on the click.
+default, and the invariant that makes it safe to leave on is that no model downloads
+until a viewer selects that row. Offering it costs a placeholder in a menu and a
+warm-up: the engine is fetched and compiled while the row is on screen, and a model a
+past run left on the device is loaded, so the click pays for the first window alone.
+The model download itself waits for the click.
 
 ```ts
 attach(video, {
@@ -204,7 +206,7 @@ attach(video, {
     models: undefined,             // where the models come from; default HuggingFace
     source: undefined,             // read the audio from here instead of the element
     status: true,                  // the small status line on the video while loading
-    onState: (s) => {},            // loading, listening, live, complete, error (below)
+    onState: (s) => {},            // warm, loading, listening, live, complete, error (below)
     onProgress: (p) => {},         // { phase: 'engine'|'model'|'transcribe', loaded, total }
   },
 });
@@ -212,7 +214,7 @@ attach(video, {
 
 The engine is SubBot, whisper.cpp built to WebAssembly and run in workers. The first
 line is on screen within a few seconds of the click with the models already cached: a
-four second window from the playhead goes through the small model first, then the
+two second window from the playhead goes through the small model first, then the
 engine keeps thirty seconds of lead ahead of the viewer in six second steps. Behind
 that a second tier re-does every window with a bigger model, nearest the playhead
 first and then from the start of the file, and its lines replace the first ones as
@@ -255,6 +257,7 @@ and playback keeps its own URL while the transcription reads the copy.
 `onState` reports what the engine is doing, for a page that shows it:
 
 ```ts
+{ state: 'warm', model }                                  // before any select: engine ready, model in memory or not
 { state: 'loading', step: 'engine' | 'model' | 'audio', loaded, total }
 { state: 'listening' }                                    // ready, first window running
 { state: 'live', covered, duration, language }            // seconds covered so far

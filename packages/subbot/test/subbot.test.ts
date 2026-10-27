@@ -1,7 +1,9 @@
 import type { ResolvedTranscribe, TranscribeRequest } from '@subtitledb/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_VAD_URL } from '../src/asr/models.js';
 import { LIVE } from '../src/schedule.js';
 import { Subbot, type SubbotState } from '../src/subbot.js';
+import { dropWarm, warmUp } from '../src/warm.js';
 import { type FakeOptions, fakeMedia, fakeSpawn, type Truth } from './fake-workers.js';
 
 const DEPS = {
@@ -47,6 +49,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  dropWarm();
 });
 
 describe('the first cue', () => {
@@ -81,6 +84,38 @@ describe('the first cue', () => {
 });
 
 describe('the whole file', () => {
+  it('takes over the worker warmed before the click, and only asks it for the model', async () => {
+    const fake = { truth: lines(10), duration: 10 };
+    const { spawn, log } = fakeSpawn(fake);
+    const assets = {
+      wasmUrl: DEPS.wasmUrl,
+      modelUrl: 'https://m.test/ggml-tiny-q8_0.bin',
+      vadUrl: DEFAULT_VAD_URL,
+      cacheName: 'subtitledb-subbot',
+    };
+    // No Cache API here, so the warm worker is the engine alone, as on a first visit.
+    expect(await warmUp(spawn, assets)).toBe(false);
+    expect(log.spawned).toBe(1);
+    expect(log.loads).toBe(0);
+    const states: SubbotState[] = [];
+    const bot = new Subbot(
+      {
+        media: fakeMedia(0, 10),
+        config: config({
+          quality: 'fast',
+          models: 'https://m.test/',
+          onState: (s) => states.push(s),
+        }),
+      },
+      { ...DEPS, spawn },
+    );
+    await bot.run();
+    // The audio worker is the only new one; the live worker was the warm one, loaded on take-over.
+    expect(log.spawned).toBe(2);
+    expect(log.loads).toBe(1);
+    expect(states.at(-1)?.state).toBe('complete');
+  });
+
   it('is covered and handed back as WebVTT with every line, in order', async () => {
     const truth = lines(40);
     const { run, states } = start({ truth, duration: 40 }, {}, 20);
@@ -106,6 +141,16 @@ describe('the whole file', () => {
     expect(models).toEqual(new Set(['tiny-q8_0', 'base-q8_0']));
     // The pool starts after the first live window, never before.
     expect(log.windows[0]?.model).toBe('tiny-q8_0');
+  });
+
+  it('completes on the live tier alone when the machine is too small for a pool', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 2, deviceMemory: 4 });
+    const truth = lines(20);
+    const { run, log, states } = start({ truth, duration: 20 }, { quality: 'balanced' });
+    const { text } = await run;
+    for (const l of truth) expect(text).toContain(l.text);
+    expect(new Set(log.windows.map((w) => w.model))).toEqual(new Set(['tiny-q8_0']));
+    expect(states.at(-1)?.state).toBe('complete');
   });
 
   it('detects the language from the first window and reports it', async () => {

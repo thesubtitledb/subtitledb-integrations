@@ -14,9 +14,16 @@
  * once every second of it is covered, and the adapter then sets that file as the
  * track's source. Until then the cues are drawn through the track directly.
  */
-import type { TranscribeRequest } from '@subtitledb/core';
+import type { ResolvedTranscribe, TranscribeRequest } from '@subtitledb/core';
 import { candidateLabel, syntheticCandidate } from '@subtitledb/core';
-import { audioCtxFor, DEFAULT_VAD_URL, MODELS, modelUrl, type Quality } from './asr/models.js';
+import {
+  audioCtxFor,
+  DEFAULT_VAD_URL,
+  MODELS,
+  modelUrl,
+  type Quality,
+  type TierModels,
+} from './asr/models.js';
 import type { AsrOptions } from './asr/protocol.js';
 import { quietestAt } from './audio/pcm.js';
 import { RATE } from './audio/resample.js';
@@ -35,6 +42,7 @@ import {
   type Window,
 } from './schedule.js';
 import { cuesToVtt } from './vtt.js';
+import { takeWarm, warmUp } from './warm.js';
 import { type AsrAssets, AsrWorker, AudioWorker, type Spawn, spawnFrom } from './workers.js';
 
 export interface RunDeps {
@@ -48,6 +56,7 @@ export interface RunDeps {
 }
 
 export type SubbotState =
+  | { state: 'warm'; model: boolean }
   | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
@@ -64,6 +73,21 @@ interface Config {
   models?: string;
   status?: boolean;
   onState?: (s: SubbotState) => void;
+}
+
+/** The models of each tier for a config: an explicit model is one tier, else what `quality` names. */
+export function tiersFor(cfg: Pick<Config, 'model' | 'quality'>): TierModels {
+  if (cfg.model && cfg.model !== 'auto') return { live: cfg.model, quality: null };
+  return MODELS[cfg.quality ?? 'balanced'];
+}
+
+function assetsFor(model: string, base: string | undefined, deps: RunDeps): AsrAssets {
+  return {
+    wasmUrl: deps.wasmUrl,
+    modelUrl: modelUrl(model, base),
+    vadUrl: DEFAULT_VAD_URL,
+    cacheName: deps.cacheName ?? 'subtitledb-subbot',
+  };
 }
 
 /** Decode cost per second of audio, by tier, until measured. Single-thread WASM. */
@@ -85,7 +109,7 @@ export class Subbot {
   private live: AsrWorker | null = null;
   private pool: AsrWorker[] = [];
   private readonly liveModel: string;
-  private readonly qualityModel: string | null;
+  private qualityModel: string | null;
   private language: string | null = null;
   private duration = 0;
   private fresh = true;
@@ -106,11 +130,9 @@ export class Subbot {
     this.cfg = req.config as unknown as Config;
     this.signal = req.signal;
     this.spawn = deps.spawn ?? spawnFrom(deps.workerUrl);
-    const q = this.cfg.quality ?? 'balanced';
-    // An explicit model is one tier: it is what the caller asked to run, nothing else.
-    const explicit = this.cfg.model && this.cfg.model !== 'auto';
-    this.liveModel = explicit ? this.cfg.model : MODELS[q].live;
-    this.qualityModel = explicit ? null : MODELS[q].quality;
+    const tiers = tiersFor(this.cfg);
+    this.liveModel = tiers.live;
+    this.qualityModel = tiers.quality;
     const lang = this.cfg.language === 'auto' ? 'und' : this.cfg.language;
     this.renderer = new TrackRenderer(
       this.media,
@@ -155,12 +177,17 @@ export class Subbot {
   }
 
   private assets(model: string): AsrAssets {
-    return {
-      wasmUrl: this.deps.wasmUrl,
-      modelUrl: modelUrl(model, this.cfg.models),
-      vadUrl: DEFAULT_VAD_URL,
-      cacheName: this.deps.cacheName ?? 'subtitledb-subbot',
-    };
+    return assetsFor(model, this.cfg.models, this.deps);
+  }
+
+  /** The worker warmed ahead of the click, if it is for this run's live model. */
+  private adoptWarm(): AsrWorker | null {
+    const w = takeWarm(this.assets(this.liveModel));
+    if (!w) return null;
+    w.onProgress = (what, l, t) => this.progress(what, l, t);
+    w.onFail = (e) => this.fail(e);
+    w.load();
+    return w;
   }
 
   private spawnAsr(model: string, report: boolean): AsrWorker {
@@ -391,6 +418,12 @@ export class Subbot {
     const cores = navigator.hardwareConcurrency || 2;
     const mem = (navigator as { deviceMemory?: number }).deviceMemory;
     const n = qualityWorkers(cores, mem);
+    // A machine too small for a pool gets the live tier alone, which then covers the
+    // file itself and is what completion waits for.
+    if (n === 0) {
+      this.qualityModel = null;
+      return;
+    }
     for (let i = 0; i < n; i++) this.pool.push(this.spawnAsr(this.qualityModel, false));
   }
 
@@ -402,7 +435,7 @@ export class Subbot {
       this.renderer.status('Preparing transcription');
       // The model download and the audio open overlap; whichever is slower sets the
       // first cue.
-      this.live = this.spawnAsr(this.liveModel, true);
+      this.live = this.adoptWarm() ?? this.spawnAsr(this.liveModel, true);
       await this.openAudio();
       this.throwIfFailed();
       await this.live.ready;
@@ -459,5 +492,22 @@ export class Subbot {
   /** Milliseconds from the call to the first cue on screen, for the bench. */
   get timeToFirstCue(): number | null {
     return this.firstCueAt;
+  }
+}
+
+/**
+ * Get the live worker ready before the row is selected: engine compiled, model in
+ * memory when this device already has it. Never downloads a model. `onState` hears
+ * `warm` once it is as ready as it can get, with `model` saying whether the model is
+ * in.
+ */
+export async function warmTranscription(cfg: ResolvedTranscribe, deps: RunDeps): Promise<void> {
+  const c = cfg as unknown as Config;
+  const spawn = deps.spawn ?? spawnFrom(deps.workerUrl);
+  const model = await warmUp(spawn, assetsFor(tiersFor(c).live, c.models, deps));
+  try {
+    c.onState?.({ state: 'warm', model });
+  } catch {
+    // A listener's bug is not the warm-up's.
   }
 }

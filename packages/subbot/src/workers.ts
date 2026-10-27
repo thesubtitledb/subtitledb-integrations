@@ -61,7 +61,7 @@ class Client<Out, In extends { type: string; id?: number }> {
 
   constructor(
     spawn: Spawn,
-    private readonly onFail: (e: Error) => void,
+    public onFail: (e: Error) => void,
   ) {
     this.worker = spawn();
     this.worker.onmessage = ({ data }) => this.receive(data as In);
@@ -161,23 +161,33 @@ export interface Done {
   ms: number;
 }
 
-/** One whisper.cpp instance. */
+/**
+ * One whisper.cpp instance. `load` false brings the engine up without a model, for a
+ * worker started ahead of the click; `load()` then fetches the model when it is
+ * wanted. The progress and failure callbacks can be re-pointed by whoever takes such
+ * a worker over.
+ */
 export class AsrWorker {
   private client: Client<ToAsr, FromAsr>;
   readonly ready: Promise<void>;
   private rejectReady: ((e: Error) => void) | null = null;
+  private loading: boolean;
   busy: { t0: number; t1: number; started: number } | null = null;
+  onProgress: LoadProgress;
 
   constructor(
     spawn: Spawn,
     readonly assets: AsrAssets,
     onProgress: LoadProgress,
     onFail: (e: Error) => void,
+    load = true,
   ) {
+    this.onProgress = onProgress;
+    this.loading = load;
     this.client = new Client<ToAsr, FromAsr>(spawn, onFail);
     this.ready = new Promise<void>((resolve, reject) => {
       const off = this.client.on((m) => {
-        if (m.type === 'progress') onProgress(m.what, m.loaded, m.total);
+        if (m.type === 'progress') this.onProgress(m.what, m.loaded, m.total);
         else if (m.type === 'ready') {
           off();
           resolve();
@@ -191,11 +201,22 @@ export class AsrWorker {
     // Observed through work(), not here: a worker stopped before it was ready must not
     // be an unhandled rejection.
     this.ready.catch(() => {});
-    this.client.post({ type: 'init', role: 'asr', ...assets });
+    this.client.post({ type: 'init', role: 'asr', ...assets, load });
   }
 
   get dead(): boolean {
     return this.client.dead;
+  }
+
+  set onFail(fn: (e: Error) => void) {
+    this.client.onFail = fn;
+  }
+
+  /** Fetch and load the model, once. `ready` resolves when it is in. */
+  load(): void {
+    if (this.loading) return;
+    this.loading = true;
+    this.client.post({ type: 'load' });
   }
 
   async transcribe(

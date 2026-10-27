@@ -28,7 +28,10 @@ export type ToAsr =
       modelUrl: string;
       vadUrl: string | null;
       cacheName: string;
+      /** Load the model now. Else the engine alone comes up, and `load` brings the model later. */
+      load: boolean;
     }
+  | { type: 'load' }
   | { type: 'transcribe'; id: number; pcm: Int16Array; t0: number; opts: AsrOptions }
   | { type: 'vad'; id: number; pcm: Int16Array; t0: number }
   | { type: 'detect'; id: number; pcm: Int16Array };
