@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type BrowserContext, chromium, expect, test } from '@playwright/test';
@@ -247,21 +247,19 @@ test('identify: the first lines find a corpus file, which replaces the transcrip
       },
     }),
   );
+  // The excerpt's real subtitles, 1.5 s early, as a corpus file of another release
+  // would be. SubBot checks the words it hears after the lookup against them.
+  const srt = await readFile(
+    join(process.cwd(), 'packages/subbot/test/media/sintel-excerpt.en.srt'),
+    'utf8',
+  );
+  const early = srt.replace(/(\d\d):(\d\d):(\d\d),(\d\d\d)/g, (_, h, m, sec, ms) => {
+    const t = ((+h * 60 + +m) * 60 + +sec) * 1000 + +ms - 1500;
+    const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+    return `${pad(Math.floor(t / 3_600_000))}:${pad(Math.floor(t / 60_000) % 60)}:${pad(Math.floor(t / 1000) % 60)},${pad(t % 1000, 3)}`;
+  });
   await page.route(/\/get\/501\b/, (r) =>
-    r.fulfill({
-      headers: CORS,
-      contentType: 'text/plain',
-      body: [
-        '1',
-        '00:00:16,000 --> 00:00:19,000',
-        'What brings you to the land of the gatekeepers?',
-        '',
-        '2',
-        '00:00:22,500 --> 00:00:24,000',
-        'A line a person wrote.',
-        '',
-      ].join('\n'),
-    }),
+    r.fulfill({ headers: CORS, contentType: 'text/plain', body: early }),
   );
   try {
     await page.evaluate(() => (window as unknown as Page).__subbot.setNotice(true));
@@ -281,8 +279,8 @@ test('identify: the first lines find a corpus file, which replaces the transcrip
     expect(r.error, r.error ?? '').toBeNull();
     expect(r.identified).toMatchObject({ sub_id: 501, shift_ms: 1500 });
     // The file, shifted 1.5 s, is what the adapter was handed.
-    expect(r.vtt).toContain('00:00:17.500 --> 00:00:20.500');
-    expect(r.vtt).toContain('A line a person wrote.');
+    expect(r.vtt).toContain('00:00:48.850 --> 00:00:51.750');
+    expect(r.vtt).toContain('A dangerous quest for a lone hunter.');
     expect(r.complete).toBe(false);
     expect(r.notice).toContain('Matched');
     // The lookup carried what the model heard, in the language it detected.
@@ -299,7 +297,7 @@ test('identify: the first lines find a corpus file, which replaces the transcrip
       const v = document.getElementById('player') as HTMLVideoElement;
       return [...v.textTracks].flatMap((t) => [...(t.cues ?? [])].map((c) => (c as VTTCue).text));
     });
-    expect(onTrack).toContain('A line a person wrote.');
+    expect(onTrack).toContain('A dangerous quest for a lone hunter.');
   } finally {
     await page.unrouteAll();
   }

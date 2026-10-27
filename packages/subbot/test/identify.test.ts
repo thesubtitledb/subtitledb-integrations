@@ -1,6 +1,12 @@
 import type { IdentifiedText, ResolvedTranscribe, TranscribeRequest } from '@subtitledb/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IDENTIFY_WORDS, Subbot, type SubbotState, wordCount } from '../src/subbot.js';
+import {
+  IDENTIFY_WORDS,
+  Subbot,
+  type SubbotState,
+  VERIFY_AFTER_MS,
+  wordCount,
+} from '../src/subbot.js';
 import { dropWarm } from '../src/warm.js';
 import { fakeMedia, fakeSpawn, type Truth } from './fake-workers.js';
 
@@ -92,6 +98,37 @@ describe('identify', () => {
     const r = await run;
     expect(identify).toHaveBeenCalledTimes(IDENTIFY_WORDS.length);
     expect(r.identified).toBeUndefined();
+    expect(states.at(-1)?.state).toBe('complete');
+  });
+
+  it('shows a match once the words after the lookup agree with it', async () => {
+    // The file says what the video says, at the same times.
+    const reference = lines(120).map((l) => ({ start_ms: l.t0 * 1000, text: l.text }));
+    const identify = vi.fn(async () => ({ ...FOUND, reference }));
+    const { run, states, log } = start(identify);
+    const r = await run;
+    expect(r.identified?.sub_id).toBe(501);
+    expect(identify).toHaveBeenCalledOnce();
+    expect(states.at(-1)?.state).toBe('identified');
+    // It waited for words from 30 s past the first line, and no longer than it needed.
+    const covered = log.windows.reduce((n, w) => Math.max(n, w.t1), 0);
+    expect(covered).toBeGreaterThan(0.5 + VERIFY_AFTER_MS / 1000);
+    expect(covered).toBeLessThan(90);
+  });
+
+  it('drops a match the words after do not bear out, and never takes it again', async () => {
+    // Another episode: the same opening, then other words.
+    const reference = [
+      ...lines(20).map((l) => ({ start_ms: l.t0 * 1000, text: l.text })),
+      ...lines(120)
+        .filter((l) => l.t0 >= 20)
+        .map((l) => ({ start_ms: l.t0 * 1000, text: 'somebody else talks here instead' })),
+    ];
+    const identify = vi.fn(async () => ({ ...FOUND, reference }));
+    const { run, states } = start(identify);
+    const r = await run;
+    expect(r.identified).toBeUndefined();
+    expect(identify).toHaveBeenCalledTimes(IDENTIFY_WORDS.length);
     expect(states.at(-1)?.state).toBe('complete');
   });
 

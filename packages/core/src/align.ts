@@ -8,6 +8,7 @@
  * densest one-second window wins if it stands clear of that noise.
  */
 import type { Cue } from './transform.js';
+import type { SpeechCue } from './types.js';
 
 /** How far apart two files may be and still be lined up. */
 export const RANGE_MS = 120_000;
@@ -80,4 +81,49 @@ export function lineUp(ref: Cue[], other: Cue[]): LineUp | null {
   }
   votes.sort((x, y) => x - y);
   return { ms: Math.round(votes[votes.length >> 1] ?? centre), lines };
+}
+
+/** How far a heard word trigram may sit from the file's and still agree. */
+const AGREE_MS = 5000;
+/** One word per character where a script has no spaces. */
+const WORDS = /[฀-໿က-႟ក-៿぀-ヿ㐀-鿿]|[\p{L}\p{N}]+/gu;
+
+function grams(cues: readonly SpeechCue[]): Array<[string, number]> {
+  const ws: string[] = [];
+  const at: number[] = [];
+  for (const c of cues) {
+    for (const w of c.text.toLowerCase().match(WORDS) ?? []) {
+      ws.push(w);
+      at.push(c.start_ms);
+    }
+  }
+  const out: Array<[string, number]> = [];
+  for (let i = 0; i + 2 < ws.length; i++)
+    out.push([`${ws[i]} ${ws[i + 1]} ${ws[i + 2]}`, at[i] as number]);
+  return out;
+}
+
+/**
+ * How much of what was heard a subtitle file also says at that moment: the distinct
+ * word trigrams of `heard`, and how many of them `file` holds within 5 s. `file` is
+ * already shifted onto the video.
+ */
+export function agreement(
+  file: readonly SpeechCue[],
+  heard: readonly SpeechCue[],
+): { hits: number; total: number } {
+  const at = new Map<string, number[]>();
+  for (const [g, ms] of grams(file)) {
+    const l = at.get(g);
+    if (l) l.push(ms);
+    else at.set(g, [ms]);
+  }
+  const seen = new Set<string>();
+  let hits = 0;
+  for (const [g, ms] of grams(heard)) {
+    if (seen.has(g)) continue;
+    seen.add(g);
+    if (at.get(g)?.some((t) => Math.abs(t - ms) <= AGREE_MS)) hits++;
+  }
+  return { hits, total: seen.size };
 }

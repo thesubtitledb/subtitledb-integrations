@@ -1,6 +1,6 @@
 {
   "name": "@subtitledb/core",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Client for The Subtitle Database, a free subtitle API for films and series. No key needed. Lookups, matching, downloads and WebVTT conversion, with no dependencies. Runs in browsers and Node 20.3 or newer, as an ES module.",
   "license": "MIT",
   "type": "module",

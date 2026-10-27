@@ -64,6 +64,12 @@ export interface IdentifiedText {
   text: string;
   format: 'vtt';
   identified: Identified;
+  /**
+   * The matched spoken-language file, shifted onto the video. SubBot checks the
+   * words it hears next against it before showing `text`; without it, `text` is
+   * shown on the lookup's word.
+   */
+  reference?: SpeechCue[];
 }
 
 /** What the engine is doing, for a page that shows it. */

@@ -1,5 +1,5 @@
 export type { LineUp } from './align.js';
-export { lineUp } from './align.js';
+export { agreement, lineUp } from './align.js';
 export type { CacheOptions } from './cache.js';
 export { SingleFlightCache } from './cache.js';
 export type {

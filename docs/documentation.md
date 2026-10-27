@@ -233,8 +233,11 @@ itself from `onState`.
 `identify` looks the first lines up in the corpus. Once the engine has heard 30 words
 it sends them, with their times and the detected language, to
 `POST /v1/subbot/identify`; with no match it asks again at 60 and at 120 words, then
-leaves the transcription alone. On a match the transcription stops and a file a person
-wrote takes its place on the track, shifted onto the video. When the viewer reads
+leaves the transcription alone. A match is checked first: the words heard from 30 s
+past the first line sent must agree with the file at the same moments (a show's theme
+or intro can match another episode; its dialogue after does not). A match that fails
+the check is dropped and not taken again. Once it passes, the transcription stops and
+a file a person wrote takes its place on the track, shifted onto the video. When the viewer reads
 another language (`languages`, else the browser's), that language's file of the same
 title is fetched and lined up against the matched one by cue times, and shown instead;
 if the corpus has none, the spoken-language file is shown. The pill ends on `Matched`,
