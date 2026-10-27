@@ -62,7 +62,7 @@ const chunks = await build({
   entryPoints: [
     join(here, 'src/chunks/engine.ts'),
     join(here, 'src/chunks/players.ts'),
-    join(here, 'src/chunks/transcribe.ts'),
+    join(here, 'src/chunks/subbot.ts'),
     join(here, 'src/chunks/debug.ts'),
   ],
   outdir: versioned,
@@ -84,7 +84,23 @@ for (const [file, meta] of Object.entries(chunks.metafile.outputs)) {
   const name = from.slice(from.lastIndexOf('/') + 1).replace(/\.ts$/, '');
   named[name] = file.slice(file.lastIndexOf('/') + 1);
 }
-for (const name of ['engine', 'players', 'transcribe', 'debug']) {
+// ---- pass one-b: the worker ------------------------------------------------
+//
+// Its own bundle, not a splitting entry. A worker is loaded by URL from a blob module
+// the engine chunk makes, and what it needs it carries itself: a relative import from
+// it would be one more request on the path to the first cue, and sharing with the
+// engine chunk would put core in the worker.
+const worker = await build({
+  ...SHARED,
+  entryPoints: [join(here, 'src/chunks/subbot-worker.ts')],
+  outdir: versioned,
+  entryNames: '[name]-[hash]',
+  metafile: true,
+});
+for (const [file, meta] of Object.entries(worker.metafile.outputs)) {
+  if (meta.entryPoint) named['subbot-worker'] = file.slice(file.lastIndexOf('/') + 1);
+}
+for (const name of ['engine', 'players', 'subbot', 'subbot-worker', 'debug']) {
   if (!named[name]) throw new Error(`chunk pass produced no ${name} entry`);
 }
 
@@ -148,6 +164,10 @@ for (const entry of ENTRIES) {
 
 // ---- what is served with it ------------------------------------------------
 
+// The whisper.cpp build the worker instantiates. Unhashed: it is versioned by the
+// directory like everything else here, and the worker fetches it by that name.
+await cp(join(root, 'packages/subbot/wasm/dist/subbot.wasm'), join(versioned, 'subbot.wasm'));
+
 await cp(join(here, 'public/_headers'), join(out, '_headers'));
 await cp(join(here, 'public/_redirects'), join(out, '_redirects'));
 
@@ -182,7 +202,7 @@ for (const entry of built) {
 // Keyed by a path relative to cwd, which is not the output directory and need not be
 // anywhere near it, so match on the filename esbuild actually emitted.
 const sized = Object.fromEntries(
-  Object.entries(chunks.metafile.outputs).map(([file, meta]) => [
+  Object.entries({ ...chunks.metafile.outputs, ...worker.metafile.outputs }).map(([file, meta]) => [
     file.slice(file.lastIndexOf('/') + 1),
     meta.bytes,
   ]),

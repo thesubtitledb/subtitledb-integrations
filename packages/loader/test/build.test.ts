@@ -159,7 +159,7 @@ describe('every chunk the loader can ask for exists', () => {
     }
   });
 
-  it('names all four chunks, the transcription and debugger ones among them', async () => {
+  it('names all five chunks, the transcription and debugger ones among them', async () => {
     // The transcription chunk is the last-loaded: pulled only on a synthetic select.
     // The debugger chunk only with a debugger key. Both have to be named in the entry
     // so the loader can ask for them.
@@ -167,10 +167,11 @@ describe('every chunk the loader can ask for exists', () => {
       'debug',
       'engine',
       'players',
-      'transcribe',
+      'subbot',
+      'subbot-worker',
     ]);
     const files = await readdir(join(out, 'v', version));
-    for (const name of ['transcribe', 'debug']) {
+    for (const name of ['subbot', 'subbot-worker', 'debug']) {
       expect(files).toContain(manifest.chunks[name]);
       expect(iife).toContain(manifest.chunks[name]);
       expect(esm).toContain(manifest.chunks[name]);
@@ -185,15 +186,29 @@ describe('every chunk the loader can ask for exists', () => {
     expect(debug).not.toMatch(/\bimport\s*[{("'*]/);
   });
 
-  it('including the shared file the two chunks both import', async () => {
+  it('including the shared files the chunks import rather than copy', async () => {
     const files = await readdir(join(out, 'v', version));
     const shared = files.filter((f) => f.startsWith('sdb-') && f.endsWith('.js'));
-    // Splitting is what keeps core in one file. Without it a page that loads the
-    // bindings after the engine runs a second copy of the registry, which is the
-    // exact thing guard.ts exists to prevent between loaders.
-    expect(shared, 'splitting produced no shared chunk').toHaveLength(1);
-    const engine = await readFile(join(out, 'v', version, manifest.chunks.engine), 'utf8');
-    expect(engine).toContain(shared[0]);
+    // Splitting is what keeps core in shared files rather than in every chunk. Without
+    // it a page that loads the bindings after the engine runs a second copy of the
+    // registry, which is the exact thing guard.ts exists to prevent between loaders.
+    // Two shared files, not one: the transcription chunk uses a corner of core (the
+    // candidate label), and esbuild splits that corner from the rest.
+    expect(shared.length, 'splitting produced no shared chunk').toBeGreaterThanOrEqual(1);
+    for (const name of ['engine', 'players', 'subbot']) {
+      const text = await readFile(join(out, 'v', version, manifest.chunks[name]), 'utf8');
+      expect(
+        shared.some((f) => text.includes(f)),
+        `${name} imports no shared file`,
+      ).toBe(true);
+    }
+    // The worker stands alone: spawned by URL from a blob, it carries what it needs.
+    const worker = await readFile(
+      join(out, 'v', version, manifest.chunks['subbot-worker']),
+      'utf8',
+    );
+    expect(shared.some((f) => worker.includes(f))).toBe(false);
+    expect(worker).not.toMatch(/\bimport\s*[{("'*]/);
   });
 });
 

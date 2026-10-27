@@ -1,0 +1,463 @@
+/**
+ * The run: open the audio, warm the models, keep cues ahead of the playhead, fill
+ * in the rest of the file behind, and hand a complete WebVTT back at the end.
+ *
+ * Two tiers. The live tier is one worker with the small model, fed a short first
+ * window from the playhead and then six second steps, thirty seconds ahead at most,
+ * so the first line is on screen within a few seconds of the click and the lead
+ * never runs out. The quality tier is a pool with the bigger model, fifteen second
+ * windows, nearest the playhead first and then from the start of the file; its
+ * cues replace the live ones as they land. Everything heavy is in workers and every
+ * buffer is transferred, so the page's thread only ever moves cues around.
+ *
+ * The returned promise is the adapter's contract: it resolves with the whole file
+ * once every second of it is covered, and the adapter then sets that file as the
+ * track's source. Until then the cues are drawn through the track directly.
+ */
+import type { TranscribeRequest } from '@subtitledb/core';
+import { candidateLabel, syntheticCandidate } from '@subtitledb/core';
+import { audioCtxFor, DEFAULT_VAD_URL, MODELS, modelUrl, type Quality } from './asr/models.js';
+import type { AsrOptions } from './asr/protocol.js';
+import { quietestAt } from './audio/pcm.js';
+import { RATE } from './audio/resample.js';
+import { CueStore, type Segment, segmentsToCues, type Tier, trimToSpeech } from './cues.js';
+import { SubbotError } from './errors.js';
+import { type Plan, planFor } from './players.js';
+import { TrackRenderer } from './render.js';
+import {
+  Intervals,
+  LIVE,
+  nextLive,
+  nextQuality,
+  QUALITY_WINDOW,
+  qualityWorkers,
+  type Span,
+  type Window,
+} from './schedule.js';
+import { cuesToVtt } from './vtt.js';
+import { type AsrAssets, AsrWorker, AudioWorker, type Spawn, spawnFrom } from './workers.js';
+
+export interface RunDeps {
+  /** The worker script, on the CDN. */
+  workerUrl: string;
+  /** The whisper.cpp build, next to it. */
+  wasmUrl: string;
+  /** Test seam: how a worker is made. */
+  spawn?: Spawn;
+  cacheName?: string;
+}
+
+export type SubbotState =
+  | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
+  | { state: 'listening' }
+  | { state: 'live'; covered: number; duration: number; language: string | null }
+  | { state: 'complete'; cues: number }
+  | { state: 'error'; error: Error };
+
+/** The fields of the resolved config this engine reads beyond the core ones. */
+interface Config {
+  model: string;
+  task: 'transcribe' | 'translate';
+  language: string;
+  source?: string;
+  quality?: Quality;
+  models?: string;
+  status?: boolean;
+  onState?: (s: SubbotState) => void;
+}
+
+/** Decode cost per second of audio, by tier, until measured. Single-thread WASM. */
+const MS_PER_SEC: Record<Tier, number> = { live: 350, quality: 850 };
+/** How far behind a seek the live worker's current window may be before it is dropped. */
+const RESTART_MS = 1500;
+
+export class Subbot {
+  private readonly media: HTMLMediaElement;
+  private readonly cfg: Config;
+  private readonly signal: AbortSignal | undefined;
+  private readonly spawn: Spawn;
+  private readonly store = new CueStore();
+  private readonly renderer: TrackRenderer;
+  private readonly covered = new Intervals();
+  private readonly qualityCovered = new Intervals();
+  private inflight: Window[] = [];
+  private audio: AudioWorker | null = null;
+  private live: AsrWorker | null = null;
+  private pool: AsrWorker[] = [];
+  private readonly liveModel: string;
+  private readonly qualityModel: string | null;
+  private language: string | null = null;
+  private duration = 0;
+  private fresh = true;
+  private stopped = false;
+  private failure: Error | null = null;
+  private wake: (() => void) | null = null;
+  private unhook: (() => void) | null = null;
+  private rate: Record<Tier, number> = { ...MS_PER_SEC };
+  private firstCueAt: number | null = null;
+  private readonly startedAt = performance.now();
+  private readonly loaded: Record<string, [number, number]> = {};
+
+  constructor(
+    private readonly req: TranscribeRequest,
+    private readonly deps: RunDeps,
+  ) {
+    this.media = req.media;
+    this.cfg = req.config as unknown as Config;
+    this.signal = req.signal;
+    this.spawn = deps.spawn ?? spawnFrom(deps.workerUrl);
+    const q = this.cfg.quality ?? 'balanced';
+    // An explicit model is one tier: it is what the caller asked to run, nothing else.
+    const explicit = this.cfg.model && this.cfg.model !== 'auto';
+    this.liveModel = explicit ? this.cfg.model : MODELS[q].live;
+    this.qualityModel = explicit ? null : MODELS[q].quality;
+    const lang = this.cfg.language === 'auto' ? 'und' : this.cfg.language;
+    this.renderer = new TrackRenderer(
+      this.media,
+      candidateLabel(syntheticCandidate(this.cfg.language)),
+      lang,
+      this.cfg.status !== false,
+    );
+    this.store.listen((added, removed) => {
+      this.renderer.apply(added, removed);
+      if (added.length && this.firstCueAt === null) {
+        this.firstCueAt = performance.now() - this.startedAt;
+        this.renderer.status(null);
+      }
+    });
+  }
+
+  private emit(s: SubbotState): void {
+    try {
+      this.cfg.onState?.(s);
+    } catch {
+      // A listener's bug is not the run's.
+    }
+    if (s.state === 'loading' && s.step !== 'audio') {
+      this.req.onProgress?.({ phase: s.step, loaded: s.loaded, total: s.total });
+    } else if (s.state === 'live') {
+      this.req.onProgress?.({ phase: 'transcribe', loaded: s.covered, total: s.duration });
+    }
+  }
+
+  private progress(what: string, loaded: number, total: number): void {
+    this.loaded[what] = [loaded, total];
+    let l = 0;
+    let t = 0;
+    for (const [a, b] of Object.values(this.loaded)) {
+      l += a;
+      t += b;
+    }
+    const step = what === 'wasm' ? 'engine' : 'model';
+    this.emit({ state: 'loading', step, loaded: l, total: t });
+    const pct = t > 0 ? Math.min(99, Math.round((100 * l) / t)) : 0;
+    this.renderer.status(`Downloading the speech model ${pct}%`);
+  }
+
+  private assets(model: string): AsrAssets {
+    return {
+      wasmUrl: this.deps.wasmUrl,
+      modelUrl: modelUrl(model, this.cfg.models),
+      vadUrl: DEFAULT_VAD_URL,
+      cacheName: this.deps.cacheName ?? 'subtitledb-subbot',
+    };
+  }
+
+  private spawnAsr(model: string, report: boolean): AsrWorker {
+    return new AsrWorker(
+      this.spawn,
+      this.assets(model),
+      report ? (what, l, t) => this.progress(what, l, t) : () => {},
+      (e) => this.fail(e),
+    );
+  }
+
+  private fail(e: Error): void {
+    if (this.stopped) return;
+    this.failure = e;
+    this.stop();
+  }
+
+  private stop(): void {
+    this.stopped = true;
+    this.wake?.();
+    this.unhook?.();
+    this.unhook = null;
+    this.live?.terminate();
+    for (const w of this.pool) w.terminate();
+    this.pool = [];
+    this.audio?.terminate();
+    this.media.removeEventListener('seeking', this.onSeek);
+  }
+
+  private readonly onSeek = (): void => {
+    this.fresh = true;
+    const live = this.live;
+    const b = live?.busy;
+    if (live && b) {
+      const expect = (b.t1 - b.t0) * this.rate.live;
+      const remaining = expect - (performance.now() - b.started);
+      const far = Math.abs(this.media.currentTime - b.t0) > LIVE.lead;
+      // A window far from where the viewer went, with most of its cost still ahead,
+      // is not worth finishing. Terminating is the only way to stop a decode.
+      if (far && remaining > RESTART_MS) {
+        live.terminate();
+        this.live = this.spawnAsr(this.liveModel, false);
+      }
+    }
+    this.wake?.();
+  };
+
+  private async openAudio(): Promise<void> {
+    const plan = planFor(this.media, this.req.player, this.cfg.source);
+    const lang = this.cfg.language === 'auto' ? undefined : this.cfg.language;
+    const tryPlan = async (p: Plan): Promise<void> => {
+      const audio = new AudioWorker(this.spawn, (e) => this.fail(e));
+      this.audio = audio;
+      this.unhook = p.hook ? p.hook((bytes, init, start) => audio.feed(bytes, init, start)) : null;
+      try {
+        await audio.open(p.spec, lang);
+      } catch (e) {
+        audio.terminate();
+        this.unhook?.();
+        this.unhook = null;
+        if (p.fallback && !this.stopped) {
+          await tryPlan(p.fallback);
+          return;
+        }
+        throw e;
+      }
+    };
+    this.emit({ state: 'loading', step: 'audio', loaded: 0, total: 1 });
+    await tryPlan(plan);
+    const opened = this.audio?.opened;
+    const d = opened?.duration || this.media.duration;
+    this.duration = Number.isFinite(d) && d > 0 ? d : 0;
+  }
+
+  private audioUntil(t: number): number {
+    const a = this.audio;
+    if (!a?.opened) return t;
+    if (a.opened.random) return this.duration || Number.POSITIVE_INFINITY;
+    const iv = new Intervals();
+    for (const [x, y] of a.coverage) iv.add(x, y);
+    return iv.until(t);
+  }
+
+  private merged(base: Intervals): Intervals {
+    const iv = new Intervals();
+    iv.spans = base.spans.map((s) => [s[0], s[1]] as Span);
+    for (const w of this.inflight) iv.add(w.t0, w.t1);
+    return iv;
+  }
+
+  private complete(): boolean {
+    if (!this.duration) return false;
+    const done = this.qualityModel ? this.qualityCovered : this.covered;
+    return done.total() >= this.duration - 0.5;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const t = setTimeout(() => {
+        this.wake = null;
+        resolve();
+      }, ms);
+      this.wake = () => {
+        clearTimeout(t);
+        this.wake = null;
+        resolve();
+      };
+    });
+  }
+
+  private async work(worker: AsrWorker, w: Window, tier: Tier): Promise<void> {
+    this.inflight.push(w);
+    try {
+      await worker.ready;
+      const audio = this.audio as AudioWorker;
+      const read = await audio.read(w.t0, w.t1);
+      let pcm = read.pcm;
+      let len = pcm.length / RATE;
+      // Cut a full window at its quietest point near the end, so a line is not split
+      // across two windows and transcribed as two halves.
+      if (w.t1 < this.duration - 0.1 && len > 2.5) {
+        const cut = quietestAt(pcm, len - 1, len);
+        if (cut < len - 0.1) {
+          pcm = pcm.subarray(0, Math.round(cut * RATE));
+          len = cut;
+        }
+      }
+      const t0 = read.t0;
+      const t1 = t0 + len;
+      if (len < 0.3) {
+        this.mark(tier, w.t0, w.t1);
+        return;
+      }
+      const opts: AsrOptions = {
+        language: this.language ?? this.cfg.language,
+        translate: this.cfg.task === 'translate',
+        audioCtx: audioCtxFor(len),
+        tokenTimestamps: true,
+        maxLen: 0,
+        singleSegment: len <= 6.5,
+        maxTokens: Math.ceil(len * 10) + 10,
+      };
+      const started = performance.now();
+      const r = await worker.transcribe(pcm, t0, t1, opts);
+      const ms = performance.now() - started;
+      this.rate[tier] = 0.7 * this.rate[tier] + 0.3 * (ms / len);
+      if (!this.language && this.cfg.language === 'auto' && r.lang && r.lang !== 'auto')
+        this.language = r.lang;
+      const cues = trimToSpeech(
+        segmentsToCues(r.segments as Segment[], tier, t0, t1),
+        r.spans ?? [],
+      );
+      if (this.stopped) return;
+      this.store.replace(t0, t1, cues, tier);
+      // The window was asked from w.t0; what came back may start a little earlier or
+      // later by a codec frame. Cover what was asked for, so no sliver is re-done.
+      this.mark(tier, Math.min(w.t0, t0), Math.max(t1, w.t1 - 0.05));
+    } catch (e) {
+      if (e instanceof SubbotError && e.code === 'aborted') return;
+      throw e;
+    } finally {
+      this.inflight = this.inflight.filter((x) => x !== w);
+    }
+  }
+
+  private mark(tier: Tier, t0: number, t1: number): void {
+    this.covered.add(t0, t1);
+    if (tier === 'quality') this.qualityCovered.add(t0, t1);
+    this.emit({
+      state: 'live',
+      covered: this.covered.total(),
+      duration: this.duration,
+      language: this.language,
+    });
+  }
+
+  private async liveLoop(): Promise<void> {
+    while (!this.stopped && !this.complete()) {
+      const live = this.live as AsrWorker;
+      const playhead = this.media.currentTime;
+      const merged = this.merged(this.covered);
+      let w = nextLive(
+        playhead,
+        merged,
+        (t) => this.audioUntil(t),
+        this.duration,
+        LIVE,
+        this.fresh,
+      );
+      // With no quality tier the live worker fills the rest of the file itself.
+      if (!w && !this.qualityModel) {
+        w = nextQuality(playhead, merged, (t) => this.audioUntil(t), this.duration, LIVE.step);
+      }
+      if (!w) {
+        await this.sleep(400);
+        continue;
+      }
+      this.fresh = false;
+      await this.work(live, w, 'live');
+      if (this.live !== live) {
+        // Restarted under us by a seek. The new one is picked up on the next turn.
+        this.fresh = true;
+      }
+    }
+  }
+
+  private async qualityLoop(worker: AsrWorker): Promise<void> {
+    while (!this.stopped && !this.complete()) {
+      const playhead = this.media.currentTime;
+      const merged = this.merged(this.qualityCovered);
+      const w = nextQuality(
+        playhead,
+        merged,
+        (t) => this.audioUntil(t),
+        this.duration,
+        QUALITY_WINDOW,
+      );
+      if (!w) {
+        await this.sleep(500);
+        continue;
+      }
+      await this.work(worker, w, 'quality');
+    }
+  }
+
+  private startPool(): void {
+    if (!this.qualityModel) return;
+    const cores = navigator.hardwareConcurrency || 2;
+    const mem = (navigator as { deviceMemory?: number }).deviceMemory;
+    const n = qualityWorkers(cores, mem);
+    for (let i = 0; i < n; i++) this.pool.push(this.spawnAsr(this.qualityModel, false));
+  }
+
+  async run(): Promise<{ text: string; format: 'vtt' }> {
+    if (this.signal?.aborted) throw new SubbotError('transcription was cancelled', 'aborted');
+    const onAbort = () => this.fail(new SubbotError('transcription was cancelled', 'aborted'));
+    this.signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      this.renderer.status('Preparing transcription');
+      // The model download and the audio open overlap; whichever is slower sets the
+      // first cue.
+      this.live = this.spawnAsr(this.liveModel, true);
+      await this.openAudio();
+      this.throwIfFailed();
+      await this.live.ready;
+      this.throwIfFailed();
+      this.renderer.status('Listening');
+      this.emit({ state: 'listening' });
+      this.media.addEventListener('seeking', this.onSeek);
+
+      // The first window alone, so the quality models do not share the network or
+      // the cores with the one window that decides how soon a cue appears.
+      const first = this.firstWindow();
+      if (first) await this.work(this.live, first, 'live');
+      this.throwIfFailed();
+      this.startPool();
+      await Promise.all([this.liveLoop(), ...this.pool.map((w) => this.qualityLoop(w))]);
+      this.throwIfFailed();
+      if (!this.complete())
+        throw new SubbotError('the audio could not all be read', 'audio_unreadable');
+
+      const text = cuesToVtt(this.store.cues);
+      this.emit({ state: 'complete', cues: this.store.cues.length });
+      this.renderer.handover();
+      return { text, format: 'vtt' };
+    } catch (e) {
+      const err =
+        this.failure ?? (e instanceof Error ? e : new SubbotError(String(e), 'worker_failed'));
+      this.renderer.dispose();
+      this.emit({ state: 'error', error: err });
+      throw err;
+    } finally {
+      this.signal?.removeEventListener('abort', onAbort);
+      this.stop();
+    }
+  }
+
+  private firstWindow(): Window | null {
+    const w = nextLive(
+      this.media.currentTime,
+      this.merged(this.covered),
+      (t) => this.audioUntil(t),
+      this.duration,
+      LIVE,
+      true,
+    );
+    this.fresh = false;
+    return w;
+  }
+
+  private throwIfFailed(): void {
+    if (this.failure) throw this.failure;
+    if (this.stopped) throw new SubbotError('transcription was cancelled', 'aborted');
+  }
+
+  /** Milliseconds from the call to the first cue on screen, for the bench. */
+  get timeToFirstCue(): number | null {
+    return this.firstCueAt;
+  }
+}

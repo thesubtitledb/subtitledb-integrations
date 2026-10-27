@@ -155,6 +155,9 @@ function attachViaElement(
   const html5 = (video: HTMLVideoElement) =>
     attachToVideo(video, {
       ...options,
+      // The transcription engine reads a stream through whatever drives the element:
+      // the target when that is a player object (hls.js), or what the page named.
+      owner: options.owner ?? (target === video ? undefined : target),
       session,
       formats: renders(binding, options),
       onShow: (track, index) => binding.shown?.(target, index, track),
@@ -293,7 +296,10 @@ function attachViaApi(
     // The element is read live for a synthetic candidate, whose audio is transcribed
     // on the device. These players mount and swap their element late, so this is the
     // same live lookup resolve uses, not a reference captured at attach.
-    const loaded: LoadedSubtitle | null = await session.load(candidate, { media: media() });
+    const loaded: LoadedSubtitle | null = await session.load(candidate, {
+      media: media(),
+      player: options.owner ?? target,
+    });
     if (!loaded || destroyed) return;
 
     // Blob rather than the API URL for the same reason as the element path: the

@@ -24,6 +24,11 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.m3u8': 'application/vnd.apple.mpegurl',
+  '.mpd': 'application/dash+xml',
+  '.m4s': 'video/iso.segment',
+  '.ts': 'video/mp2t',
+  '.mp3': 'audio/mpeg',
 };
 
 const server = createServer(async (req, res) => {

@@ -66,7 +66,7 @@ SubtitleDB.attach(player, {
 | `formats` | `['vtt']` | Formats the player renders itself. ArtPlayer adds srt, ass and ssa |
 | `player` | detected | Name the player binding instead of detecting it |
 | `strict` | `false` | Throw when a player is found but its captions menu cannot be reached |
-| `transcribe` | `false` | Speech to text on the device when nothing matches. See [transcription](docs/documentation.md#transcription) |
+| `transcribe` | `false` | Speech to text on the device when nothing matches, a line on screen within seconds. See [transcription](docs/documentation.md#transcription) |
 | `cacheTtlMs` | `300000` | How long a lookup is reused, in milliseconds |
 | `maxRequests` | `12` | Most network calls for the life of the attach |
 | `apiBase` | `https://api.thesubtitledb.org` | The API to call |
@@ -227,13 +227,18 @@ new Artplayer({ container, url, plugins: [subtitleDbPlugin({ languages: ['en'] }
 `@subtitledb/html5` is the smallest build, for a bare `<video>` only. The ArtPlayer
 package adds its own settings menu and also exports `attachSubtitleDb(art, options)`.
 
-### @subtitledb/transcribe
+### @subtitledb/subbot
 
-The engines behind `transcribe`: `runTranscription`, `runInWorker`, `spawnWorker`,
-`engineProgram`, `transformersProgram` and `whisperCppProgram` (with `TRANSFORMERS_CDN`,
-`WHISPER_CPP_CDN` and `WHISPER_CPP_MODELS`), the audio steps `extractAudio`, `downmix`,
-`resampleLinear` and `TARGET_RATE`, the output steps `cuesToVtt` and `formatTimestamp`,
-and `TranscribeError`.
+The engine behind `transcribe`: `runTranscription`, the contract core calls on a
+synthetic select, and the parts it is made of. `Subbot` runs one transcription: the
+audio worker reads the element's source or the player's manifest, the ASR workers run
+whisper.cpp, the scheduler (`nextLive`, `nextQuality`, `Intervals`) decides which
+window is next, `CueStore` and `segmentsToCues` turn segments into lines, and
+`TrackRenderer` draws them through the element's own text track. `planFor` works out
+where the bytes are for a given element and player. `MODELS`, `modelUrl` and
+`audioCtxFor` describe the models. The worker entry is `@subtitledb/subbot/worker`;
+the whisper.cpp build it instantiates is in `wasm/dist`, built by `wasm/build.sh`
+from a pinned whisper.cpp with Emscripten, and committed.
 
 ### @subtitledb/debug
 

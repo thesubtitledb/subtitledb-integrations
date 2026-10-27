@@ -17,20 +17,21 @@ import { basePath } from './base.js';
 /** Filled in by build.mjs with the content-hashed names esbuild actually emitted. */
 declare const __SDB_CHUNKS__: Record<ChunkName, string>;
 
-export type ChunkName = 'engine' | 'players' | 'transcribe' | 'debug';
+export type ChunkName = 'engine' | 'players' | 'subbot' | 'subbot-worker' | 'debug';
 
 type Engine = typeof import('./chunks/engine.js');
 type Players = typeof import('@subtitledb/players');
-type Transcribe = typeof import('@subtitledb/transcribe');
+type Subbot = typeof import('./chunks/subbot.js');
 type Debug = typeof import('./chunks/debug.js');
 
 interface Loaded {
   engine: Engine;
   players: Players;
-  // The heaviest chunk, and the last-loaded: pulled only when a viewer selects the
-  // transcription row, and it stands alone because it shares no runtime code with the
-  // other two.
-  transcribe: Transcribe;
+  // The last-loaded: pulled only when a viewer selects the transcription row.
+  subbot: Subbot;
+  // Never imported from here: the engine chunk spawns it as a worker by URL. Named so
+  // the loader can hand that URL over.
+  'subbot-worker': never;
   // Only with a debugger key, and in parallel with whichever of the first two the
   // attach needs. Like transcribe it shares no runtime code with the others.
   debug: Debug;

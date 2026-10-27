@@ -69,7 +69,7 @@ export interface SessionOptions {
 
   /**
    * Opt-in, on-device speech-to-text for a title the corpus has nothing for. Off by
-   * default; `true` means every default (transformers.js, whisper-tiny.en, offered
+   * default; `true` means every default (SubBot, detected language, offered
    * only on no-match). Offering it is free: a synthetic candidate appears in the
    * picker and nothing downloads until a viewer selects it. Only offered when a
    * {@link transcriber} is also wired, so a row that cannot run is never shown.
@@ -463,6 +463,7 @@ export class SubtitleSession {
       const got = await this.textCache.resolve(key, () =>
         run({
           media,
+          ...(ctx?.player !== undefined ? { player: ctx.player } : {}),
           config: cfg,
           signal: this.live.signal,
           ...(onProgress ? { onProgress } : {}),

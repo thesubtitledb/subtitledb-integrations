@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SubBot: subtitles transcribed on the device</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>SubBot: subtitles transcribed on the device</h1>
+      <p>
+        The transcription row, selected. The loader comes from the CDN like any other page
+        (<code>?cdn=http://localhost:4174</code> points it at a local build). Pick a player: the
+        same minute of Sintel as a plain file, through hls.js, dash.js and Shaka. Or drop a video
+        file of your own on the last one.
+      </p>
+    </header>
+
+    <main class="grid">
+      <section>
+        <div class="picker" id="players">
+          <button type="button" data-player="native">Plain video</button>
+          <button type="button" data-player="hlsjs">hls.js</button>
+          <button type="button" data-player="dashjs">dash.js</button>
+          <button type="button" data-player="shaka">Shaka</button>
+          <label class="file">
+            <input type="file" id="file" accept="video/*,audio/*,.mkv,.mp4,.webm,.ts,.mp3" />
+            a file
+          </label>
+        </div>
+        <div class="picker">
+          <label>quality
+            <select id="quality">
+              <option value="fast">fast</option>
+              <option value="balanced" selected>balanced</option>
+              <option value="best">best</option>
+            </select>
+          </label>
+          <label>language <input id="language" value="auto" size="5" /></label>
+          <label><input type="checkbox" id="translate" /> translate to English</label>
+        </div>
+        <div id="stage" class="stage"></div>
+        <p class="hint" id="hint">pick a player above</p>
+      </section>
+
+      <aside class="panel">
+        <h2>What happened</h2>
+        <p class="state" id="state">idle</p>
+        <dl id="status"></dl>
+        <h2>Lines as they appear <span id="count" class="count"></span></h2>
+        <ol id="lines" class="candidates"><li class="muted">nothing yet</li></ol>
+      </aside>
+    </main>
+
+    <script>
+      const CDN = new URL(location.href).searchParams.get('cdn') || 'https://cdn.thesubtitledb.org';
+      const el = (id) => document.getElementById(id);
+      const loader = document.createElement('script');
+      loader.src = `${CDN}/latest/subtitle-helper.js`;
+      loader.onerror = () => {
+        el('state').textContent = `could not load ${loader.src}`;
+      };
+      document.head.appendChild(loader);
+
+      const MEDIA = {
+        native: 'vendor/subbot/sintel-excerpt.webm',
+        hlsjs: 'vendor/subbot/hls-opus/audio.m3u8',
+        dashjs: 'vendor/subbot/dash-opus/manifest.mpd',
+        shaka: 'vendor/subbot/dash-opus/manifest.mpd',
+      };
+
+      function script(src) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = resolve;
+          s.onerror = () => reject(new Error(`could not load ${src}`));
+          document.head.appendChild(s);
+        });
+      }
+
+      function video() {
+        const stage = el('stage');
+        stage.replaceChildren();
+        const v = document.createElement('video');
+        v.className = 'player';
+        v.controls = true;
+        v.muted = true;
+        v.playsInline = true;
+        v.id = 'player';
+        stage.append(v);
+        return v;
+      }
+
+      /** Mounts the player and answers what to hand attach(), with the element. */
+      const PLAYERS = {
+        async native(src) {
+          const v = video();
+          v.src = src;
+          return { target: v, video: v };
+        },
+        async hlsjs(src) {
+          await script('./vendor/hlsjs/hls.min.js');
+          const v = video();
+          const hls = new window.Hls();
+          hls.attachMedia(v);
+          hls.loadSource(new URL(src, location.href).href);
+          return { target: hls, video: v };
+        },
+        async dashjs(src) {
+          await script('./vendor/dashjs/dash.all.min.js');
+          const v = video();
+          const player = window.dashjs.MediaPlayer().create();
+          player.initialize(v, new URL(src, location.href).href, false);
+          // dash.js has no captions API of its own that this library binds, so the
+          // element is attached and the player named as its owner. A seek goes through
+          // the player: one set on the element before it has started is not kept.
+          return { target: v, video: v, owner: player, seek: (t) => player.seek(t) };
+        },
+        async shaka(src) {
+          await script('./vendor/shaka/shaka-player.compiled.js');
+          window.shaka.polyfill.installAll();
+          const v = video();
+          const player = new window.shaka.Player();
+          await player.attach(v);
+          await player.load(new URL(src, location.href).href);
+          return { target: player, video: v };
+        },
+      };
+
+      let handle = null;
+      let seekTo = null;
+      let report = { player: null, state: 'idle', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null };
+      let selectedAt = 0;
+
+      function setState(s) {
+        // The first time each state is seen, as milliseconds after the select.
+        const k = s.split(' ').slice(0, 2).join(' ');
+        if (selectedAt && !(k in report.marks)) report.marks[k] = Math.round(performance.now() - selectedAt);
+        report.state = s;
+        el('state').textContent = s;
+      }
+
+      function row(k, v) {
+        const dl = el('status');
+        let dt = dl.querySelector(`dt[data-k="${k}"]`);
+        if (!dt) {
+          dt = document.createElement('dt');
+          dt.dataset.k = k;
+          dt.textContent = k;
+          const dd = document.createElement('dd');
+          dl.append(dt, dd);
+        }
+        dt.nextElementSibling.textContent = v;
+      }
+
+      function addLine(text, tier) {
+        const list = el('lines');
+        if (report.lines.length === 0) list.replaceChildren();
+        report.lines.push(text);
+        const li = document.createElement('li');
+        li.textContent = text;
+        li.dataset.tier = tier;
+        list.append(li);
+        el('count').textContent = String(report.lines.length);
+      }
+
+      /** Watches the element's tracks for the first cue, by polling: that is what a viewer sees. */
+      function watchCues(v, startedAt) {
+        const seen = new Set();
+        const tick = () => {
+          for (const t of v.textTracks) {
+            if (!t.cues) continue;
+            for (const c of t.cues) {
+              const key = `${c.startTime}|${c.text}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              if (report.firstCueMs === null) {
+                report.firstCueMs = Math.round(performance.now() - startedAt);
+                // Positive: the line was on the track before the playhead reached it.
+                report.firstCueLead = Math.round((c.startTime - v.currentTime) * 1000);
+                row('first cue', `${report.firstCueMs} ms after select, ${report.firstCueLead} ms ahead of the playhead`);
+              }
+              addLine(`${c.startTime.toFixed(1)}  ${c.text}`, t.mode);
+            }
+          }
+          const overlay = document.querySelector('[data-subtitledb-overlay]');
+          if (overlay?.textContent && !seen.has(overlay.textContent)) {
+            seen.add(overlay.textContent);
+            if (report.firstCueMs === null) {
+              report.firstCueMs = Math.round(performance.now() - startedAt);
+              row('first cue', `${report.firstCueMs} ms after select (overlay)`);
+            }
+            addLine(overlay.textContent, 'overlay');
+          }
+        };
+        const timer = setInterval(tick, 50);
+        return () => clearInterval(timer);
+      }
+
+      async function mount(name, src) {
+        if (handle) {
+          handle.destroy();
+          handle = null;
+        }
+        for (const b of el('players').querySelectorAll('button')) b.classList.toggle('on', b.dataset.player === name);
+        report = { player: name, state: 'mounting', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null };
+        selectedAt = 0;
+        el('status').replaceChildren();
+        el('lines').replaceChildren();
+        el('count').textContent = '';
+        setState('mounting');
+        const { target, video: v, owner, seek } = await PLAYERS[name](src ?? MEDIA[name]);
+        seekTo = seek ?? ((t) => { v.currentTime = t; });
+        el('hint').textContent = `${name}: ${src ?? MEDIA[name]}`;
+        v.addEventListener('loadedmetadata', () => row('duration', `${v.duration.toFixed(1)} s`), { once: true });
+
+        handle = SubtitleDB.attach(target, {
+          hint: { imdbId: 'tt1727587' },
+          ...(owner ? { owner } : {}),
+          transcribe: {
+            when: 'always',
+            quality: el('quality').value,
+            language: el('language').value.trim() || 'auto',
+            task: el('translate').checked ? 'translate' : 'transcribe',
+            onState: (s) => {
+              if (s.state === 'loading') {
+                const pct = s.total ? Math.round((100 * s.loaded) / s.total) : 0;
+                setState(`loading ${s.step} ${pct}%`);
+              } else if (s.state === 'live') {
+                setState('live');
+                row('covered', `${s.covered.toFixed(1)} of ${s.duration.toFixed(1)} s`);
+                row('language', s.language ?? 'detecting');
+              } else if (s.state === 'complete') {
+                report.complete = true;
+                setState('complete');
+                row('cues', String(s.cues));
+              } else if (s.state === 'error') {
+                report.error = s.error.message;
+                setState(`error: ${s.error.message}`);
+              } else setState(s.state);
+            },
+          },
+          onError: (err) => {
+            report.error = err.message;
+            row('error', err.message);
+          },
+          onSelected: (loaded) => {
+            report.vtt = loaded.text;
+            row('handed over', `${loaded.text.length} bytes of WebVTT`);
+          },
+        });
+        await handle.ready;
+        row('attached via', handle.player.label);
+        setState('attached');
+        return v;
+      }
+
+      /** Select the transcription row and start the clock; `at` seeks there first. */
+      async function select(at) {
+        const v0 = el('player');
+        if (at != null) {
+          // Playing first: every player keeps a seek made during playback, and a seek
+          // that a player swallows cannot hold the page forever.
+          await v0.play().catch(() => {});
+          const seeked = new Promise((r) => v0.addEventListener('seeked', r, { once: true }));
+          seekTo(at);
+          await Promise.race([seeked, new Promise((r) => setTimeout(r, 10000))]);
+        }
+        const result = await handle.refresh();
+        const synthetic = result.candidates.find((c) => c.synthetic);
+        if (!synthetic) throw new Error('no transcription row offered');
+        const v = el('player');
+        const startedAt = performance.now();
+        selectedAt = startedAt;
+        const stop = watchCues(v, startedAt);
+        setState('selected');
+        await v.play().catch(() => {});
+        handle.select(synthetic).catch((e) => {
+          report.error = String(e.message || e);
+        });
+        return () => stop();
+      }
+
+      for (const b of el('players').querySelectorAll('button')) {
+        b.addEventListener('click', async () => {
+          await mount(b.dataset.player);
+          await select();
+        });
+      }
+      el('file').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        await mount('native', URL.createObjectURL(file));
+        await select();
+      });
+
+      // The end to end run drives the page through these.
+      window.__subbot = {
+        mount,
+        select,
+        report: () => ({ ...report, lines: report.lines.slice() }),
+        video: () => el('player'),
+      };
+    </script>
+  </body>
+</html>
