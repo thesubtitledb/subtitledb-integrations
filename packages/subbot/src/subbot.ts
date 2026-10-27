@@ -144,7 +144,6 @@ export class Subbot {
       this.renderer.apply(added, removed);
       if (added.length && this.firstCueAt === null) {
         this.firstCueAt = performance.now() - this.startedAt;
-        this.renderer.status(null);
       }
     });
   }
@@ -172,8 +171,7 @@ export class Subbot {
     }
     const step = what === 'wasm' ? 'engine' : 'model';
     this.emit({ state: 'loading', step, loaded: l, total: t });
-    const pct = t > 0 ? Math.min(99, Math.round((100 * l) / t)) : 0;
-    this.renderer.status(`Downloading the speech model ${pct}%`);
+    this.renderer.status('Downloading', t > 0 ? Math.min(0.99, l / t) : 0);
   }
 
   private assets(model: string): AsrAssets {
@@ -356,6 +354,11 @@ export class Subbot {
   private mark(tier: Tier, t0: number, t1: number): void {
     this.covered.add(t0, t1);
     if (tier === 'quality') this.qualityCovered.add(t0, t1);
+    // How far to the complete file: what `complete()` waits for.
+    if (this.duration) {
+      const done = (this.qualityModel ? this.qualityCovered : this.covered).total();
+      this.renderer.status('Transcribing', Math.min(0.99, done / this.duration));
+    }
     this.emit({
       state: 'live',
       covered: this.covered.total(),
@@ -432,7 +435,7 @@ export class Subbot {
     const onAbort = () => this.fail(new SubbotError('transcription was cancelled', 'aborted'));
     this.signal?.addEventListener('abort', onAbort, { once: true });
     try {
-      this.renderer.status('Preparing transcription');
+      this.renderer.status('Starting');
       // The model download and the audio open overlap; whichever is slower sets the
       // first cue.
       this.live = this.adoptWarm() ?? this.spawnAsr(this.liveModel, true);

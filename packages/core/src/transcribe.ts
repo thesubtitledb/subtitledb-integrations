@@ -84,7 +84,10 @@ export interface TranscribeOptions {
   source?: string;
   /** Where the models are fetched from. Default: the whisper.cpp mirror on HuggingFace. */
   models?: string;
-  /** The small status line on the video while the model downloads. Default on. */
+  /**
+   * The small pill on the video: what SubBot is doing, with a progress ring and the
+   * percentage, and an x to hide it. Default on; `false` turns it off.
+   */
   status?: boolean;
   onProgress?: (p: TranscribeProgress) => void;
   onState?: (s: TranscribeState) => void;
