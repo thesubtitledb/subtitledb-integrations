@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The built whisper.cpp engine is a source here: CI has no Emscripten.
+!packages/subbot/wasm/dist/
 coverage/
 *.tsbuildinfo
 examples/vendor/
