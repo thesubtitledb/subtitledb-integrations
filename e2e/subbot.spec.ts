@@ -38,9 +38,13 @@ interface Report {
   warm: boolean | null;
   /** Every text the notice on the video showed, in order. */
   notice: string[];
+  /** The corpus file shown in place of the transcription, when the lookup found one. */
+  identified: { sub_id: number; shift_ms: number } | null;
 }
 
 const NOTICE = '[data-subtitledb-status]';
+/** The real API answers any origin; a stubbed answer has to say so too. */
+const CORS = { 'access-control-allow-origin': '*' };
 
 // A minute of Sintel through both tiers on one WASM thread is a few minutes of work.
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
@@ -55,6 +59,11 @@ test.beforeAll(async () => {
   context = await chromium.launchPersistentContext(await mkdtemp(join(tmpdir(), 'subbot-')), {
     headless: true,
   });
+  // The corpus lookup answers no match unless a test says otherwise, so the runs
+  // below transcribe the whole minute whatever the live index holds.
+  await context.route(/\/v1\/subbot\/identify\b/, (r) =>
+    r.fulfill({ headers: CORS, json: { match: null, files: [], probes: 0, runner_up: 0 } }),
+  );
   page = await context.newPage();
   await page.goto(`${PAGE}/subbot.html?cdn=${encodeURIComponent(CDN)}`);
   await page.waitForFunction(
@@ -197,4 +206,101 @@ test('status: false, the lines come and no notice is drawn', async () => {
     .not.toBeNull();
   expect((await report()).notice).toEqual([]);
   await expect(page.locator(NOTICE)).toHaveCount(0);
+});
+
+test('identify: the first lines find a corpus file, which replaces the transcription', async () => {
+  type Page = Driver;
+  const asked: Array<{ lang: string; cues: Array<{ start_ms: number; text: string }> }> = [];
+  const file = {
+    id: 501,
+    language: 'en',
+    format: 'srt',
+    download_url: 'https://api.thesubtitledb.org/get/501',
+  };
+  await page.route(/\/v1\/subbot\/identify\b/, (r) => {
+    asked.push(r.request().postDataJSON());
+    return r.fulfill({
+      headers: CORS,
+      json: {
+        match: {
+          sub_id: 501,
+          imdb_id: 'tt1727587',
+          season: 0,
+          episode: 0,
+          lang: 'en',
+          shift_ms: 1500,
+          hits: 12,
+        },
+        files: [],
+        probes: 20,
+        runner_up: 0,
+      },
+    });
+  });
+  await page.route(/\/v1\/by-subid\/501\b/, (r) =>
+    r.fulfill({
+      headers: CORS,
+      json: {
+        title: { imdb_id: 'tt1727587', name: 'Sintel', kind: 'movie' },
+        subtitles: { total: 1, limit: 1, offset: 0, items: [file] },
+        subtitle: file,
+      },
+    }),
+  );
+  await page.route(/\/get\/501\b/, (r) =>
+    r.fulfill({
+      headers: CORS,
+      contentType: 'text/plain',
+      body: [
+        '1',
+        '00:00:16,000 --> 00:00:19,000',
+        'What brings you to the land of the gatekeepers?',
+        '',
+        '2',
+        '00:00:22,500 --> 00:00:24,000',
+        'A line a person wrote.',
+        '',
+      ].join('\n'),
+    }),
+  );
+  try {
+    await page.evaluate(() => (window as unknown as Page).__subbot.setNotice(true));
+    await page.evaluate(async () => (window as unknown as Page).__subbot.mount('native'));
+    await page.evaluate(async () => (window as unknown as Page).__subbot.select(17));
+    await expect
+      .poll(async () => (await report()).identified, {
+        timeout: 180_000,
+        message: `no swap; ${asked.length} lookup(s)`,
+      })
+      .not.toBeNull()
+      .catch(async (e) => {
+        console.log(`report: ${JSON.stringify({ ...(await report()), vtt: null })}`);
+        throw e;
+      });
+    const r = await report();
+    expect(r.error, r.error ?? '').toBeNull();
+    expect(r.identified).toMatchObject({ sub_id: 501, shift_ms: 1500 });
+    // The file, shifted 1.5 s, is what the adapter was handed.
+    expect(r.vtt).toContain('00:00:17.500 --> 00:00:20.500');
+    expect(r.vtt).toContain('A line a person wrote.');
+    expect(r.complete).toBe(false);
+    expect(r.notice).toContain('Matched');
+    // The lookup carried what the model heard, in the language it detected.
+    const first = asked[0];
+    expect(first?.lang).toBe('en');
+    const words = (first?.cues ?? []).map((c) => c.text).join(' ');
+    console.log(
+      `identify: asked ${asked.length} time(s); first with ${words.split(/\s+/).length} words`,
+    );
+    expect(words.split(/\s+/).length).toBeGreaterThanOrEqual(25);
+    expect(words.toLowerCase()).toMatch(/dragon|gatekeeper|searching|someone|alone/);
+    // The track shows the corpus line, not the model's.
+    const onTrack = await page.evaluate(() => {
+      const v = document.getElementById('player') as HTMLVideoElement;
+      return [...v.textTracks].flatMap((t) => [...(t.cues ?? [])].map((c) => (c as VTTCue).text));
+    });
+    expect(onTrack).toContain('A line a person wrote.');
+  } finally {
+    await page.unrouteAll();
+  }
 });

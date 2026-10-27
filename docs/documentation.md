@@ -206,7 +206,8 @@ attach(video, {
     models: undefined,             // where the models come from; default HuggingFace
     source: undefined,             // read the audio from here instead of the element
     status: true,                  // the small progress pill on the video; false hides it
-    onState: (s) => {},            // warm, loading, listening, live, complete, error (below)
+    identify: true,                // swap in a corpus file that holds the words; false keeps the transcription
+    onState: (s) => {},            // warm, loading, listening, live, complete, identified, error (below)
     onProgress: (p) => {},         // { phase: 'engine'|'model'|'transcribe', loaded, total }
   },
 });
@@ -228,6 +229,17 @@ one word and the percentage: `Downloading`, `Starting`, `Listening`, `Transcribi
 share of the file done), and `Ready` before it fades. Its x hides it for the rest of the
 run. It needs no stylesheet. `status: false` turns it off, for a page that shows progress
 itself from `onState`.
+
+`identify` looks the first lines up in the corpus. Once the engine has heard 30 words
+it sends them, with their times and the detected language, to
+`POST /v1/subbot/identify`; with no match it asks again at 60 and at 120 words, then
+leaves the transcription alone. On a match the transcription stops and a file a person
+wrote takes its place on the track, shifted onto the video. When the viewer reads
+another language (`languages`, else the browser's), that language's file of the same
+title is fetched and lined up against the matched one by cue times, and shown instead;
+if the corpus has none, the spoken-language file is shown. The pill ends on `Matched`,
+the handed-over file is that file, and `onState` reports `identified`. Nothing is
+looked up while translating. A lookup spends up to five requests of `maxRequests`.
 
 `quality` picks the models. `fast` is the small model alone: fewest bytes (43 MB) and
 cores. `balanced` adds the base model (82 MB) behind it, on machines with the cores
@@ -268,8 +280,13 @@ and playback keeps its own URL while the transcription reads the copy.
 { state: 'listening' }                                    // ready, first window running
 { state: 'live', covered, duration, language }            // seconds covered so far
 { state: 'complete', cues }
+{ state: 'identified', identified }                     // a corpus file replaced the transcription
 { state: 'error', error }
 ```
+
+`identified` names the file shown: `sub_id`, `imdb_id`, `season`, `episode`, `lang`,
+`shift_ms` (added to its cue times), and `matched_sub_id`, the spoken-language file
+that held the words. The same object is on the loaded subtitle as `identified`.
 
 `status` is the one piece of UI the engine draws itself: a small line in the corner of
 the video while the models download, gone at the first cue. Turn it off when the page

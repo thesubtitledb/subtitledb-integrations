@@ -25,6 +25,8 @@ const DOCUMENTED = [
   'basename',
   'localeLanguages',
   'corpusLanguage',
+  'languageFamily',
+  'lineUp',
   'languageName',
   'hasLanguageName',
   'toVtt',

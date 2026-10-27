@@ -13,9 +13,18 @@
  * The returned promise is the adapter's contract: it resolves with the whole file
  * once every second of it is covered, and the adapter then sets that file as the
  * track's source. Until then the cues are drawn through the track directly.
+ *
+ * Once the first lines are in, they are looked up in the corpus (`req.identify`, at
+ * 30, 60 and 120 words). On a match the run stops, the corpus file replaces the
+ * transcription on the track, and the promise resolves with that file instead.
  */
-import type { ResolvedTranscribe, TranscribeRequest } from '@subtitledb/core';
-import { candidateLabel, syntheticCandidate } from '@subtitledb/core';
+import type {
+  Identified,
+  IdentifiedText,
+  ResolvedTranscribe,
+  TranscribeRequest,
+} from '@subtitledb/core';
+import { candidateLabel, parseVtt, syntheticCandidate } from '@subtitledb/core';
 import {
   audioCtxFor,
   DEFAULT_VAD_URL,
@@ -61,6 +70,7 @@ export type SubbotState =
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
   | { state: 'complete'; cues: number }
+  | { state: 'identified'; identified: Identified }
   | { state: 'error'; error: Error };
 
 /** The fields of the resolved config this engine reads beyond the core ones. */
@@ -94,6 +104,18 @@ function assetsFor(model: string, base: string | undefined, deps: RunDeps): AsrA
 const MS_PER_SEC: Record<Tier, number> = { live: 350, quality: 850 };
 /** How far behind a seek the live worker's current window may be before it is dropped. */
 const RESTART_MS = 1500;
+/** Words heard before each corpus lookup; after the last miss the transcription stays. */
+export const IDENTIFY_WORDS = [30, 60, 120];
+/** Lines sent per lookup, the route's cap. */
+const IDENTIFY_CUES = 80;
+/** One word per character where a script has no spaces, as the corpus index counts them. */
+const WORDS = /[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u9fff]|[\p{L}\p{N}]+/gu;
+
+export function wordCount(cues: ReadonlyArray<{ text: string }>): number {
+  let n = 0;
+  for (const c of cues) n += c.text.match(WORDS)?.length ?? 0;
+  return n;
+}
 
 export class Subbot {
   private readonly media: HTMLMediaElement;
@@ -121,6 +143,10 @@ export class Subbot {
   private firstCueAt: number | null = null;
   private readonly startedAt = performance.now();
   private readonly loaded: Record<string, [number, number]> = {};
+  private asked = 0;
+  /** The lookup in the air, if any. A run that finishes waits for it. */
+  private lookup: Promise<void> | null = null;
+  private swapped: IdentifiedText | null = null;
 
   constructor(
     private readonly req: TranscribeRequest,
@@ -145,6 +171,7 @@ export class Subbot {
       if (added.length && this.firstCueAt === null) {
         this.firstCueAt = performance.now() - this.startedAt;
       }
+      this.maybeIdentify();
     });
   }
 
@@ -159,6 +186,52 @@ export class Subbot {
     } else if (s.state === 'live') {
       this.req.onProgress?.({ phase: 'transcribe', loaded: s.covered, total: s.duration });
     }
+  }
+
+  /** Ask the corpus for these lines once enough words are in. One lookup at a time. */
+  private maybeIdentify(): void {
+    const ask = this.req.identify;
+    const need = IDENTIFY_WORDS[this.asked];
+    if (!ask || need === undefined || this.lookup || this.swapped || this.stopped) return;
+    if (this.cfg.task !== 'transcribe') return;
+    const lang = this.language ?? (this.cfg.language === 'auto' ? null : this.cfg.language);
+    if (!lang || wordCount(this.store.cues) < need) return;
+    this.asked++;
+    const cues = this.store.cues.slice(0, IDENTIFY_CUES).map((c) => ({
+      start_ms: Math.round(c.start * 1000),
+      text: c.text.slice(0, 500),
+    }));
+    // The session reports a failed lookup and answers null; either way the
+    // transcription carries on.
+    this.lookup = ask(lang, cues)
+      .then((r) => {
+        if (r && !this.stopped) this.swapIn(r);
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.lookup = null;
+        this.maybeIdentify();
+      });
+  }
+
+  /** The corpus file replaces the transcription on the track, and the run stops. */
+  private swapIn(r: IdentifiedText): void {
+    this.swapped = r;
+    const cues = parseVtt(r.text).map((c) => ({
+      start: c.start / 1000,
+      end: c.end / 1000,
+      text: c.text,
+      tier: 'quality' as const,
+    }));
+    this.store.clear();
+    this.store.replace(0, Number.POSITIVE_INFINITY, cues, 'quality');
+    this.stop();
+  }
+
+  private finishSwap(r: IdentifiedText): { text: string; format: 'vtt'; identified: Identified } {
+    this.emit({ state: 'identified', identified: r.identified });
+    this.renderer.handover('Matched');
+    return { text: r.text, format: 'vtt', identified: r.identified };
   }
 
   private progress(what: string, loaded: number, total: number): void {
@@ -430,7 +503,7 @@ export class Subbot {
     for (let i = 0; i < n; i++) this.pool.push(this.spawnAsr(this.qualityModel, false));
   }
 
-  async run(): Promise<{ text: string; format: 'vtt' }> {
+  async run(): Promise<{ text: string; format: 'vtt'; identified?: Identified }> {
     if (this.signal?.aborted) throw new SubbotError('transcription was cancelled', 'aborted');
     const onAbort = () => this.fail(new SubbotError('transcription was cancelled', 'aborted'));
     this.signal?.addEventListener('abort', onAbort, { once: true });
@@ -451,9 +524,13 @@ export class Subbot {
       // the cores with the one window that decides how soon a cue appears.
       const first = this.firstWindow();
       if (first) await this.work(this.live, first, 'live');
+      if (this.swapped) return this.finishSwap(this.swapped);
       this.throwIfFailed();
       this.startPool();
       await Promise.all([this.liveLoop(), ...this.pool.map((w) => this.qualityLoop(w))]);
+      // A short file can be covered while its lookup is still out; the answer decides.
+      while (this.lookup && !this.swapped) await this.lookup;
+      if (this.swapped) return this.finishSwap(this.swapped);
       this.throwIfFailed();
       if (!this.complete())
         throw new SubbotError('the audio could not all be read', 'audio_unreadable');

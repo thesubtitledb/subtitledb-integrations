@@ -132,7 +132,7 @@
 
       let handle = null;
       let seekTo = null;
-      let report = { player: null, state: 'idle', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null, notice: [] };
+      let report = { player: null, state: 'idle', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null, notice: [], identified: null };
       let selectedAt = 0;
 
       function setState(s) {
@@ -209,7 +209,9 @@
           handle = null;
         }
         for (const b of el('players').querySelectorAll('button')) b.classList.toggle('on', b.dataset.player === name);
-        report = { player: name, state: 'mounting', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null, notice: [] };
+        // A run stopped by this mount still reports for a moment; it must not land in the new report.
+        report = { player: name, state: 'mounting', firstCueMs: null, firstCueLead: null, marks: {}, lines: [], complete: false, error: null, vtt: null, warm: null, notice: [], identified: null };
+        const mine = report;
         selectedAt = 0;
         el('status').replaceChildren();
         el('lines').replaceChildren();
@@ -230,6 +232,7 @@
             task: el('translate').checked ? 'translate' : 'transcribe',
             status: el('notice').checked,
             onState: (s) => {
+              if (report !== mine) return;
               if (s.state === 'loading') {
                 const pct = s.total ? Math.round((100 * s.loaded) / s.total) : 0;
                 setState(`loading ${s.step} ${pct}%`);
@@ -252,11 +255,14 @@
             },
           },
           onError: (err) => {
+            if (report !== mine) return;
             report.error = err.message;
             row('error', err.message);
           },
           onSelected: (loaded) => {
+            if (report !== mine) return;
             report.vtt = loaded.text;
+            report.identified = loaded.identified ?? null;
             row('handed over', `${loaded.text.length} bytes of WebVTT`);
           },
         });
@@ -286,8 +292,9 @@
         const stop = watchCues(v, startedAt);
         setState('selected');
         await v.play().catch(() => {});
+        const ours = report;
         handle.select(synthetic).catch((e) => {
-          report.error = String(e.message || e);
+          if (report === ours) report.error = String(e.message || e);
         });
         return () => stop();
       }

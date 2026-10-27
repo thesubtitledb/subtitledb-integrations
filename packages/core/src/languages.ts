@@ -119,6 +119,23 @@ export function corpusLanguage(code: string): string {
   return baseLanguage(tag);
 }
 
+/** Codes the identify route files under one spoken language: SubBot hears Portuguese. */
+const FAMILY: Record<string, string> = {
+  pb: 'pt',
+  pm: 'pt',
+  ea: 'es',
+  sp: 'es',
+  zt: 'zh',
+  ze: 'zh',
+  zc: 'zh',
+};
+
+/** The spoken language a tag or corpus code belongs to: `pt-BR` and `pb` are `pt`. */
+export function languageFamily(code: string): string {
+  const c = corpusLanguage(code);
+  return FAMILY[c] ?? c;
+}
+
 /**
  * Spanish regions the API files under `ea`, checked live with `?lang=` 2026-10-18. Every
  * other region, es-ES included, is `es`. 419 is Latin America; the UN subregions

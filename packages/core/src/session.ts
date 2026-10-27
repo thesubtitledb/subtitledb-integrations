@@ -5,7 +5,10 @@ import { SubtitleDbAbort, SubtitleDbError } from './errors.js';
 import { type IdentifyOptions, identify, isResolvable, type MediaHint } from './identify.js';
 import { baseLanguage, corpusLanguage, localeLanguages } from './languages.js';
 import { type Candidate, findSubtitles, type MatchResult, PAGE } from './match.js';
+import { identifySpeech } from './speech.js';
 import {
+  type Identified,
+  type IdentifiedText,
   type LoadContext,
   type ResolvedTranscribe,
   resolveTranscribe,
@@ -13,6 +16,7 @@ import {
   type TranscribeOptions,
   type Transcriber,
 } from './transcribe.js';
+import type { SpeechCue } from './types.js';
 
 export interface SessionOptions {
   /** Supply a client, or let the session build one from apiBase. */
@@ -112,6 +116,8 @@ export interface LoadedSubtitle {
   format: string;
   /** Set when the bytes were converted, naming what they were stored as. */
   convertedFrom?: string;
+  /** Set when SubBot's words were matched and a corpus file is shown instead. */
+  identified?: Identified;
 }
 
 const DEFAULT_MAX_REQUESTS = 12;
@@ -146,7 +152,11 @@ export class SubtitleSession {
   readonly client: SubtitleDbClient;
   private readonly opts: SessionOptions;
   private readonly cache: SingleFlightCache<MatchResult>;
-  private readonly textCache: SingleFlightCache<{ text: string; format: string }>;
+  private readonly textCache: SingleFlightCache<{
+    text: string;
+    format: string;
+    identified?: Identified;
+  }>;
   private requests = 0;
   private aborter: AbortController | null = null;
   private inflightKey: string | null = null;
@@ -171,7 +181,11 @@ export class SubtitleSession {
       });
     const ttl = opts.cacheTtlMs ?? 5 * 60_000;
     this.cache = new SingleFlightCache<MatchResult>({ ttlMs: ttl });
-    this.textCache = new SingleFlightCache<{ text: string; format: string }>({ ttlMs: ttl });
+    this.textCache = new SingleFlightCache<{
+      text: string;
+      format: string;
+      identified?: Identified;
+    }>({ ttlMs: ttl });
   }
 
   /** Requests spent so far. Exposed so adapters and tests can assert the budget. */
@@ -473,9 +487,40 @@ export class SubtitleSession {
           config: cfg,
           signal: this.live.signal,
           ...(onProgress ? { onProgress } : {}),
+          ...(cfg.identify === false || cfg.task !== 'transcribe'
+            ? {}
+            : { identify: (lang: string, cues: SpeechCue[]) => this.identifySpeech(lang, cues) }),
         }),
       );
-      return { candidate, text: got.text, format: got.format };
+      return {
+        candidate,
+        text: got.text,
+        format: got.format,
+        ...(got.identified ? { identified: got.identified } : {}),
+      };
+    } catch (err) {
+      // A run stopped by dispose() was asked to stop: the player went away, nothing failed.
+      if (!this.live.signal.aborted) this.report(err);
+      return null;
+    }
+  }
+
+  /**
+   * The corpus file for lines SubBot heard, lined up, or null. Never throws: a failed
+   * lookup is reported and the transcription carries on.
+   */
+  private async identifySpeech(lang: string, cues: SpeechCue[]): Promise<IdentifiedText | null> {
+    try {
+      return await identifySpeech(
+        {
+          client: this.client,
+          languages: this.effectiveLanguages() ?? localeLanguages(),
+          budget: (n) => this.budget(n),
+          signal: this.live.signal,
+        },
+        lang,
+        cues,
+      );
     } catch (err) {
       this.report(err);
       return null;

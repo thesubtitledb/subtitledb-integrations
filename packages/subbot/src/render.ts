@@ -167,10 +167,10 @@ export class TrackRenderer {
    * its `src` set by the adapter and the browser replaces the cues itself; a track
    * this renderer added is taken away once the adapter's own track is showing.
    */
-  handover(): void {
+  handover(word = 'Ready'): void {
     this.handedOver = true;
     clearInterval(this.checkTimer);
-    this.finish('Ready');
+    this.finish(word);
     if (!this.owned && !this.overlay) return;
     const started = Date.now();
     const poll = () => {

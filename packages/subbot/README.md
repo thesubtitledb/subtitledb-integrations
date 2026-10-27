@@ -48,6 +48,13 @@ already stands for, so the browser renders them. A player that owns captions and
 turns the native track off gets an overlay. When every second is covered the run
 resolves with the file and the adapter sets it as the track's source.
 
+When the session passes `identify` (it does unless `identify: false`, and never while
+translating), the cues heard so far are sent to the corpus at 30, 60 and 120 words,
+one lookup at a time. On a match the run stops every worker, replaces the track's cues
+with the file the session fetched (already shifted, and in the viewer's language when
+the corpus had one to line up), and resolves with that file. A run that covers a short
+file while a lookup is out waits for the answer before it resolves.
+
 ## Models
 
 q8_0 on purpose: on single-thread WebAssembly it is the fastest quantisation measured
