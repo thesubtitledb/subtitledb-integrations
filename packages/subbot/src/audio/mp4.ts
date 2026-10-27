@@ -304,7 +304,7 @@ function opusHead(u8: Uint8Array, dops: Box): Uint8Array {
 }
 
 /** stts, stsc, stsz and stco/co64 folded into one flat list of samples. */
-function sampleTable(u8: Uint8Array, stbl: Box): Mp4Sample[] {
+export function sampleTable(u8: Uint8Array, stbl: Box): Mp4Sample[] {
   const stts = child(u8, stbl, 'stts');
   const stsc = child(u8, stbl, 'stsc');
   const stsz = child(u8, stbl, 'stsz') ?? child(u8, stbl, 'stz2');
@@ -367,9 +367,13 @@ function sampleTable(u8: Uint8Array, stbl: Box): Mp4Sample[] {
   const samples: Mp4Sample[] = [];
   let dts = 0;
   let s = 0;
+  // stsc runs are in chunk order, so one pass steps through them. A scan per chunk
+  // took ~40 s on a 74 min file with a run for every one of its 132k chunks.
+  let run = 0;
   for (let c = 0; c < offsets.length && s < sizes.length; c++) {
-    let per = 0;
-    for (const r of runs) if (r.first <= c + 1) per = r.per;
+    while ((runs[run + 1]?.first ?? Infinity) <= c + 1) run++;
+    const r = runs[run];
+    const per = r && r.first <= c + 1 ? r.per : 0;
     let offset = offsets[c] ?? 0;
     for (let k = 0; k < per && s < sizes.length; k++, s++) {
       const size = sizes[s] ?? 0;

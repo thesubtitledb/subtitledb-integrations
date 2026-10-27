@@ -36,7 +36,7 @@ import {
 import type { AsrOptions } from './asr/protocol.js';
 import { quietestAt } from './audio/pcm.js';
 import { RATE } from './audio/resample.js';
-import { CueStore, type Segment, segmentsToCues, type Tier, trimToSpeech } from './cues.js';
+import { CueStore, held, type Segment, segmentsToCues, type Tier, trimToSpeech } from './cues.js';
 import { SubbotError } from './errors.js';
 import { type Plan, planFor } from './players.js';
 import { TrackRenderer } from './render.js';
@@ -587,7 +587,7 @@ export class Subbot {
       if (!this.complete())
         throw new SubbotError('the audio could not all be read', 'audio_unreadable');
 
-      const text = cuesToVtt(this.store.cues);
+      const text = cuesToVtt(held(this.store.cues));
       this.emit({ state: 'complete', cues: this.store.cues.length });
       this.renderer.handover();
       return { text, format: 'vtt' };

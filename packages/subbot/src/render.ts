@@ -13,7 +13,7 @@
  * transcription carries on behind it. Nothing showing: a player that owns captions
  * turned the native track off, and an overlay takes over.
  */
-import type { Cue } from './cues.js';
+import { type Cue, held } from './cues.js';
 import { Notice } from './notice.js';
 
 declare const VTTCue: new (start: number, end: number, text: string) => TextTrackCue;
@@ -28,6 +28,8 @@ export class TrackRenderer {
   private overlay: HTMLDivElement | null = null;
   private readonly notice: Notice | null;
   private cues: Cue[] = [];
+  /** When each cue leaves the screen: see held(). */
+  private shown = new Map<Cue, number>();
   private timer: ReturnType<typeof setInterval> | undefined;
   private checkTimer: ReturnType<typeof setInterval> | undefined;
   private handedOver = false;
@@ -89,7 +91,12 @@ export class TrackRenderer {
   }
 
   apply(added: Cue[], removed: Cue[]): void {
-    this.cues = this.cues.filter((c) => !removed.includes(c)).concat(added);
+    this.cues = this.cues
+      .filter((c) => !removed.includes(c))
+      .concat(added)
+      .sort((a, b) => a.start - b.start);
+    const shown = held(this.cues);
+    this.shown = new Map(this.cues.map((c, i) => [c, shown[i]?.end ?? c.end]));
     const track = this.open();
     if (!track) {
       if (!this.overlay) this.showOverlay();
@@ -105,9 +112,15 @@ export class TrackRenderer {
       }
       this.live.delete(c);
     }
+    // A line that lands next to one on screen moves where that one leaves.
+    for (const [c, cue] of this.live) {
+      const end = this.shown.get(c);
+      if (end !== undefined && cue.endTime !== end) cue.endTime = end;
+    }
     for (const c of added) {
-      if (c.end <= c.start) continue;
-      const cue = new VTTCue(c.start, c.end, c.text);
+      const end = this.shown.get(c) ?? c.end;
+      if (end <= c.start) continue;
+      const cue = new VTTCue(c.start, end, c.text);
       try {
         track.addCue(cue);
         this.live.set(c, cue);
@@ -138,7 +151,7 @@ export class TrackRenderer {
     const tick = () => {
       const t = this.media.currentTime;
       const text = this.cues
-        .filter((c) => c.start <= t && t < c.end)
+        .filter((c) => c.start <= t && t < (this.shown.get(c) ?? c.end))
         .map((c) => c.text)
         .join('\n');
       if (div.textContent !== text) div.textContent = text;

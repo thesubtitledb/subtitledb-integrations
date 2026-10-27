@@ -163,6 +163,29 @@ export function trimToSpeech(cues: Cue[], spans: Array<[number, number]>): Cue[]
   });
 }
 
+/** Reading speed, the shortest time on screen, and the gap the screen does not blink for. */
+export const READ_CPS = 17;
+export const MIN_HOLD = 1.2;
+export const BRIDGE = 1;
+
+/**
+ * The cues as they are shown. A cue ends where the voice stops, so a short line said
+ * fast flashes, and the screen blinks between two lines said close together. On
+ * screen a line stays up for its reading time (at least MIN_HOLD), a gap to the next
+ * line under BRIDGE is closed, and no line runs into the next. The heard times are
+ * kept for everything else. `cues` sorted by start.
+ */
+export function held(cues: readonly Cue[]): Cue[] {
+  return cues.map((c, i) => {
+    const next = cues[i + 1]?.start ?? Number.POSITIVE_INFINITY;
+    const read = Math.min(MAX_DUR, Math.max(MIN_HOLD, c.text.length / READ_CPS));
+    let end = Math.max(c.end, c.start + read);
+    if (next - end < BRIDGE) end = next;
+    end = Math.min(end, next);
+    return end > c.start ? { ...c, end } : c;
+  });
+}
+
 export type CueListener = (added: Cue[], removed: Cue[]) => void;
 
 /** Cues by time, replaceable per span, with one listener for the renderer. */
