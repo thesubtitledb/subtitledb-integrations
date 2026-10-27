@@ -50,7 +50,9 @@ resolves with the file and the adapter sets it as the track's source.
 
 When the session passes `identify` (it does unless `identify: false`, and never while
 translating), the cues heard so far are sent to the corpus at 30, 60 and 120 words,
-one lookup at a time. On a match the run stops every worker, replaces the track's cues
+one lookup at a time. A match is shown only once the words heard from 30 s past the
+first line sent agree with it (`VERIFY_*` in `subbot.ts`); one that does not is dropped
+and its episode never taken again. Then the run stops every worker, replaces the track's cues
 with the file the session fetched (already shifted, and in the viewer's language when
 the corpus had one to line up), and resolves with that file. A run that covers a short
 file while a lookup is out waits for the answer before it resolves.

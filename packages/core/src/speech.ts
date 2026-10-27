@@ -88,6 +88,7 @@ export async function identifySpeech(
     shift_ms: m.shift_ms,
     matched_sub_id: m.sub_id,
   };
+  const reference = ref.map((c) => ({ start_ms: c.start, text: c.text }));
   const want = d.languages[0];
   if (want && languageFamily(want) !== languageFamily(m.lang)) {
     const sub = await inLanguage(d, m, want);
@@ -98,8 +99,9 @@ export async function identifySpeech(
         text: serialize(shift(other, fit.ms)),
         format: 'vtt',
         identified: { ...base, sub_id: sub.id, lang: sub.language, shift_ms: fit.ms },
+        reference,
       };
     }
   }
-  return { text: serialize(ref), format: 'vtt', identified: base };
+  return { text: serialize(ref), format: 'vtt', identified: base, reference };
 }

@@ -24,7 +24,7 @@ import type {
   ResolvedTranscribe,
   TranscribeRequest,
 } from '@subtitledb/core';
-import { candidateLabel, parseVtt, syntheticCandidate } from '@subtitledb/core';
+import { agreement, candidateLabel, parseVtt, syntheticCandidate } from '@subtitledb/core';
 import {
   audioCtxFor,
   DEFAULT_VAD_URL,
@@ -108,6 +108,17 @@ const RESTART_MS = 1500;
 export const IDENTIFY_WORDS = [30, 60, 120];
 /** Lines sent per lookup, the route's cap. */
 const IDENTIFY_CUES = 80;
+/**
+ * A match is shown once the words heard from 30 s past the lookup's first line agree
+ * with the file: a show's theme or intro matches another episode, its dialogue after
+ * does not. Bench (2026-10-27, TehTranScriber transcripts against whole files): right
+ * matches agreed on 50-100% of those trigrams, a wrong episode on 0-31%.
+ */
+export const VERIFY_AFTER_MS = 30_000;
+/** Trigrams heard before deciding, and the most before giving up on a match. */
+export const VERIFY_MIN = 12;
+export const VERIFY_MAX = 30;
+export const VERIFY_SHARE = 0.35;
 /** One word per character where a script has no spaces, as the corpus index counts them. */
 const WORDS = /[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u9fff]|[\p{L}\p{N}]+/gu;
 
@@ -147,6 +158,10 @@ export class Subbot {
   /** The lookup in the air, if any. A run that finishes waits for it. */
   private lookup: Promise<void> | null = null;
   private swapped: IdentifiedText | null = null;
+  /** A match waiting for the words after it to agree. */
+  private pending: { r: IdentifiedText; key: string; after: number; from: number } | null = null;
+  /** Title, season and episode of matches the words after did not bear out. */
+  private readonly rejected = new Set<string>();
 
   constructor(
     private readonly req: TranscribeRequest,
@@ -171,6 +186,7 @@ export class Subbot {
       if (added.length && this.firstCueAt === null) {
         this.firstCueAt = performance.now() - this.startedAt;
       }
+      this.verify(false);
       this.maybeIdentify();
     });
   }
@@ -192,7 +208,8 @@ export class Subbot {
   private maybeIdentify(): void {
     const ask = this.req.identify;
     const need = IDENTIFY_WORDS[this.asked];
-    if (!ask || need === undefined || this.lookup || this.swapped || this.stopped) return;
+    if (!ask || need === undefined || this.lookup || this.pending || this.swapped || this.stopped)
+      return;
     if (this.cfg.task !== 'transcribe') return;
     const lang = this.language ?? (this.cfg.language === 'auto' ? null : this.cfg.language);
     if (!lang || wordCount(this.store.cues) < need) return;
@@ -205,13 +222,47 @@ export class Subbot {
     // transcription carries on.
     this.lookup = ask(lang, cues)
       .then((r) => {
-        if (r && !this.stopped) this.swapIn(r);
+        if (!r || this.stopped) return;
+        const id = r.identified;
+        const key = `${id.imdb_id}:${id.season}:${id.episode}`;
+        if (this.rejected.has(key)) return;
+        if (!r.reference) {
+          this.swapIn(r);
+          return;
+        }
+        const first = cues[0]?.start_ms ?? 0;
+        const after = cues[cues.length - 1]?.start_ms ?? 0;
+        this.pending = { r, key, after, from: first + VERIFY_AFTER_MS };
+        this.verify(false);
       })
       .catch(() => {})
       .finally(() => {
         this.lookup = null;
         this.maybeIdentify();
       });
+  }
+
+  /**
+   * Show the pending match once enough later words agree with it; drop it once enough
+   * do not. `final`: no more words are coming, so decide on what there is.
+   */
+  private verify(final: boolean): void {
+    const p = this.pending;
+    if (!p || this.swapped || this.stopped) return;
+    const heard: Array<{ start_ms: number; text: string }> = [];
+    for (const c of this.store.cues) {
+      const ms = Math.round(c.start * 1000);
+      if (ms > p.after && ms >= p.from) heard.push({ start_ms: ms, text: c.text });
+    }
+    const { hits, total } = agreement(p.r.reference ?? [], heard);
+    if (total >= VERIFY_MIN && hits >= total * VERIFY_SHARE) {
+      this.pending = null;
+      this.swapIn(p.r);
+    } else if (total >= VERIFY_MAX || final) {
+      this.pending = null;
+      this.rejected.add(p.key);
+      if (!final) this.maybeIdentify();
+    }
   }
 
   /** The corpus file replaces the transcription on the track, and the run stops. */
@@ -530,6 +581,7 @@ export class Subbot {
       await Promise.all([this.liveLoop(), ...this.pool.map((w) => this.qualityLoop(w))]);
       // A short file can be covered while its lookup is still out; the answer decides.
       while (this.lookup && !this.swapped) await this.lookup;
+      this.verify(true);
       if (this.swapped) return this.finishSwap(this.swapped);
       this.throwIfFailed();
       if (!this.complete())

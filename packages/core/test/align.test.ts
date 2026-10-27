@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lineUp } from '../src/align.js';
+import { agreement, lineUp } from '../src/align.js';
 import type { Cue } from '../src/transform.js';
 
 /** A film's lines: uneven gaps, as speech has. Seeded so a failure repeats. */
@@ -40,5 +40,27 @@ describe('lineUp', () => {
   it('answers null with too few lines to decide', () => {
     const ref = film(5);
     expect(lineUp(ref, ref)).toBeNull();
+  });
+});
+
+describe('agreement', () => {
+  const file = [
+    { start_ms: 10_000, text: 'A dangerous quest for a lone hunter.' },
+    { start_ms: 14_000, text: "I've been alone for as long as I can remember." },
+  ];
+
+  it('counts the heard trigrams the file holds at that moment', () => {
+    const heard = [{ start_ms: 11_500, text: 'a dangerous quest for a lone hunter' }];
+    expect(agreement(file, heard)).toEqual({ hits: 5, total: 5 });
+  });
+
+  it('does not count the same words said at another time', () => {
+    const heard = [{ start_ms: 40_000, text: 'a dangerous quest for a lone hunter' }];
+    expect(agreement(file, heard)).toEqual({ hits: 0, total: 5 });
+  });
+
+  it('does not count other words', () => {
+    const heard = [{ start_ms: 10_000, text: 'the city of Townsville sleeps at night' }];
+    expect(agreement(file, heard).hits).toBe(0);
   });
 });
