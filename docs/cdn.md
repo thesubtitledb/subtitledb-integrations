@@ -361,23 +361,25 @@ permissive CORS fails by rendering nothing at all rather than by reporting an er
 
 ### On-device transcription
 
-If you turn on `transcribe`, the engine and its model load from a CDN when a viewer
-selects the transcription row, and the engine runs in a worker created from a blob.
-That needs four more directives, and none of them apply until someone actually clicks
-the row:
+If you turn on `transcribe`, selecting the transcription row loads the engine chunk
+and its worker from this CDN, the whisper.cpp build next to them, and the models from
+HuggingFace; the workers are created from a blob. That needs four more directives,
+and none of them apply until someone actually clicks the row:
 
 ```
 worker-src  blob:
-script-src  https://cdn.jsdelivr.net
-connect-src https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co
+script-src  'wasm-unsafe-eval'
+connect-src https://cdn.thesubtitledb.org https://huggingface.co https://*.hf.co
 ```
 
-`worker-src blob:` lets the engine run off the main thread. `script-src` covers the
-engine module (transformers.js from jsDelivr). `connect-src` covers the model download
-(the HuggingFace hub, and jsDelivr for the whisper.cpp engine). This is a deliberate
-third-party exposure: a visitor who runs transcription fetches these bytes from
-jsDelivr and HuggingFace. Nothing loads from them unless transcription is both enabled
-and selected.
+`worker-src blob:` lets the engine run off the main thread; the blob imports the
+worker chunk from this CDN, which `script-src` already allows for the loader.
+`'wasm-unsafe-eval'` lets the worker instantiate the whisper.cpp build. `connect-src`
+covers the build (fetched from here) and the models (the HuggingFace hub, which
+redirects downloads to `*.hf.co`). This is a deliberate third-party exposure: a visitor
+who runs transcription fetches the model bytes from HuggingFace. Nothing loads from it
+unless transcription is both enabled and selected, and `models` in the `transcribe`
+options points the download at a copy you host instead.
 
 ## Self-hosting
 

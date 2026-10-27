@@ -61,8 +61,10 @@ export type {
   TranscribeEngine,
   TranscribeOptions,
   TranscribeProgress,
+  TranscribeQuality,
   TranscribeRequest,
   Transcriber,
+  TranscribeState,
   TranscribeTask,
   TranscribeWhen,
 } from './transcribe.js';

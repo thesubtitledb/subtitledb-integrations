@@ -123,6 +123,13 @@ export interface AttachOptions extends Partial<Omit<SessionOptions, 'formats' | 
   /** Cap on tracks offered to the player. Default 30. */
   maxTracks?: number;
   /**
+   * The object driving the element when the target is a bare element and a library
+   * (dash.js, say) is behind it. Read only by the transcription row, whose engine
+   * can then read the stream's manifest. A player object passed as the target is its
+   * own owner.
+   */
+  owner?: unknown;
+  /**
    * Fired once when a player was recognised on the page but could not be reached.
    *
    * Only ever fires for players whose subtitles are real DOM children, so the track

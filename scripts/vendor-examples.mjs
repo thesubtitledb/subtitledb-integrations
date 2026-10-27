@@ -49,6 +49,16 @@ const COPIES = [
   ['node_modules/mediaelement/build', 'mediaelement', false],
   ['node_modules/media-chrome/dist/iife', 'mediachrome', false],
   ['node_modules/hls.js/dist/hls.min.js', 'hlsjs/hls.min.js', false],
+  ['node_modules/dashjs/dist/modern/umd/dash.all.min.js', 'dashjs/dash.all.min.js', false],
+
+  // What examples/subbot.html plays: the Sintel excerpt the subbot unit tests use,
+  // as a plain file and as HLS and DASH, so the transcription is tried on every
+  // path a page can hand it.
+  ['packages/subbot/test/media/sintel-excerpt.webm', 'subbot/sintel-excerpt.webm', true],
+  ['packages/subbot/test/media/sintel-excerpt.en.srt', 'subbot/sintel-excerpt.en.srt', true],
+  ['packages/subbot/test/media/hls-fmp4', 'subbot/hls-fmp4', true],
+  ['packages/subbot/test/media/hls-opus', 'subbot/hls-opus', true],
+  ['packages/subbot/test/media/dash-opus', 'subbot/dash-opus', true],
 
   // Commercial players. Their libraries load and construct without a licence, which
   // is enough to check the binding against the real API surface; playback and

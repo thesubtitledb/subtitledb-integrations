@@ -4,10 +4,9 @@
  *
  * Core stays engine-agnostic. It knows how to *offer* a transcription (a synthetic
  * candidate in the picker) and how to *ask for one* (call the injected `transcriber`
- * when that candidate is selected), and nothing about Whisper, WebGPU or WASM. The
- * engine is loaded lazily, so none of it downloads until a viewer actually clicks the
- * row. See the CDN loader for the wiring. The default is transformers.js with
- * `whisper-tiny.en`.
+ * when that candidate is selected), and nothing about whisper or WASM. The engine is
+ * loaded lazily, so no model downloads until a viewer actually clicks the row. See
+ * the CDN loader for the wiring. The engine is SubBot (`@subtitledb/subbot`).
  */
 import type { Candidate } from './match.js';
 import type { BundleSubtitle } from './types.js';
@@ -23,9 +22,18 @@ import type { BundleSubtitle } from './types.js';
  *               disable it without being rewritten to a boolean.
  */
 export type TranscribeWhen = 'no-match' | 'always' | 'off';
-export type TranscribeEngine = 'transformers' | 'whisper-cpp';
+export type TranscribeEngine = 'subbot';
 export type TranscribeTask = 'transcribe' | 'translate';
 export type TranscribeDevice = 'auto' | 'webgpu' | 'wasm';
+/**
+ * How much of the device to spend.
+ *
+ *   'fast'      the small model only. Fewest bytes and cores; the first cue soonest.
+ *   'balanced'  the small model keeps up with playback and the base model re-does
+ *               every window behind it. The default.
+ *   'best'      the base model live and the small (244 MB) model behind it.
+ */
+export type TranscribeQuality = 'fast' | 'balanced' | 'best';
 
 /** Progress for the one-time engine fetch, model download, and the run itself. */
 export interface TranscribeProgress {
@@ -34,22 +42,36 @@ export interface TranscribeProgress {
   total: number;
 }
 
+/** What the engine is doing, for a page that shows it. */
+export type TranscribeState =
+  | { state: 'warm'; model: boolean }
+  | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
+  | { state: 'listening' }
+  | { state: 'live'; covered: number; duration: number; language: string | null }
+  | { state: 'complete'; cues: number }
+  | { state: 'error'; error: Error };
+
 /**
  * Opt-in, on-device speech-to-text. Off by default, and `true` means every default.
  *
- * The invariant that makes this safe to leave on: nothing heavy loads until a viewer
- * selects the transcription row. Offering it costs a placeholder in a menu; the engine
- * chunk and the model download only on an explicit select.
+ * The invariant that makes this safe to leave on: no model downloads until a viewer
+ * selects the transcription row. Offering it costs a placeholder in a menu and, where
+ * the engine supports it, a warm-up that compiles the engine and loads a model this
+ * device already has; the download itself waits for the select.
  */
 export interface TranscribeOptions {
   when?: TranscribeWhen;
   engine?: TranscribeEngine;
-  /** Defaults per engine. transformers: `onnx-community/whisper-tiny.en`. */
+  /**
+   * A whisper.cpp model name (`tiny.en-q8_0`, `base-q8_0`, ...) or a URL to a ggml
+   * file. Runs as the only tier. Default `auto`: the models `quality` names.
+   */
   model?: string;
+  quality?: TranscribeQuality;
   /** `translate` targets English only, whatever the audio language. */
   task?: TranscribeTask;
   device?: TranscribeDevice;
-  /** Tag for the produced track. Defaults from the model, which is English-only. */
+  /** The audio's language, or `auto` (the default) to detect it from the first seconds. */
   language?: string;
   /**
    * Where to read the audio from, when the media element's own source is not readable
@@ -60,7 +82,12 @@ export interface TranscribeOptions {
    * audio and playback keeps its own URL. Defaults to the element's `currentSrc`.
    */
   source?: string;
+  /** Where the models are fetched from. Default: the whisper.cpp mirror on HuggingFace. */
+  models?: string;
+  /** The small status line on the video while the model downloads. Default on. */
+  status?: boolean;
   onProgress?: (p: TranscribeProgress) => void;
+  onState?: (s: TranscribeState) => void;
 }
 
 /** A {@link TranscribeOptions} with every default filled in. */
@@ -68,11 +95,15 @@ export interface ResolvedTranscribe {
   when: TranscribeWhen;
   engine: TranscribeEngine;
   model: string;
+  quality: TranscribeQuality;
   task: TranscribeTask;
   device: TranscribeDevice;
   language: string;
   /** A CORS-readable override for the audio source. Absent means read the element. */
   source?: string;
+  models?: string;
+  status?: boolean;
+  onState?: (s: TranscribeState) => void;
 }
 
 /**
@@ -80,10 +111,13 @@ export interface ResolvedTranscribe {
  *
  * `media` is the playing element, the source of the audio. Typed as the DOM media
  * element because that is what every adapter already holds; the engine reads its
- * current source, or captures it directly, and returns WebVTT.
+ * current source, or captures it directly, and returns WebVTT. `player` is the player
+ * object when the adapter has one (hls.js, dash.js, Shaka): a streaming player knows
+ * the manifest its element does not.
  */
 export interface TranscribeRequest {
   media: HTMLMediaElement;
+  player?: unknown;
   config: ResolvedTranscribe;
   signal?: AbortSignal;
   onProgress?: (p: TranscribeProgress) => void;
@@ -95,19 +129,26 @@ export interface TranscribeRequest {
  * The CDN loader wires this to a function that loads the engine lazily; a page
  * bundling its own engine passes one directly.
  * Returns WebVTT text, which rides the same blob-URL path as a fetched subtitle.
+ *
+ * `warm`, when the engine has one, is called each time the row is offered, so the
+ * engine can be ready before the click. It must not download a model: the row being
+ * on screen is not a request for one.
  */
-export type Transcriber = (req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>;
+export type Transcriber = ((req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>) & {
+  warm?: (config: ResolvedTranscribe) => void;
+};
 
 /** Extra context for {@link SubtitleSession.load}, only read for a synthetic candidate. */
 export interface LoadContext {
   /** The media element whose audio a synthetic candidate transcribes. */
   media?: HTMLMediaElement | null;
+  /** The player object driving it, when there is one. */
+  player?: unknown;
 }
 
-/** Defaults are English-only tiny models: the smallest useful download for each engine. */
+/** `auto` means the models `quality` picks. */
 export const DEFAULT_MODELS: Record<TranscribeEngine, string> = {
-  transformers: 'onnx-community/whisper-tiny.en',
-  'whisper-cpp': 'tiny.en-q5_1',
+  subbot: 'auto',
 };
 
 /**
@@ -128,17 +169,19 @@ export function resolveTranscribe(
   const o: TranscribeOptions = opt === true ? {} : opt;
   const when = o.when ?? 'no-match';
   if (when === 'off') return null;
-  const engine = o.engine ?? 'transformers';
+  const engine = o.engine ?? 'subbot';
   return {
     when,
     engine,
     model: o.model ?? DEFAULT_MODELS[engine],
+    quality: o.quality ?? 'balanced',
     task: o.task ?? 'transcribe',
     device: o.device ?? 'auto',
-    // English-only by default because the default model is English-only. A caller that
-    // points `model` at a multilingual Whisper should set `language` to match.
-    language: o.language ?? 'en',
+    language: o.language ?? 'auto',
     ...(o.source ? { source: o.source } : {}),
+    ...(o.models ? { models: o.models } : {}),
+    ...(o.status === false ? { status: false } : {}),
+    ...(o.onState ? { onState: o.onState } : {}),
   };
 }
 

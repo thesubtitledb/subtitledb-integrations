@@ -1,0 +1,35 @@
+{
+  "name": "@subtitledb/subbot",
+  "version": "0.1.0",
+  "description": "SubBot: on-device subtitles for a video that has none. Reads the audio the player is already playing, transcribes it in the browser with whisper.cpp and shows the first line within seconds, then transcribes the whole file in the background and offers it as a complete subtitle.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/asr/worker.d.ts",
+      "default": "./dist/asr/worker.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "wasm/dist"
+  ],
+  "sideEffects": [
+    "./dist/asr/worker.js"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --force",
+    "build:wasm": "bash wasm/build.sh"
+  },
+  "dependencies": {
+    "@subtitledb/core": "0.5.8"
+  }
+}

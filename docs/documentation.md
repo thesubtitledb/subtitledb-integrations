@@ -160,7 +160,7 @@ one frozen object and fails if any of them stops honouring it.
 | `hint` | inferred | What is playing: `{ imdbId }`, `{ tmdbId, tmdbType }`, `{ seriesImdbId, season, episode }`, or `{ title, year, season, episode }`. |
 | `autoSelect` | off | `true` picks the top candidate, `'locale'` the viewer's own language, a code like `'en-US'` pins one (matched on the base subtag). |
 | `hearingImpaired` | off | Prefer HI subtitles when ranking. |
-| `transcribe` | off | On-device speech-to-text when the corpus has nothing. `true` for defaults, or `{ when, engine, model, task, device, language, onProgress }`. See below. |
+| `transcribe` | off | On-device speech-to-text when the corpus has nothing. `true` for defaults, or an object; see [transcription](#transcription) |
 | `maxTracks` | 30 | Cap on how many subtitles are offered. |
 | `convert` | on | Convert srt, ass and ssa to WebVTT in the browser. |
 | `formats` | the binding's own | What the player renders unaided. Anything else is converted. |
@@ -185,37 +185,67 @@ convert what this player cannot render. Setting `formats` yourself overrides bot
 
 `transcribe` adds a fallback for a title the corpus has nothing for: the video's own
 audio, transcribed on the device, offered as one more row in the picker. It is off by
-default, and the invariant that makes it safe to leave on is that nothing heavy loads
-until a viewer selects that row. Offering it costs a placeholder in a menu; the engine
-and the model download only on the click.
+default, and the invariant that makes it safe to leave on is that no model downloads
+until a viewer selects that row. Offering it costs a placeholder in a menu and a
+warm-up: the engine is fetched and compiled while the row is on screen, and a model a
+past run left on the device is loaded, so the click pays for the first window alone.
+The model download itself waits for the click.
 
 ```ts
 attach(video, {
-  transcribe: true,                // every default: no-match, transformers.js, whisper-tiny.en
+  transcribe: true,                // every default: no-match, balanced, detected language
 });
 
 attach(video, {
   transcribe: {
     when: 'no-match',              // 'no-match' (default), 'always', or 'off'
-    engine: 'transformers',       // 'transformers' (default) or 'whisper-cpp' (experimental)
-    model: 'onnx-community/whisper-tiny.en',
-    task: 'transcribe',           // or 'translate', which targets English only
-    device: 'auto',               // 'auto', 'webgpu', or 'wasm'
-    language: 'en',               // the tag for the produced track
-    source: undefined,            // read the audio from here instead of the element
-    onProgress: (p) => {},        // { phase: 'engine'|'model'|'transcribe', loaded, total }
+    quality: 'balanced',           // 'fast', 'balanced' (default), or 'best'
+    language: 'auto',              // the audio's language, or 'auto' to detect it
+    task: 'transcribe',            // or 'translate', which targets English only
+    model: 'auto',                 // one whisper.cpp model to run alone, or a URL to a ggml file
+    models: undefined,             // where the models come from; default HuggingFace
+    source: undefined,             // read the audio from here instead of the element
+    status: true,                  // the small status line on the video while loading
+    onState: (s) => {},            // warm, loading, listening, live, complete, error (below)
+    onProgress: (p) => {},         // { phase: 'engine'|'model'|'transcribe', loaded, total }
   },
 });
 ```
 
-The default engine is transformers.js, running Whisper as ONNX on WebGPU where the
-browser has it and WASM otherwise. `whisper-cpp` is a second, experimental engine that
-runs a whisper.cpp WASM build; it is opt-in and may need a self-hosted build. Three
-things to know: the audio has to be readable, so the media must be same-origin or
-served with CORS; the output language is the audio's own, and `translate` only ever
-targets English, so `autoSelect: 'locale'` on a foreign film is not satisfied by it;
-and on the CDN the engine and model load from jsDelivr and HuggingFace, which needs a
-[wider CSP](cdn.md#on-device-transcription).
+The engine is SubBot, whisper.cpp built to WebAssembly and run in workers. The first
+line is on screen within a few seconds of the click with the models already cached: a
+two second window from the playhead goes through the small model first, then the
+engine keeps thirty seconds of lead ahead of the viewer in six second steps. Behind
+that a second tier re-does every window with a bigger model, nearest the playhead
+first and then from the start of the file, and its lines replace the first ones as
+they land. When every second is covered the complete WebVTT is handed to the player
+as the track's file, so what the viewer picked is what fills, and what fills is
+finally a subtitle like any other. The page's thread never decodes anything; every
+window is read, decoded and transcribed in workers and the buffers are transferred.
+
+`quality` picks the models. `fast` is the small model alone: fewest bytes (43 MB) and
+cores. `balanced` adds the base model (82 MB) behind it, on machines with the cores
+and memory for it. `best` runs the base model live and the small model (264 MB)
+behind. `model` names one whisper.cpp model to run alone instead, `tiny.en-q8_0` or
+`base-q8_0` say, or a URL to a ggml file. `models` is the directory they come from;
+the default is the whisper.cpp mirror on HuggingFace, which needs a [wider
+CSP](cdn.md#on-device-transcription).
+
+`language` is detected from the first window by default and fixed for the rest of the
+run. Set it when you know it. `translate` is Whisper's own
+and only ever targets English, so `autoSelect: 'locale'` on a foreign film is not
+satisfied by it.
+
+The audio comes from wherever the player gets it. A plain element is read from its
+source: a file, or a URL that answers byte ranges. hls.js, dash.js and Shaka are read
+from their manifest, which is the index the backfill needs, and when the manifest
+cannot be read their own loaded segments are used instead, which covers what the
+player buffers and no more. Pass the player object to `attach` where you can; for a
+library this repo has no binding for (dash.js), attach the element and name the
+player as `owner`. Native HLS in Safari is read from the playlist the element names.
+The containers read are MP4 (flat and fragmented), Matroska and WebM, MPEG-TS, HLS and
+DASH; the codecs are what the browser's own `AudioDecoder` takes, AAC, Opus, FLAC, MP3
+and Vorbis among them. AC-3, E-AC-3 and DTS are reported as `unsupported_codec`.
 
 `source` is the escape hatch for a media element whose own source a `fetch` cannot
 read. A `<video>` plays a cross-origin file that carries no CORS header, but reading its
@@ -223,6 +253,23 @@ audio for transcription cannot: the browser blocks the read. archive.org is the 
 case, its `/download/` URL redirects to a storage node that drops the header. Point
 `source` at a CORS-readable copy of the same audio (archive.org serves one at `/cors/`)
 and playback keeps its own URL while the transcription reads the copy.
+
+`onState` reports what the engine is doing, for a page that shows it:
+
+```ts
+{ state: 'warm', model }                                  // before any select: engine ready, model in memory or not
+{ state: 'loading', step: 'engine' | 'model' | 'audio', loaded, total }
+{ state: 'listening' }                                    // ready, first window running
+{ state: 'live', covered, duration, language }            // seconds covered so far
+{ state: 'complete', cues }
+{ state: 'error', error }
+```
+
+`status` is the one piece of UI the engine draws itself: a small line in the corner of
+the video while the models download, gone at the first cue. Turn it off when the page
+shows `onState` its own way. The cues go through the element's own text track and
+the browser renders them; a player that owns its captions and switches the native
+track off gets an overlay instead.
 
 ## The handle
 

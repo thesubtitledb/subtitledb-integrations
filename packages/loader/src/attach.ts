@@ -15,13 +15,19 @@
  * chunk being skipped. So `looksOwned` answers the cheap half here, errs toward yes,
  * and anything it flags goes the long way round to get the real answer.
  */
+
+import type { Transcriber } from '@subtitledb/core';
 import type { AttachHandle, AttachOptions } from '@subtitledb/players';
 import { isVideoElement, looksOwned } from '@subtitledb/players/marks';
+import { basePath } from './base.js';
 import { chunk } from './chunks.js';
 import { debugAttach } from './debug.js';
 import { type DeferredHandle, deferHandle } from './deferred.js';
 import { claim, type Incumbent, mismatch } from './guard.js';
 import { ANTISPAM_ID, CLIENT } from './ids.js';
+
+/** Filled in by build.mjs. Read here for the worker chunk, which is spawned, not imported. */
+declare const __SDB_CHUNKS__: Record<string, string>;
 
 declare const __SDB_VERSION__: string;
 
@@ -94,10 +100,24 @@ export function attach(
 
   // Wire the transcription engine lazily. `transcribe` is the page's declarative
   // request; this is the engine behind it, and it is the loader's job because only the
-  // loader owns chunk(). The transcribe chunk, and through it the model, load on the
-  // first synthetic select and never before: this closure is not called until then.
+  // loader owns chunk(). The models load on the first synthetic select and never
+  // before. The chunk, its worker and the engine load when the row is offered, so the
+  // click that follows pays for the first window alone; a model a past run left on
+  // this device is loaded then too.
   if (options.transcribe && !opts.transcriber) {
-    opts.transcriber = (req) => chunk('transcribe', moduleUrl).then((m) => m.runTranscription(req));
+    const deps = () => ({
+      workerUrl: basePath(moduleUrl) + __SDB_CHUNKS__['subbot-worker'],
+      wasmUrl: `${basePath(moduleUrl)}subbot.wasm`,
+    });
+    const run: Transcriber = (req) =>
+      chunk('subbot', moduleUrl).then((m) => m.runTranscription(req, deps()));
+    run.warm = (cfg) => {
+      // Best effort: a warm-up that fails changes nothing, the select loads from scratch.
+      chunk('subbot', moduleUrl)
+        .then((m) => m.warmTranscription(cfg, deps()))
+        .catch(() => {});
+    };
+    opts.transcriber = run;
   }
 
   const handle = deferHandle(async (): Promise<AttachHandle> => {

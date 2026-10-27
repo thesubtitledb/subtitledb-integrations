@@ -47,7 +47,11 @@ export function candidateLabel(c: Candidate): string {
   // A synthetic row is not a corpus file and must never read like one: it is the
   // media's own audio transcribed on the device, so it is labelled as such and marked
   // with the language it will produce rather than a cue count it does not have yet.
-  if (c.synthetic) return `AI transcription (${languageName(s.language)})`;
+  if (c.synthetic) {
+    return s.language === 'auto'
+      ? 'AI transcription'
+      : `AI transcription (${languageName(s.language)})`;
+  }
   const bits: string[] = [languageName(s.language)];
   if (s.hearing_impaired) bits.push('HI');
   // Stored names carry stray whitespace; trimmed on both sides of the cut.

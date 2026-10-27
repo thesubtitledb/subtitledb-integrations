@@ -55,6 +55,12 @@ export interface SubtitleDbHtml5Options
   disabled?: boolean;
   onResolved?: (result: ResolveResult) => void;
   onSelected?: (loaded: LoadedSubtitle) => void;
+  /**
+   * The object driving this element, when a library does: an hls.js or dash.js
+   * instance. Only read for the transcription row, whose engine can then read the
+   * stream's manifest instead of an element source it cannot open.
+   */
+  owner?: unknown;
 
   /**
    * Called after the track elements for a resolve have been added, and after they
@@ -246,7 +252,10 @@ export function attachSubtitleDb(
   async function select(c: Candidate): Promise<void> {
     // Pass the element for a synthetic candidate: transcription reads the audio from
     // it. A real candidate ignores it and downloads as before.
-    const loaded = await session.load(c, { media: video });
+    const loaded = await session.load(c, {
+      media: video,
+      ...(options.owner !== undefined ? { player: options.owner } : {}),
+    });
     if (!loaded || destroyed) return;
 
     const idx = offered.indexOf(c);

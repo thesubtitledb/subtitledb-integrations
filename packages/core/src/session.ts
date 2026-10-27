@@ -69,9 +69,9 @@ export interface SessionOptions {
 
   /**
    * Opt-in, on-device speech-to-text for a title the corpus has nothing for. Off by
-   * default; `true` means every default (transformers.js, whisper-tiny.en, offered
+   * default; `true` means every default (SubBot, detected language, offered
    * only on no-match). Offering it is free: a synthetic candidate appears in the
-   * picker and nothing downloads until a viewer selects it. Only offered when a
+   * picker and no model downloads until a viewer selects it. Only offered when a
    * {@link transcriber} is also wired, so a row that cannot run is never shown.
    */
   transcribe?: boolean | TranscribeOptions | undefined;
@@ -292,7 +292,7 @@ export class SubtitleSession {
       // Offer on-device transcription as one more row when it is configured, an engine
       // is wired to run it, and the trigger fires. It is appended last so it never
       // outranks a real subtitle, and it carries no bytes, so this stays a single
-      // cacheable request: nothing downloads until the row is selected.
+      // cacheable request: no model downloads until the row is selected.
       const syn = this.syntheticFor(match.candidates);
       if (syn) result.candidates = [...match.candidates, syn];
 
@@ -369,6 +369,12 @@ export class SubtitleSession {
     const cfg = this.transcribeConfig();
     if (!cfg) return null;
     if (cfg.when === 'no-match' && candidates.length > 0) return null;
+    // The row is about to be on screen: an engine that can get ready now does.
+    try {
+      this.opts.transcriber.warm?.(cfg);
+    } catch (err) {
+      this.report(err);
+    }
     return syntheticCandidate(cfg.language);
   }
 
@@ -463,6 +469,7 @@ export class SubtitleSession {
       const got = await this.textCache.resolve(key, () =>
         run({
           media,
+          ...(ctx?.player !== undefined ? { player: ctx.player } : {}),
           config: cfg,
           signal: this.live.signal,
           ...(onProgress ? { onProgress } : {}),

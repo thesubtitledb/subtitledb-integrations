@@ -6,7 +6,7 @@ only after all of them pass.
 
 | Suite | Command | Proves | CI job |
 |---|---|---|---|
-| `packages/*/test/*.test.ts`, vitest | `npm test` | core (client, identify, match, convert, cache, session), the players, html5 and artplayer bindings, the loader and transcribe packages. Fetch is stubbed. `packages/core/test/shared-cases.test.ts` reads `plugins/shared/match-cases.json`, the ranking cases every plugin shares | `check`, after `npm run lint` and `npm run typecheck` |
+| `packages/*/test/*.test.ts`, vitest | `npm test` | core (client, identify, match, convert, cache, session), the players, html5 and artplayer bindings, the loader and subbot packages (demuxers against media fixtures, scheduler, cue rules, the orchestrator against fake workers). Fetch is stubbed. `packages/core/test/shared-cases.test.ts` reads `plugins/shared/match-cases.json`, the ranking cases every plugin shares | `check`, after `npm run lint` and `npm run typecheck` |
 | `packages/core/test/api.live.test.ts` | `npm run test:live` | the wire types in `packages/core/src/types.ts` against the live api.thesubtitledb.org | `live` |
 | `e2e/*.spec.ts`, Playwright Chromium | `npx playwright install chromium` once, then `npm run e2e` | the example pages in a real browser against the live API, served on port 4173 with the CDN tree on 4174. Builds, vendors and builds the CDN tree first | `check`, after `npm run build` |
 | `packages/loader/test/build.test.ts` | `npm run build && npm run build:cdn`, then `npx vitest run packages/loader/test/build.test.ts` | the CDN tree as a browser gets it: no bare specifier, no `import.meta` in the classic script, no empty file, the headers | `check` and `build` |

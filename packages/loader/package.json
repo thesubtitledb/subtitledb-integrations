@@ -27,6 +27,6 @@
     "@subtitledb/debug": "0.1.0",
     "@subtitledb/html5": "0.2.1",
     "@subtitledb/players": "0.2.1",
-    "@subtitledb/transcribe": "0.2.1"
+    "@subtitledb/subbot": "0.1.0"
   }
 }

@@ -19,7 +19,8 @@ export default defineConfig({
       { find: '@subtitledb/core', replacement: src('core/src/index.ts') },
       { find: '@subtitledb/debug', replacement: src('debug/src/index.ts') },
       { find: '@subtitledb/html5', replacement: src('html5/src/index.ts') },
-      { find: '@subtitledb/transcribe', replacement: src('transcribe/src/index.ts') },
+      { find: '@subtitledb/subbot/worker', replacement: src('subbot/src/asr/worker.ts') },
+      { find: '@subtitledb/subbot', replacement: src('subbot/src/index.ts') },
     ],
   },
   // What build.mjs stamps in. The loader reads all four, and a test that had to
@@ -31,7 +32,8 @@ export default defineConfig({
     __SDB_CHUNKS__: JSON.stringify({
       engine: 'engine.mjs',
       players: 'players.mjs',
-      transcribe: 'transcribe.mjs',
+      subbot: 'subbot.mjs',
+      'subbot-worker': 'subbot-worker.mjs',
       debug: 'debug.mjs',
     }),
     __SDB_BASE__: JSON.stringify('https://cdn.example.test/v/0.0.0-test/'),

@@ -10,6 +10,8 @@
       "!**/node_modules",
       "!**/coverage",
       "!examples/vendor",
+      // Media fixtures. Two of them are MPEG transport streams, whose extension is .ts.
+      "!packages/subbot/test/media",
       // Built by packages/loader/build.mjs: minified bundles with hashed names, which
       // biome will happily report three hundred findings against.
       "!cdn",

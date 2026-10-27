@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SubtitleDbClient } from '../src/client.js';
 import { createSession } from '../src/session.js';
-import { SYNTHETIC_ID } from '../src/transcribe.js';
+import { resolveTranscribe, SYNTHETIC_ID } from '../src/transcribe.js';
 import { bundleSubtitle, movieBundle, stubFetch } from './fixtures.js';
 
 function session(routes: Parameters<typeof stubFetch>[0], opts: Record<string, unknown> = {}) {
@@ -521,6 +521,19 @@ describe('on-device transcription', () => {
     expect(r.candidates[0]?.subtitle.id).toBe(SYNTHETIC_ID);
   });
 
+  it('warms the engine when the row is offered, and not when it is withheld', async () => {
+    const transcriber = Object.assign(vi.fn(vtt), { warm: vi.fn() });
+    const { s } = session([EMPTY], { transcribe: { quality: 'fast' }, transcriber });
+    await s.resolve({ imdbId: 'tt0133093' });
+    expect(transcriber.warm).toHaveBeenCalledWith(expect.objectContaining({ quality: 'fast' }));
+    expect(transcriber).not.toHaveBeenCalled();
+
+    const quiet = Object.assign(vi.fn(vtt), { warm: vi.fn() });
+    const { s: t } = session([BY_IMDB], { transcribe: true, transcriber: quiet });
+    await t.resolve({ imdbId: 'tt0133093' });
+    expect(quiet.warm).not.toHaveBeenCalled();
+  });
+
   it('does not offer one without a transcriber, so a dead row is never shown', async () => {
     const { s } = session([EMPTY], { transcribe: true });
     const r = await s.resolve({ imdbId: 'tt0133093' });
@@ -549,6 +562,38 @@ describe('on-device transcription', () => {
     expect(r.candidates).toHaveLength(2);
     expect(r.candidates[0]?.synthetic).toBeUndefined();
     expect(r.candidates.at(-1)?.synthetic).toBe(true);
+  });
+
+  it('resolves the defaults to SubBot, a detected language and the balanced models', () => {
+    expect(resolveTranscribe(true)).toEqual({
+      when: 'no-match',
+      engine: 'subbot',
+      model: 'auto',
+      quality: 'balanced',
+      task: 'transcribe',
+      device: 'auto',
+      language: 'auto',
+    });
+    const onState = () => {};
+    expect(
+      resolveTranscribe({ quality: 'fast', models: 'https://m.test/', status: false, onState }),
+    ).toMatchObject({
+      quality: 'fast',
+      models: 'https://m.test/',
+      status: false,
+      onState,
+    });
+  });
+
+  it('load() hands the player to the engine, which reads a manifest the element does not know', async () => {
+    const transcriber = vi.fn(vtt);
+    const { s } = session([EMPTY], { transcribe: true, transcriber });
+    const r = await s.resolve({ imdbId: 'tt0133093' });
+    const syn = r.candidates[0];
+    if (!syn) throw new Error('expected a synthetic candidate');
+    const player = { getSource: () => 'https://x.test/a.mpd' };
+    await s.load(syn, { media, player });
+    expect(transcriber).toHaveBeenCalledWith(expect.objectContaining({ media, player }));
   });
 
   it('load() transcribes the synthetic candidate through the wired engine', async () => {
