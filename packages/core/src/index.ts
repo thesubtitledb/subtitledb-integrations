@@ -1,3 +1,5 @@
+export type { LineUp } from './align.js';
+export { lineUp } from './align.js';
 export type { CacheOptions } from './cache.js';
 export { SingleFlightCache } from './cache.js';
 export type {
@@ -38,6 +40,7 @@ export type { LocaleSource } from './languages.js';
 export {
   corpusLanguage,
   hasLanguageName,
+  languageFamily,
   languageName,
   localeLanguages,
 } from './languages.js';
@@ -55,6 +58,8 @@ export { handleFor, handleForAny, registerHandle } from './registry.js';
 export type { LoadedSubtitle, ResolveResult, SessionOptions } from './session.js';
 export { createSession, SubtitleSession } from './session.js';
 export type {
+  Identified,
+  IdentifiedText,
   LoadContext,
   ResolvedTranscribe,
   TranscribeDevice,
@@ -90,6 +95,9 @@ export type {
   ResponseClass,
   SearchResponse,
   SearchSort,
+  SpeechCue,
+  SpeechMatch,
+  SpeechMatchResponse,
   Subtitle,
   SubtitlePage,
   SubtitleSort,

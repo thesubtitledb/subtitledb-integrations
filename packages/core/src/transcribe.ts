@@ -9,7 +9,7 @@
  * the CDN loader for the wiring. The engine is SubBot (`@subtitledb/subbot`).
  */
 import type { Candidate } from './match.js';
-import type { BundleSubtitle } from './types.js';
+import type { BundleSubtitle, SpeechCue } from './types.js';
 
 /**
  * When the transcription row is offered.
@@ -42,6 +42,30 @@ export interface TranscribeProgress {
   total: number;
 }
 
+/**
+ * The corpus file shown in place of the transcription. `matched_sub_id` is the file in
+ * the spoken language that held the words; `sub_id` is the one shown, the same file or
+ * the viewer's language lined up against it.
+ */
+export interface Identified {
+  sub_id: number;
+  imdb_id: string;
+  season: number;
+  episode: number;
+  /** The shown file's language, as the corpus stores it. */
+  lang: string;
+  /** Milliseconds added to every cue of the shown file. */
+  shift_ms: number;
+  matched_sub_id: number;
+}
+
+/** A corpus file ready to show, as WebVTT already shifted. */
+export interface IdentifiedText {
+  text: string;
+  format: 'vtt';
+  identified: Identified;
+}
+
 /** What the engine is doing, for a page that shows it. */
 export type TranscribeState =
   | { state: 'warm'; model: boolean }
@@ -49,6 +73,7 @@ export type TranscribeState =
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
   | { state: 'complete'; cues: number }
+  | { state: 'identified'; identified: Identified }
   | { state: 'error'; error: Error };
 
 /**
@@ -89,6 +114,13 @@ export interface TranscribeOptions {
    * percentage, and an x to hide it. Default on; `false` turns it off.
    */
   status?: boolean;
+  /**
+   * Look the first lines up in the corpus and, on a match, show that file instead of
+   * the transcription, lined up with the video: in the viewer's language when the
+   * corpus has it, else in the spoken one. Default on; `false` keeps the
+   * transcription.
+   */
+  identify?: boolean;
   onProgress?: (p: TranscribeProgress) => void;
   onState?: (s: TranscribeState) => void;
 }
@@ -106,6 +138,7 @@ export interface ResolvedTranscribe {
   source?: string;
   models?: string;
   status?: boolean;
+  identify?: boolean;
   onState?: (s: TranscribeState) => void;
 }
 
@@ -124,6 +157,11 @@ export interface TranscribeRequest {
   config: ResolvedTranscribe;
   signal?: AbortSignal;
   onProgress?: (p: TranscribeProgress) => void;
+  /**
+   * Set by the session unless `identify` is off: the corpus file for these lines, or
+   * null. `lang` is the spoken language. On a file the engine stops and returns it.
+   */
+  identify?: (lang: string, cues: SpeechCue[]) => Promise<IdentifiedText | null>;
 }
 
 /**
@@ -137,7 +175,9 @@ export interface TranscribeRequest {
  * engine can be ready before the click. It must not download a model: the row being
  * on screen is not a request for one.
  */
-export type Transcriber = ((req: TranscribeRequest) => Promise<{ text: string; format: 'vtt' }>) & {
+export type Transcriber = ((
+  req: TranscribeRequest,
+) => Promise<{ text: string; format: 'vtt'; identified?: Identified }>) & {
   warm?: (config: ResolvedTranscribe) => void;
 };
 
@@ -184,6 +224,7 @@ export function resolveTranscribe(
     ...(o.source ? { source: o.source } : {}),
     ...(o.models ? { models: o.models } : {}),
     ...(o.status === false ? { status: false } : {}),
+    ...(o.identify === false ? { identify: false } : {}),
     ...(o.onState ? { onState: o.onState } : {}),
   };
 }

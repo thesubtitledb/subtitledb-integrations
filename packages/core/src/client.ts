@@ -10,6 +10,8 @@ import type {
   ResponseClass,
   SearchResponse,
   SearchSort,
+  SpeechCue,
+  SpeechMatchResponse,
   SubtitleSort,
   TitleKind,
   TmdbType,
@@ -259,7 +261,7 @@ export class SubtitleDbClient {
   }
 
   /** One request, with timeout, retry and typed errors. */
-  private async request<T>(url: string, signal?: AbortSignal): Promise<T> {
+  private async request<T>(url: string, signal?: AbortSignal, payload?: unknown): Promise<T> {
     let last: SubtitleDbError | undefined;
 
     for (let attempt = 0; attempt <= this.retries; attempt++) {
@@ -268,8 +270,13 @@ export class SubtitleDbClient {
       try {
         const doFetch = this.doFetch;
         res = await doFetch(url, {
-          method: 'GET',
-          headers: { accept: 'application/json', ...this.auth() },
+          method: payload === undefined ? 'GET' : 'POST',
+          headers: {
+            accept: 'application/json',
+            ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
+            ...this.auth(),
+          },
+          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
           signal: joinSignals(AbortSignal.timeout(this.timeoutMs), signal),
         });
       } catch (cause) {
@@ -468,6 +475,18 @@ export class SubtitleDbClient {
       this.url(`/v1/by-subid/${Number(id)}`, this.pageQuery(params)),
       params.signal,
     );
+  }
+
+  /**
+   * Which corpus file holds these words, and how far to move it to sit on the video.
+   * SubBot's lookup: `lang` is the spoken language, `cues` the first lines it heard
+   * with their times. No key.
+   */
+  identifySpeech(
+    body: { lang: string; cues: SpeechCue[] },
+    opts: RequestOptions = {},
+  ): Promise<SpeechMatchResponse> {
+    return this.request<SpeechMatchResponse>(this.url('/v1/subbot/identify'), opts.signal, body);
   }
 
   /**

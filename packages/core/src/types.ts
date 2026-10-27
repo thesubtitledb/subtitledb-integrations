@@ -293,6 +293,33 @@ export interface TitleMatch {
   score: number;
 }
 
+/** One line SubBot heard, for POST /v1/subbot/identify. */
+export interface SpeechCue {
+  /** Milliseconds into the video. */
+  start_ms: number;
+  text: string;
+}
+
+/** The file that holds the words, and the shift that puts it on the video. */
+export interface SpeechMatch {
+  sub_id: number;
+  imdb_id: string;
+  season: number;
+  episode: number;
+  lang: string;
+  /** Milliseconds to add to every cue of the file. */
+  shift_ms: number;
+  hits: number;
+}
+
+/** POST /v1/subbot/identify. `match` is null when nothing stood out. */
+export interface SpeechMatchResponse {
+  match: SpeechMatch | null;
+  files: Array<{ sub_id: number; lang: string; shift_ms: number; hits: number }>;
+  probes: number;
+  runner_up: number;
+}
+
 /**
  * The per-verb extras. Each is present only for the verb that produces it:
  * `torrent` for by-infohash, `match` for by-releasename/by-title, `subtitle` for

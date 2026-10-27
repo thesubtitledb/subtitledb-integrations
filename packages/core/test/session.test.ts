@@ -623,6 +623,24 @@ describe('on-device transcription', () => {
     expect(transcriber).toHaveBeenCalledOnce();
   });
 
+  it('does not report a run that dispose() stopped', async () => {
+    const onError = vi.fn();
+    const transcriber = vi.fn(
+      (req: { signal?: AbortSignal }) =>
+        new Promise<{ text: string; format: 'vtt' }>((_, reject) =>
+          req.signal?.addEventListener('abort', () => reject(new Error('cancelled'))),
+        ),
+    );
+    const { s } = session([EMPTY], { transcribe: true, transcriber, onError });
+    const r = await s.resolve({ imdbId: 'tt0133093' });
+    const syn = r.candidates[0];
+    if (!syn) throw new Error('expected a synthetic candidate');
+    const loading = s.load(syn, { media });
+    s.dispose();
+    expect(await loading).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('returns null and reports when there is no media element to read', async () => {
     const onError = vi.fn();
     const transcriber = vi.fn(vtt);

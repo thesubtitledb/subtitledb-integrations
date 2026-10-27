@@ -7,7 +7,7 @@
  * `warmTranscription` is its optional `warm`: called when the row is offered, it gets
  * the engine ready without downloading anything heavy.
  */
-import type { TranscribeRequest } from '@subtitledb/core';
+import type { Identified, TranscribeRequest } from '@subtitledb/core';
 import { type RunDeps, Subbot } from './subbot.js';
 
 export type { Quality, TierModels } from './asr/models.js';
@@ -37,7 +37,7 @@ export {
   qualityWorkers,
 } from './schedule.js';
 export type { RunDeps, SubbotState } from './subbot.js';
-export { Subbot, tiersFor, warmTranscription } from './subbot.js';
+export { IDENTIFY_WORDS, Subbot, tiersFor, warmTranscription, wordCount } from './subbot.js';
 export { cuesToVtt, formatTimestamp } from './vtt.js';
 export { dropWarm, takeWarm, WARM_TTL_MS, warmUp } from './warm.js';
 export type { Spawn, WorkerLike } from './workers.js';
@@ -46,6 +46,6 @@ export { AsrWorker, AudioWorker, spawnFrom } from './workers.js';
 export function runTranscription(
   req: TranscribeRequest,
   deps: RunDeps,
-): Promise<{ text: string; format: 'vtt' }> {
+): Promise<{ text: string; format: 'vtt'; identified?: Identified }> {
   return new Subbot(req, deps).run();
 }
