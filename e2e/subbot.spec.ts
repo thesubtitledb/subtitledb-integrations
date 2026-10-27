@@ -36,7 +36,11 @@ interface Report {
   vtt: string | null;
   /** The warm-up's report, before the select: true with the model already in memory. */
   warm: boolean | null;
+  /** Every text the notice on the video showed, in order. */
+  notice: string[];
 }
+
+const NOTICE = '[data-subtitledb-status]';
 
 // A minute of Sintel through both tiers on one WASM thread is a few minutes of work.
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
@@ -118,6 +122,13 @@ async function run(player: string, warm: boolean, at?: number) {
   expect(done.lines.length).toBeGreaterThan(3);
   // Sintel's first minute: a line the model cannot miss.
   expect(done.vtt?.toLowerCase()).toMatch(/dragon|scales|sintel|gatekeeper|strange/);
+
+  // The notice counted up with a percentage, ended on ready, and went away.
+  console.log(`${player}: notice ${JSON.stringify(done.notice)}`);
+  expect(done.notice.some((t) => /^Transcribing\d+%$/.test(t))).toBe(true);
+  if (!warm) expect(done.notice.some((t) => /^Downloading\d+%$/.test(t))).toBe(true);
+  expect(done.notice).toContain('Ready');
+  await expect(page.locator(NOTICE)).toHaveCount(0, { timeout: 5_000 });
 }
 
 test('plain video: the first cue within budget, then the whole file', async () => {
@@ -140,4 +151,50 @@ test('Shaka, reading the asset it loaded', async () => {
 test('hls.js, reading the playlist', async () => {
   // Opus in fMP4: Playwright's Chromium carries no AAC decoder.
   await run('hlsjs', true, 17);
+});
+
+type Driver = {
+  __subbot: {
+    mount: (p: string) => Promise<void>;
+    select: (at?: number) => Promise<void>;
+    setNotice: (on: boolean) => void;
+  };
+};
+
+test('the notice stays small under a host rule that stretches, and the x hides it', async () => {
+  type Page = Driver;
+  // The developer portal's `.stage > * { width: 100%; height: 100% }`, aimed at it.
+  await page.addStyleTag({ content: '[data-subtitledb-status]{width:100%;height:100%;left:0}' });
+  await page.evaluate(async () => (window as unknown as Page).__subbot.mount('native'));
+  await page.evaluate(async () => (window as unknown as Page).__subbot.select(17));
+  const notice = page.locator(NOTICE);
+  await expect(notice).toBeVisible({ timeout: 30_000 });
+  const box = await notice.boundingBox();
+  console.log(`notice box ${JSON.stringify(box)}`);
+  expect(box?.width ?? 999).toBeLessThan(160);
+  expect(box?.height ?? 999).toBeLessThanOrEqual(22);
+  const paused = await page.evaluate(
+    () => (document.getElementById('player') as HTMLVideoElement).paused,
+  );
+  await notice.getByRole('button', { name: 'Hide' }).click();
+  await expect(notice).toHaveCount(0, { timeout: 2_000 });
+  // The click was the pill's, not the player's.
+  expect(
+    await page.evaluate(() => (document.getElementById('player') as HTMLVideoElement).paused),
+  ).toBe(paused);
+  // Progress carries on behind it without drawing it again.
+  await page.waitForTimeout(3_000);
+  await expect(notice).toHaveCount(0);
+});
+
+test('status: false, the lines come and no notice is drawn', async () => {
+  type Page = Driver;
+  await page.evaluate(() => (window as unknown as Page).__subbot.setNotice(false));
+  await page.evaluate(async () => (window as unknown as Page).__subbot.mount('native'));
+  await page.evaluate(async () => (window as unknown as Page).__subbot.select(17));
+  await expect
+    .poll(async () => (await report()).firstCueMs, { timeout: 60_000, message: 'no cue appeared' })
+    .not.toBeNull();
+  expect((await report()).notice).toEqual([]);
+  await expect(page.locator(NOTICE)).toHaveCount(0);
 });

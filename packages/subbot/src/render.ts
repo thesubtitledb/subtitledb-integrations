@@ -14,6 +14,7 @@
  * turned the native track off, and an overlay takes over.
  */
 import type { Cue } from './cues.js';
+import { Notice } from './notice.js';
 
 declare const VTTCue: new (start: number, end: number, text: string) => TextTrackCue;
 
@@ -25,7 +26,7 @@ export class TrackRenderer {
   private owned = false;
   private live = new Map<Cue, TextTrackCue>();
   private overlay: HTMLDivElement | null = null;
-  private statusEl: HTMLDivElement | null = null;
+  private readonly notice: Notice | null;
   private cues: Cue[] = [];
   private timer: ReturnType<typeof setInterval> | undefined;
   private checkTimer: ReturnType<typeof setInterval> | undefined;
@@ -35,8 +36,10 @@ export class TrackRenderer {
     private readonly media: HTMLMediaElement,
     private readonly label: string,
     private readonly language: string,
-    private readonly showStatus: boolean,
-  ) {}
+    showStatus: boolean,
+  ) {
+    this.notice = showStatus ? new Notice(() => this.container()) : null;
+  }
 
   private open(): TextTrack | null {
     if (this.track) return this.track;
@@ -144,26 +147,19 @@ export class TrackRenderer {
     this.timer = setInterval(tick, 250);
   }
 
-  /** A short line in the corner while something is downloading or warming up. */
-  status(text: string | null): void {
-    if (!this.showStatus) return;
-    if (!text) {
-      this.statusEl?.remove();
-      this.statusEl = null;
-      return;
-    }
-    if (!this.statusEl) {
-      const parent = this.container();
-      if (!parent) return;
-      const div = document.createElement('div');
-      div.setAttribute('data-subtitledb-status', '');
-      div.style.cssText =
-        'position:absolute;left:12px;top:12px;padding:4px 10px;border-radius:4px;pointer-events:none;' +
-        'font:500 13px/1.4 sans-serif;color:#fff;background:rgba(0,0,0,.6);z-index:2147483000;';
-      parent.append(div);
-      this.statusEl = div;
-    }
-    if (this.statusEl.textContent !== text) this.statusEl.textContent = text;
+  /**
+   * The notice in the corner: what SubBot is doing and how far along, `progress`
+   * 0 to 1 or null when there is nothing to measure. `null` text takes it away.
+   */
+  status(text: string | null, progress: number | null = null): void {
+    if (!this.notice) return;
+    if (text === null) this.notice.remove();
+    else this.notice.show(text, progress);
+  }
+
+  /** The last word on the notice before it fades. */
+  finish(text: string): void {
+    this.notice?.finish(text);
   }
 
   /**
@@ -174,7 +170,7 @@ export class TrackRenderer {
   handover(): void {
     this.handedOver = true;
     clearInterval(this.checkTimer);
-    this.status(null);
+    this.finish('Ready');
     if (!this.owned && !this.overlay) return;
     const started = Date.now();
     const poll = () => {
@@ -192,7 +188,8 @@ export class TrackRenderer {
     clearInterval(this.timer);
     this.overlay?.remove();
     this.overlay = null;
-    this.status(null);
+    // After a handover the notice is finishing on its own and fades when done.
+    if (!this.handedOver) this.status(null);
     if (this.track) {
       for (const cue of this.live.values()) {
         try {

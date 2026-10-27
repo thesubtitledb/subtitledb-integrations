@@ -205,7 +205,7 @@ attach(video, {
     model: 'auto',                 // one whisper.cpp model to run alone, or a URL to a ggml file
     models: undefined,             // where the models come from; default HuggingFace
     source: undefined,             // read the audio from here instead of the element
-    status: true,                  // the small status line on the video while loading
+    status: true,                  // the small progress pill on the video; false hides it
     onState: (s) => {},            // warm, loading, listening, live, complete, error (below)
     onProgress: (p) => {},         // { phase: 'engine'|'model'|'transcribe', loaded, total }
   },
@@ -222,6 +222,12 @@ they land. When every second is covered the complete WebVTT is handed to the pla
 as the track's file, so what the viewer picked is what fills, and what fills is
 finally a subtitle like any other. The page's thread never decodes anything; every
 window is read, decoded and transcribed in workers and the buffers are transferred.
+
+While it works, a small pill sits in the top corner of the video with a progress ring,
+one word and the percentage: `Downloading`, `Starting`, `Listening`, `Transcribing` (the
+share of the file done), and `Ready` before it fades. Its x hides it for the rest of the
+run. It needs no stylesheet. `status: false` turns it off, for a page that shows progress
+itself from `onState`.
 
 `quality` picks the models. `fast` is the small model alone: fewest bytes (43 MB) and
 cores. `balanced` adds the base model (82 MB) behind it, on machines with the cores
