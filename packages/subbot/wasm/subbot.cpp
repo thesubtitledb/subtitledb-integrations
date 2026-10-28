@@ -150,7 +150,7 @@ static std::string vad(const emscripten::val &audio, const std::string &opts_jso
     }
     whisper_vad_free_segments(segs);
   }
-  return out.dump();
+  return out.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 static std::string g_pending_lang;
@@ -162,7 +162,7 @@ static void on_segment(whisper_context *ctx, whisper_state *, int n_new, void *)
               {"t1", whisper_full_get_segment_t1(ctx, i) / 100.0},
               {"text", whisper_full_get_segment_text(ctx, i)},
               {"nsp", whisper_full_get_segment_no_speech_prob(ctx, i)}};
-    std::string js = s.dump();
+    std::string js = s.dump(-1, ' ', false, json::error_handler_t::replace);
     EM_ASM({ if (Module['onSegment']) Module['onSegment'](UTF8ToString($0)); }, js.c_str());
   }
 }
@@ -234,7 +234,7 @@ static std::string transcribe(const emscripten::val &audio, const std::string &o
   if (rc != 0) {
     out["error"] = "whisper_full failed";
     out["rc"] = rc;
-    return out.dump();
+    return out.dump(-1, ' ', false, json::error_handler_t::replace);
   }
   int lang_id = whisper_full_lang_id(g_ctx);
   out["lang"] = lang_id >= 0 ? whisper_lang_str(lang_id) : "";
@@ -266,7 +266,7 @@ static std::string transcribe(const emscripten::val &audio, const std::string &o
     segs.push_back(s);
   }
   out["segments"] = segs;
-  return out.dump();
+  return out.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // Encoder context for a stretch of 16 kHz audio: the model's 30 s is 1500 frames.
@@ -321,7 +321,7 @@ static std::string detect_language(const emscripten::val &audio) {
     probs[best] = -1;
   }
   out["top"] = top;
-  return out.dump();
+  return out.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 static std::string info() {
@@ -331,7 +331,7 @@ static std::string info() {
             {"multilingual", is_multilingual()},
             {"n_audio_ctx", g_ctx ? whisper_n_audio_ctx(g_ctx) : 0},
             {"system", whisper_print_system_info()}};
-  return o.dump();
+  return o.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 static void free_all() {

@@ -88,7 +88,8 @@ export function segmentsToCues(segments: Segment[], tier: Tier, t0: number, t1: 
   let last = '';
   for (const s of segments) {
     if (s.nsp > 0.6 && s.p < 0.5) continue;
-    const raw = s.text.trim().replace(/\s+/g, ' ');
+    // U+FFFD: half a character, where the decoder split one across two tokens.
+    const raw = s.text.replace(/�/g, '').trim().replace(/\s+/g, ' ');
     if (looped(raw)) continue;
     const text = unloop(raw);
     if (!text || isJunk(text)) continue;

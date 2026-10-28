@@ -183,6 +183,13 @@ describe('held', () => {
   });
 });
 
+describe('a character split across tokens', () => {
+  it('is left out of the line, not shown as a replacement mark', () => {
+    const cues = segmentsToCues([seg(0, 2, 'ありがとう�')], 'live', 0, 10);
+    expect(cues.map((c) => c.text)).toEqual(['ありがとう']);
+  });
+});
+
 describe('decoder loops', () => {
   // Heard live on The Powerpuff Girls Movie at 66 s: dozens of cues of this.
   const loop = Array.from({ length: 20 }, () => '**** of').join(' ');
