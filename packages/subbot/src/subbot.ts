@@ -70,6 +70,7 @@ export type SubbotState =
   | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
+  | { state: 'paused' }
   | { state: 'complete'; cues: number }
   | { state: 'identified'; identified: Identified }
   | { state: 'error'; error: Error };
@@ -150,6 +151,8 @@ export class Subbot {
   private duration = 0;
   private fresh = true;
   private stopped = false;
+  /** Captions off in the browser's menu: no new windows until the row is picked again. */
+  private paused = false;
   private failure: Error | null = null;
   private wake: (() => void) | null = null;
   private unhook: (() => void) | null = null;
@@ -183,6 +186,7 @@ export class Subbot {
       candidateLabel(syntheticCandidate(this.cfg.language)),
       lang,
       this.cfg.status !== false,
+      (off) => this.setPaused(off),
     );
     this.store.listen((added, removed) => {
       this.renderer.apply(added, removed);
@@ -342,6 +346,19 @@ export class Subbot {
     this.media.removeEventListener('seeking', this.onSeek);
   }
 
+  private setPaused(paused: boolean): void {
+    if (this.stopped || paused === this.paused) return;
+    this.paused = paused;
+    if (paused) {
+      this.renderer.status(null);
+      this.emit({ state: 'paused' });
+      return;
+    }
+    // Back on: from where the viewer is now, with the short first window.
+    this.fresh = true;
+    this.wake?.();
+  }
+
   private readonly onSeek = (): void => {
     this.fresh = true;
     const live = this.live;
@@ -498,6 +515,8 @@ export class Subbot {
   private mark(tier: Tier, t0: number, t1: number): void {
     this.covered.add(t0, t1);
     if (tier === 'quality') this.qualityCovered.add(t0, t1);
+    // A window that was in flight when captions went off: kept, but not reported.
+    if (this.paused) return;
     // How far to the complete file: what `complete()` waits for.
     if (this.duration) {
       const done = (this.qualityModel ? this.qualityCovered : this.covered).total();
@@ -513,6 +532,10 @@ export class Subbot {
 
   private async liveLoop(): Promise<void> {
     while (!this.stopped && !this.complete()) {
+      if (this.paused) {
+        await this.sleep(400);
+        continue;
+      }
       const live = this.live as AsrWorker;
       const playhead = this.media.currentTime;
       const merged = this.merged(this.covered, 'live');
@@ -543,6 +566,10 @@ export class Subbot {
 
   private async qualityLoop(worker: AsrWorker): Promise<void> {
     while (!this.stopped && !this.complete()) {
+      if (this.paused) {
+        await this.sleep(500);
+        continue;
+      }
       const playhead = this.media.currentTime;
       const merged = this.merged(this.qualityCovered, 'quality');
       const w = nextQuality(

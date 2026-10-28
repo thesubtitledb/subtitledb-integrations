@@ -75,6 +75,7 @@ export type {
 } from './transcribe.js';
 export {
   DEFAULT_MODELS,
+  menuOrder,
   resolveTranscribe,
   SYNTHETIC_ID,
   syntheticCandidate,

@@ -32,9 +32,14 @@ function config(over: Partial<ResolvedTranscribe> = {}): ResolvedTranscribe {
   };
 }
 
-function start(fake: FakeOptions, over: Partial<ResolvedTranscribe> = {}, playhead = 0) {
+function start(
+  fake: FakeOptions,
+  over: Partial<ResolvedTranscribe> = {},
+  playhead = 0,
+  controls = false,
+) {
   const { spawn, log } = fakeSpawn(fake);
-  const media = fakeMedia(playhead, fake.duration);
+  const media = fakeMedia(playhead, fake.duration, { controls });
   const states: SubbotState[] = [];
   const req: TranscribeRequest = {
     media,
@@ -196,6 +201,49 @@ describe('the whole file', () => {
     await run;
     const live = states.filter((s) => s.state === 'live');
     expect(live.at(-1)).toMatchObject({ language: 'fr' });
+  });
+});
+
+describe('captions off in the browser menu', () => {
+  it('pauses the transcription, and resumes at the playhead when AI subtitles is picked', async () => {
+    vi.stubGlobal(
+      'VTTCue',
+      class {
+        constructor(
+          readonly startTime: number,
+          readonly endTime: number,
+          readonly text: string,
+        ) {}
+      },
+    );
+    const { log, media, states, run } = start(
+      { truth: lines(60), duration: 60, msPerSec: { 'tiny-q8_0': 20 } },
+      {},
+      0,
+      true,
+    );
+    const until = async (ok: () => boolean) => {
+      for (let i = 0; i < 200 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(ok()).toBe(true);
+    };
+    await until(() => log.windows.length >= 2);
+
+    media.pick(null);
+    await until(() => states.some((s) => s.state === 'paused'));
+    // The window in flight finishes; nothing new is asked for.
+    await new Promise((r) => setTimeout(r, 200));
+    const asked = log.windows.length;
+    await new Promise((r) => setTimeout(r, 600));
+    expect(log.windows.length).toBe(asked);
+    expect(states.at(-1)?.state).toBe('paused');
+
+    (media as { currentTime: number }).currentTime = 40;
+    media.pick('AI subtitles');
+    await until(() => log.windows.length > asked);
+    const next = log.windows[asked];
+    expect(next?.t0).toBe(40);
+    expect((next?.t1 ?? 0) - (next?.t0 ?? 0)).toBeCloseTo(LIVE.first, 1);
+    await run;
   });
 });
 

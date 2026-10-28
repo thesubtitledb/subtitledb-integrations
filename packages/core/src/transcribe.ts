@@ -78,6 +78,8 @@ export type TranscribeState =
   | { state: 'loading'; step: 'engine' | 'model' | 'audio'; loaded: number; total: number }
   | { state: 'listening' }
   | { state: 'live'; covered: number; duration: number; language: string | null }
+  /** The viewer turned captions off in the browser's menu; picking the row again resumes. */
+  | { state: 'paused' }
   | { state: 'complete'; cues: number }
   | { state: 'identified'; identified: Identified }
   | { state: 'error'; error: Error };
@@ -265,4 +267,13 @@ export function syntheticCandidate(language: string): Candidate {
     reason: 'on-device transcription',
     synthetic: true,
   };
+}
+
+/**
+ * Candidates in the order a captions menu lists them: the transcription row first,
+ * then the corpus files as ranked. A menu shows the first `maxTracks`, and last in the
+ * list the row fell off the end for a title with that many files.
+ */
+export function menuOrder(candidates: Candidate[]): Candidate[] {
+  return [...candidates.filter((c) => c.synthetic), ...candidates.filter((c) => !c.synthetic)];
 }

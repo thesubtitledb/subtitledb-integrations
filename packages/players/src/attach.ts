@@ -7,6 +7,7 @@ import {
   elementIdentity,
   handleForAny,
   type LoadedSubtitle,
+  menuOrder,
   type PlayerInfo,
   PlayerNotReachableError,
   type ResolveResult,
@@ -350,7 +351,7 @@ function attachViaApi(
     if (destroyed) return result;
 
     latest = result;
-    offered = result.candidates.slice(0, options.maxTracks ?? 30);
+    offered = menuOrder(result.candidates).slice(0, options.maxTracks ?? 30);
 
     // Nothing is published to the player until it is chosen. These players fetch a
     // track the moment it is registered, so registering all of them would download

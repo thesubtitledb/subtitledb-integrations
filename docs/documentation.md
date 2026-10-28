@@ -207,7 +207,7 @@ attach(video, {
     source: undefined,             // read the audio from here instead of the element
     status: true,                  // the small progress pill on the video; false hides it
     identify: true,                // swap in a corpus file that holds the words; false keeps the transcription
-    onState: (s) => {},            // warm, loading, listening, live, complete, identified, error (below)
+    onState: (s) => {},            // warm, loading, listening, live, paused, complete, identified, error (below)
     onProgress: (p) => {},         // { phase: 'engine'|'model'|'transcribe', loaded, total }
   },
 });
@@ -282,6 +282,7 @@ and playback keeps its own URL while the transcription reads the copy.
 { state: 'loading', step: 'engine' | 'model' | 'audio', loaded, total }
 { state: 'listening' }                                    // ready, first window running
 { state: 'live', covered, duration, language }            // seconds covered so far
+{ state: 'paused' }                                       // captions turned off in the browser's menu
 { state: 'complete', cues }
 { state: 'identified', identified }                     // a corpus file replaced the transcription
 { state: 'error', error }
@@ -341,6 +342,11 @@ it starts rendering, exactly as `select()` would. The one case that is not treat
 a choice is a track the browser switched on by itself while another one is already
 rendering; that one is turned back off, because two enabled languages showing one
 subtitle is a bug on screen and in the menu.
+
+With `transcribe` on, the menu lists **AI subtitles** first, above the corpus files.
+On an element with the browser's own controls, choosing Off in its captions menu
+pauses the transcription; choosing AI subtitles again resumes it from the playhead,
+with every line already made kept.
 
 `@subtitledb/html5` differs in two ways, because it is the one package that already
 knows which player it is talking to:
