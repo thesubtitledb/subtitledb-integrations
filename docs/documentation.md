@@ -216,7 +216,7 @@ attach(video, {
 The engine is SubBot, whisper.cpp built to WebAssembly and run in workers. The first
 line is on screen within a few seconds of the click with the models already cached: a
 two second window from the playhead goes through the small model first, then the
-engine keeps thirty seconds of lead ahead of the viewer in six second steps. Behind
+engine works ahead of the viewer in six second steps as fast as it can. Behind
 that a second tier re-does every window with a bigger model, nearest the playhead
 first and then from the start of the file, and its lines replace the first ones as
 they land. When every second is covered the complete WebVTT is handed to the player
@@ -252,8 +252,8 @@ behind. `model` names one whisper.cpp model to run alone instead, `tiny.en-q8_0`
 the default is the whisper.cpp mirror on HuggingFace, which needs a [wider
 CSP](cdn.md#on-device-transcription).
 
-`language` is detected from the first window by default and fixed for the rest of the
-run. Set it when you know it. `translate` is Whisper's own
+`language` is detected by default, and fixed for the rest of the run once two windows
+that gave lines agree on it. Set it when you know it. `translate` is Whisper's own
 and only ever targets English, so `autoSelect: 'locale'` on a foreign film is not
 satisfied by it.
 

@@ -28,6 +28,8 @@ export interface Cue {
 /** Lines the model produces on silence, music and credits. Dropped whole. */
 const JUNK = [
   /^[\s.,!?♪♫\-_"'()[\]]*$/,
+  // No letter or digit at all: "****", "...".
+  /^[^\p{L}\p{N}]*$/u,
   /^\s*[[(（].*[\])）]\s*$/,
   /^\s*(thank you|thanks|thank you for watching|thanks for watching)[.!\s]*$/i,
   /^\s*subtitles? by\b/i,
@@ -51,9 +53,29 @@ export function isJunk(text: string): boolean {
  * once, a single word three times or more to once ("no no" is speech).
  */
 function unloop(text: string): string {
-  return text
-    .replace(/\b(\S+(?:\s+\S+){1,6}?)(?:[,.\s]+\1\b)+/gi, '$1')
-    .replace(/\b(\S+)(?:[,.\s]+\1\b){2,}/gi, '$1');
+  // Words end at whitespace or punctuation, not at \b: "****" has no word boundary.
+  return (
+    text
+      .replace(/(?<![^\s,.!?])(\S+(?:\s+\S+){1,6}?)(?:[,.\s]+\1(?![^\s,.!?]))+/gi, '$1')
+      .replace(/(?<![^\s,.!?])(\S+)(?:[,.\s]+\1(?![^\s,.!?])){2,}/gi, '$1')
+      // Inside a word, five times or more: "s-s-s-s-s-see" to "s-s-s-see". Not digits.
+      .replace(/([^\s\d]{1,6}?)\1{4,}/g, '$1$1$1')
+  );
+}
+
+/**
+ * A segment the decoder looped on: twelve words or more made of a few word triples
+ * said over and over ("**** of **** of ..."), or one word stuck ("s-s-s-s-..."). Collapsed, it is still not what was
+ * said, so it is dropped whole.
+ */
+export function looped(text: string): boolean {
+  // One word the decoder stuck in: "s-s-s-s-s-s-s-s-s-s-...".
+  if (/([^\s\d]{1,6}?)\1{7,}/.test(text)) return true;
+  const w = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (w.length < 12) return false;
+  const tri = new Set<string>();
+  for (let i = 0; i + 2 < w.length; i++) tri.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`);
+  return tri.size / (w.length - 2) < 0.4;
 }
 
 /**
@@ -66,7 +88,9 @@ export function segmentsToCues(segments: Segment[], tier: Tier, t0: number, t1: 
   let last = '';
   for (const s of segments) {
     if (s.nsp > 0.6 && s.p < 0.5) continue;
-    const text = unloop(s.text.trim().replace(/\s+/g, ' '));
+    const raw = s.text.trim().replace(/\s+/g, ' ');
+    if (looped(raw)) continue;
+    const text = unloop(raw);
     if (!text || isJunk(text)) continue;
     // The same line twice in a row is the decoder repeating itself across windows.
     if (text.toLowerCase() === last.toLowerCase()) continue;

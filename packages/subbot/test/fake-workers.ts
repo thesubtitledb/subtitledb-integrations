@@ -24,6 +24,8 @@ export interface FakeOptions {
   audioError?: string;
   random?: boolean;
   lang?: string;
+  /** The language each window in turn comes back in; `lang` after the list. */
+  langs?: string[];
 }
 
 export interface FakeLog {
@@ -42,6 +44,7 @@ class FakeWorker implements WorkerLike {
   private model = '';
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private dead = false;
+  private windows = 0;
 
   constructor(
     private readonly o: FakeOptions,
@@ -112,7 +115,8 @@ class FakeWorker implements WorkerLike {
         }));
       const ms = len * (this.o.msPerSec?.[this.model] ?? 10);
       for (const s of segments) this.reply({ type: 'segment', id: m.id, segment: s }, ms / 2);
-      this.reply({ type: 'done', id: m.id, segments, lang: this.o.lang ?? 'en', ms }, ms);
+      const lang = this.o.langs?.[this.windows++] ?? this.o.lang ?? 'en';
+      this.reply({ type: 'done', id: m.id, segments, lang, ms }, ms);
     } else if (m.type === 'detect') {
       this.reply({ type: 'lang', id: m.id, lang: this.o.lang ?? 'en', p: 0.9 }, 1);
     }

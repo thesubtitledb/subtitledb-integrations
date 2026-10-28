@@ -22,7 +22,7 @@ browser's `AudioDecoder`. Nothing is decoded ahead of a request. HLS and DASH se
 are read as fragmented MP4 or MPEG-TS; WebM segments are not.
 
 The live ASR worker runs the small model on short windows from the playhead: two
-seconds first, then six, thirty seconds of lead at most. Its first window is what
+seconds first, then six, as far ahead as it gets. Its first window is what
 sets the time to the first cue.
 
 It is started before the click. When the session offers the transcription row it

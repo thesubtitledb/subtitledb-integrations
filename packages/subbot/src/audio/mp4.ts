@@ -546,8 +546,13 @@ export function chunksOf(
   return out;
 }
 
-/** Contiguous byte extents covering the samples, merging gaps under `slack` bytes. */
-export function extents(samples: Mp4Sample[], slack = 64 * 1024): Array<[number, number]> {
+/**
+ * Contiguous byte extents covering the samples, merging gaps under `slack` bytes. Each
+ * extent is a request, and a request to a host like archive.org is a second or more,
+ * while 256 KB more of it is a fraction of that: in a 6 Mbps file the audio sits
+ * between ~100 KB runs of video, and a 6 s window was 40 requests at 64 KB.
+ */
+export function extents(samples: Mp4Sample[], slack = 256 * 1024): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   for (const s of samples) {
     const last = out[out.length - 1];

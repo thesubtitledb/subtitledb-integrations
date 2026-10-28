@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type BrowserContext, chromium, expect, test } from '@playwright/test';
@@ -50,15 +50,20 @@ const CORS = { 'access-control-allow-origin': '*' };
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
 let context: BrowserContext;
+/** The Chrome profile: ~400 MB once the models are cached in it, removed after. */
+let profile = '';
 let page: import('@playwright/test').Page;
 
 test.beforeAll(async () => {
   // A profile on disk rather than the fixture's in-memory context: Chromium keeps
   // the engine's optimised code in that profile's code cache once a run has
   // compiled it, and the next run starts on it, as a viewer's browser does.
-  context = await chromium.launchPersistentContext(await mkdtemp(join(tmpdir(), 'subbot-')), {
-    headless: true,
-  });
+  context = await chromium.launchPersistentContext(
+    (profile = await mkdtemp(join(tmpdir(), 'subbot-'))),
+    {
+      headless: true,
+    },
+  );
   // The corpus lookup answers no match unless a test says otherwise, so the runs
   // below transcribe the whole minute whatever the live index holds.
   await context.route(/\/v1\/subbot\/identify\b/, (r) =>
@@ -73,6 +78,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await context.close();
+  await rm(profile, { recursive: true, force: true });
 });
 
 async function report(): Promise<Report> {

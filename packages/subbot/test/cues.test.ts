@@ -4,6 +4,7 @@ import {
   CueStore,
   held,
   isJunk,
+  looped,
   type Segment,
   segmentsToCues,
   trimToSpeech,
@@ -179,5 +180,46 @@ describe('held', () => {
     const [a] = held(heard);
     expect(a?.end).toBe(2);
     expect(heard[0]?.end).toBe(2);
+  });
+});
+
+describe('decoder loops', () => {
+  // Heard live on The Powerpuff Girls Movie at 66 s: dozens of cues of this.
+  const loop = Array.from({ length: 20 }, () => '**** of').join(' ');
+
+  it('drops a looped segment whole, and keeps the lines around it', () => {
+    const cues = segmentsToCues(
+      [seg(60, 64, 'Who is there to help?'), seg(64, 66, loop), seg(66, 68, 'Fear not.')],
+      'live',
+      60,
+      68,
+    );
+    expect(cues.map((c) => c.text)).toEqual(['Who is there to help?', 'Fear not.']);
+  });
+
+  it('tells a loop from speech', () => {
+    expect(looped(loop)).toBe(true);
+    expect(
+      looped('the city of townsville is under attack again and the girls are on their way'),
+    ).toBe(false);
+    expect(looped('Yes yes yes.')).toBe(false);
+    expect(isJunk('**** ****')).toBe(true);
+  });
+
+  it('drops a word the decoder stuck in, and shortens a short stutter', () => {
+    // Heard on the same film at 81 s with the released loader.
+    expect(looped(`there was a ${'s-'.repeat(40)}`)).toBe(true);
+    const [c] = segmentsToCues(
+      [seg(0, 2, 'I s-s-s-s-s-s-see. Aaaaaaah! In 1000000 years.')],
+      'live',
+      0,
+      2,
+    );
+    expect(c?.text).toBe('I s-s-s-see. Aaaah! In 1000000 years.');
+  });
+
+  it('collapses a short repeat of words with no word boundary', () => {
+    const [c] = segmentsToCues([seg(0, 2, 'Oh **** **** ****!')], 'live', 0, 2);
+    expect(c?.text).toBe('Oh ****!');
   });
 });
