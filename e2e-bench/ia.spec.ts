@@ -154,12 +154,10 @@ let page: Page;
 const rows: Row[] = [];
 
 test.beforeAll(async () => {
-  context = await chromium.launchPersistentContext(
-    (profile = await mkdtemp(join(tmpdir(), 'subbot-ia-'))),
-    {
-      headless: true,
-    },
-  );
+  profile = await mkdtemp(join(tmpdir(), 'subbot-ia-'));
+  context = await chromium.launchPersistentContext(profile, {
+    headless: true,
+  });
   // No corpus lookup: a match would swap the corpus file in and score it, not SubBot.
   await context.route(/\/v1\/subbot\/identify\b/, (r) =>
     r.fulfill({

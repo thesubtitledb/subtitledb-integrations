@@ -58,12 +58,10 @@ test.beforeAll(async () => {
   // A profile on disk rather than the fixture's in-memory context: Chromium keeps
   // the engine's optimised code in that profile's code cache once a run has
   // compiled it, and the next run starts on it, as a viewer's browser does.
-  context = await chromium.launchPersistentContext(
-    (profile = await mkdtemp(join(tmpdir(), 'subbot-'))),
-    {
-      headless: true,
-    },
-  );
+  profile = await mkdtemp(join(tmpdir(), 'subbot-'));
+  context = await chromium.launchPersistentContext(profile, {
+    headless: true,
+  });
   // The corpus lookup answers no match unless a test says otherwise, so the runs
   // below transcribe the whole minute whatever the live index holds.
   await context.route(/\/v1\/subbot\/identify\b/, (r) =>
