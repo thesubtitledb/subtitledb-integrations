@@ -31,6 +31,38 @@ export function fromBlob(blob: Blob): ByteSource {
   };
 }
 
+export const RETRIES = 2;
+export const RETRY_MS = 300;
+/** Range requests in flight at once for one window. */
+export const READS = 6;
+
+/**
+ * Many ranges of one source, `READS` at a time, in order. A window of audio in a
+ * high-bitrate MP4 is dozens of ranges (the audio sits between ~100 KB runs of video),
+ * and one after another each is a full round trip to the host. The first is read
+ * alone: it learns whether the server honours Range, and if not the rest come from the
+ * whole body it kept.
+ */
+export async function readRanges(
+  src: ByteSource,
+  ranges: ReadonlyArray<readonly [number, number]>,
+): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = new Array(ranges.length);
+  const first = ranges[0];
+  if (!first) return out;
+  out[0] = await src.read(first[0], first[1]);
+  let next = 1;
+  const lane = async (): Promise<void> => {
+    while (next < ranges.length) {
+      const i = next++;
+      const [a, b] = ranges[i] as readonly [number, number];
+      out[i] = await src.read(a, b);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(READS, ranges.length - 1) }, lane));
+  return out;
+}
+
 /**
  * A URL read with Range requests. The first read learns the size from Content-Range.
  * A server that answers 200 to a Range request has no range support; the whole body
@@ -43,7 +75,13 @@ export function fromUrl(url: string, fetchFn: typeof fetch = fetch): ByteSource 
     size: null,
     async read(start, end) {
       if (whole) return whole.subarray(start, Math.min(end, whole.length));
-      const res = await fetchFn(url, { headers: { range: `bytes=${start}-${end - 1}` } });
+      const ask = () => fetchFn(url, { headers: { range: `bytes=${start}-${end - 1}` } });
+      let res = await ask();
+      // A 5xx is often one bad node behind a balancer (archive.org has them): ask again.
+      for (let i = 1; i <= RETRIES && res.status >= 500; i++) {
+        await new Promise((r) => setTimeout(r, RETRY_MS * i));
+        res = await ask();
+      }
       if (res.status === 206) {
         const m = /\/(\d+)\s*$/.exec(res.headers.get('content-range') ?? '');
         if (m) src.size = Number(m[1]);

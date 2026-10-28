@@ -9,6 +9,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(dirname(fileURLToPath(import.meta.url))), 'examples');
@@ -31,9 +32,53 @@ const TYPES = {
   '.mp3': 'audio/mpeg',
 };
 
+/**
+ * /archive/<item>/<file>: a file on the Internet Archive read through this origin, for
+ * the bench (e2e-bench/). archive.org's /download/ honours Range but redirects to a
+ * node that sends no CORS header, so SubBot's worker cannot read it directly; the
+ * site reads its demo films through its own /archive/ the same way.
+ */
+async function archive(path, req, res) {
+  const headers = { 'user-agent': 'subtitledb examples' };
+  if (req.headers.range) headers.range = req.headers.range;
+  const method = req.method === 'HEAD' ? 'HEAD' : 'GET';
+  let up;
+  // archive.org now and then ignores Range and sends the whole file, or one of its
+  // nodes answers 5xx: ask again.
+  for (let i = 0; i < 3; i++) {
+    up = await fetch(`https://archive.org/download/${path}`, { method, headers });
+    if (up.status < 500 && !(headers.range && up.status === 200)) break;
+    await up.body?.cancel();
+  }
+  if (headers.range && up.status === 200) {
+    res.writeHead(502, { 'content-type': 'text/plain' });
+    res.end('archive.org ignored the range');
+    return;
+  }
+  const out = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
+  for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+    const v = up.headers.get(h);
+    if (v) out[h] = v;
+  }
+  res.writeHead(up.status, out);
+  if (!up.body || method === 'HEAD') {
+    res.end();
+    return;
+  }
+  const body = Readable.fromWeb(up.body);
+  // A media element drops a range it no longer wants; stop reading archive.org too.
+  res.on('close', () => body.destroy());
+  body.on('error', () => res.destroy());
+  body.pipe(res);
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname.startsWith('/archive/')) {
+      await archive(url.pathname.slice('/archive/'.length), req, res);
+      return;
+    }
     const rel = decodeURIComponent(url.pathname);
     // normalize collapses any ../ before it is joined, so a request cannot escape
     // the examples directory.

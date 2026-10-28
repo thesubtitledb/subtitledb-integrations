@@ -8,7 +8,7 @@
  * segments.
  */
 import { SubbotError } from '../errors.js';
-import { type ByteSource, be, concat, fromBlob, fromUrl, Reader } from './bytes.js';
+import { type ByteSource, be, concat, fromBlob, fromUrl, Reader, readRanges } from './bytes.js';
 import type { AudioCodec, EncodedChunk } from './codec.js';
 import { type DashAudio, parseMpd } from './dash.js';
 import * as ebml from './ebml.js';
@@ -140,9 +140,11 @@ export class Mp4Source implements Source {
     const track = this.track;
     if (!this.frags) {
       const samples = mp4.samplesBetween(track, t0, t1);
+      const ranges = mp4.extents(samples);
+      const parts = await readRanges(this.r.src, ranges);
       const out: EncodedChunk[] = [];
-      for (const [a, b] of mp4.extents(samples)) {
-        const bytes = await this.r.src.read(a, b);
+      for (const [i, [a, b]] of ranges.entries()) {
+        const bytes = parts[i] as Uint8Array;
         out.push(
           ...mp4.chunksOf(
             samples.filter((s) => s.offset >= a && s.offset + s.size <= b),

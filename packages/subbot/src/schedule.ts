@@ -68,11 +68,14 @@ export interface LivePlan {
   first: number;
   /** Later windows. */
   step: number;
-  /** How far ahead of the playhead to stay. Beyond it the live tier idles. */
+  /** How far ahead of the playhead to go. Beyond it the live tier idles. */
   lead: number;
 }
 
-export const LIVE: LivePlan = { first: 2, step: 6, lead: 30 };
+/** No lead limit: the live tier works ahead as fast as it can, to the end of the file. */
+export const LIVE: LivePlan = { first: 2, step: 6, lead: Number.POSITIVE_INFINITY };
+/** A live window this far from where the viewer seeked to is not worth finishing. */
+export const FAR = 30;
 export const QUALITY_WINDOW = 15;
 
 /**

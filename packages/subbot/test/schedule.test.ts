@@ -30,12 +30,18 @@ describe('nextLive', () => {
     expect(nextLive(10, new Intervals(), audio, 600, LIVE, true)).toEqual({ t0: 10, t1: 12 });
   });
 
-  it('then takes the step and stops at the lead', () => {
+  it('then takes the step, and goes on ahead with no lead limit', () => {
     const done = new Intervals();
     done.add(10, 14);
     expect(nextLive(10, done, audio, 600)).toEqual({ t0: 14, t1: 20 });
-    done.add(14, 40);
+    done.add(14, 400);
+    expect(nextLive(10, done, audio, 600)).toEqual({ t0: 400, t1: 406 });
+    done.add(400, 600);
     expect(nextLive(10, done, audio, 600)).toBeNull();
+    // A plan with a lead stops there.
+    const near = new Intervals();
+    near.add(10, 40);
+    expect(nextLive(10, near, audio, 600, { ...LIVE, lead: 30 })).toBeNull();
   });
 
   it('is bounded by the decoded audio and the duration', () => {

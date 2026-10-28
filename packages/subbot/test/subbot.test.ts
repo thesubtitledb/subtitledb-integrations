@@ -83,6 +83,21 @@ describe('the first cue', () => {
   });
 });
 
+describe('the live tier', () => {
+  it('keeps to the playhead while the quality tier works on the same seconds', async () => {
+    const { run, log } = start(
+      { truth: lines(60), duration: 60, msPerSec: { 'tiny-q8_0': 5, 'base-q8_0': 50 } },
+      { quality: 'balanced' },
+    );
+    await run;
+    const live = log.windows.filter((w) => w.model === 'tiny-q8_0').map((w) => w.t0);
+    // The first window, then straight on from its end: not past the pool's windows.
+    expect(live[0]).toBe(0);
+    expect(live[1]).toBeCloseTo(LIVE.first, 1);
+    expect(live[2]).toBeCloseTo(LIVE.first + LIVE.step, 1);
+  });
+});
+
 describe('the whole file', () => {
   it('takes over the worker warmed before the click, and only asks it for the model', async () => {
     const fake = { truth: lines(10), duration: 10 };
@@ -153,7 +168,30 @@ describe('the whole file', () => {
     expect(states.at(-1)?.state).toBe('complete');
   });
 
-  it('detects the language from the first window and reports it', async () => {
+  it('takes a language only once two windows with speech agree on it', async () => {
+    const { run, states } = start({ truth: lines(30), duration: 30, langs: ['ja', 'en', 'en'] });
+    await run;
+    const live = states.filter((s) => s.state === 'live');
+    expect(live[0]).toMatchObject({ language: null });
+    expect(live.at(-1)).toMatchObject({ language: 'en' });
+    expect(live.some((s) => s.language === 'ja')).toBe(false);
+  });
+
+  it('does not take a language from windows that gave no lines', async () => {
+    // Music for the first 8 s: whisper hears "Japanese" in it and writes only notes.
+    const music = [0.5, 2.5, 4.5, 6.5].map((t) => ({ t0: t, t1: t + 1.4, text: '♪' }));
+    const speech = lines(30).filter((l) => l.t0 > 8);
+    const { run, states } = start({
+      truth: [...music, ...speech],
+      duration: 30,
+      langs: ['ja', 'ja'],
+    });
+    await run;
+    expect(states.some((s) => s.language === 'ja')).toBe(false);
+    expect(states.filter((s) => s.state === 'live').at(-1)).toMatchObject({ language: 'en' });
+  });
+
+  it('detects the language from the first windows and reports it', async () => {
     const { run, states } = start({ truth: lines(10), duration: 10, lang: 'fr' });
     await run;
     const live = states.filter((s) => s.state === 'live');

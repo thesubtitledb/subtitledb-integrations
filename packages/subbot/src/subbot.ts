@@ -3,9 +3,9 @@
  * in the rest of the file behind, and hand a complete WebVTT back at the end.
  *
  * Two tiers. The live tier is one worker with the small model, fed a short first
- * window from the playhead and then six second steps, thirty seconds ahead at most,
- * so the first line is on screen within a few seconds of the click and the lead
- * never runs out. The quality tier is a pool with the bigger model, fifteen second
+ * window from the playhead and then six second steps, as far ahead as it gets, so
+ * the first line is on screen within a few seconds of the click and the lead never
+ * runs out. The quality tier is a pool with the bigger model, fifteen second
  * windows, nearest the playhead first and then from the start of the file; its
  * cues replace the live ones as they land. Everything heavy is in workers and every
  * buffer is transferred, so the page's thread only ever moves cues around.
@@ -41,6 +41,7 @@ import { SubbotError } from './errors.js';
 import { type Plan, planFor } from './players.js';
 import { TrackRenderer } from './render.js';
 import {
+  FAR,
   Intervals,
   LIVE,
   nextLive,
@@ -137,13 +138,15 @@ export class Subbot {
   private readonly renderer: TrackRenderer;
   private readonly covered = new Intervals();
   private readonly qualityCovered = new Intervals();
-  private inflight: Window[] = [];
+  private inflight: Array<Window & { tier: Tier }> = [];
   private audio: AudioWorker | null = null;
   private live: AsrWorker | null = null;
   private pool: AsrWorker[] = [];
   private readonly liveModel: string;
   private qualityModel: string | null;
   private language: string | null = null;
+  /** The language the last window with speech was heard in, before two agree. */
+  private heard: string | null = null;
   private duration = 0;
   private fresh = true;
   private stopped = false;
@@ -346,7 +349,7 @@ export class Subbot {
     if (live && b) {
       const expect = (b.t1 - b.t0) * this.rate.live;
       const remaining = expect - (performance.now() - b.started);
-      const far = Math.abs(this.media.currentTime - b.t0) > LIVE.lead;
+      const far = Math.abs(this.media.currentTime - b.t0) > FAR;
       // A window far from where the viewer went, with most of its cost still ahead,
       // is not worth finishing. Terminating is the only way to stop a decode.
       if (far && remaining > RESTART_MS) {
@@ -393,10 +396,15 @@ export class Subbot {
     return iv.until(t);
   }
 
-  private merged(base: Intervals): Intervals {
+  /**
+   * What a tier counts as taken: `base` and its own windows in flight. Not the other
+   * tier's: a quality window at the playhead takes many times longer than a live one,
+   * and a live tier that stepped round it left the viewer waiting on the big model.
+   */
+  private merged(base: Intervals, tier: Tier): Intervals {
     const iv = new Intervals();
     iv.spans = base.spans.map((s) => [s[0], s[1]] as Span);
-    for (const w of this.inflight) iv.add(w.t0, w.t1);
+    for (const w of this.inflight) if (w.tier === tier) iv.add(w.t0, w.t1);
     return iv;
   }
 
@@ -421,7 +429,8 @@ export class Subbot {
   }
 
   private async work(worker: AsrWorker, w: Window, tier: Tier): Promise<void> {
-    this.inflight.push(w);
+    const job = { ...w, tier };
+    this.inflight.push(job);
     try {
       await worker.ready;
       const audio = this.audio as AudioWorker;
@@ -456,12 +465,23 @@ export class Subbot {
       const r = await worker.transcribe(pcm, t0, t1, opts);
       const ms = performance.now() - started;
       this.rate[tier] = 0.7 * this.rate[tier] + 0.3 * (ms / len);
-      if (!this.language && this.cfg.language === 'auto' && r.lang && r.lang !== 'auto')
-        this.language = r.lang;
       const cues = trimToSpeech(
         segmentsToCues(r.segments as Segment[], tier, t0, t1),
         r.spans ?? [],
       );
+      // Whisper names a language for music too: Kingsman's opening came back Japanese,
+      // twice, as lines the junk filter dropped. Take a language once two windows that
+      // gave lines agree on it.
+      if (
+        !this.language &&
+        this.cfg.language === 'auto' &&
+        r.lang &&
+        r.lang !== 'auto' &&
+        cues.length > 0
+      ) {
+        if (r.lang === this.heard) this.language = r.lang;
+        else this.heard = r.lang;
+      }
       if (this.stopped) return;
       this.store.replace(t0, t1, cues, tier);
       // The window was asked from w.t0; what came back may start a little earlier or
@@ -471,7 +491,7 @@ export class Subbot {
       if (e instanceof SubbotError && e.code === 'aborted') return;
       throw e;
     } finally {
-      this.inflight = this.inflight.filter((x) => x !== w);
+      this.inflight = this.inflight.filter((x) => x !== job);
     }
   }
 
@@ -495,7 +515,7 @@ export class Subbot {
     while (!this.stopped && !this.complete()) {
       const live = this.live as AsrWorker;
       const playhead = this.media.currentTime;
-      const merged = this.merged(this.covered);
+      const merged = this.merged(this.covered, 'live');
       let w = nextLive(
         playhead,
         merged,
@@ -524,7 +544,7 @@ export class Subbot {
   private async qualityLoop(worker: AsrWorker): Promise<void> {
     while (!this.stopped && !this.complete()) {
       const playhead = this.media.currentTime;
-      const merged = this.merged(this.qualityCovered);
+      const merged = this.merged(this.qualityCovered, 'quality');
       const w = nextQuality(
         playhead,
         merged,
@@ -606,7 +626,7 @@ export class Subbot {
   private firstWindow(): Window | null {
     const w = nextLive(
       this.media.currentTime,
-      this.merged(this.covered),
+      this.merged(this.covered, 'live'),
       (t) => this.audioUntil(t),
       this.duration,
       LIVE,

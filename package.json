@@ -20,6 +20,7 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "vendor": "node scripts/make-sample-video.mjs && node scripts/make-licences.mjs && node scripts/vendor-examples.mjs",
     "e2e": "playwright test",
+    "bench:ia": "playwright test --config playwright.bench.config.ts",
     "serve": "node scripts/serve-examples.mjs",
     "build:cdn": "npm run build --workspace @subtitledb/loader && node packages/loader/build.mjs",
     "retain:cdn": "node packages/loader/retain.mjs",
