@@ -9,6 +9,7 @@ import {
   type LoadedSubtitle,
   type MediaHint,
   type MediaRef,
+  menuOrder,
   type PlayerInfo,
   type PlayerVia,
   type ResolveResult,
@@ -157,6 +158,8 @@ export function attachSubtitleDb(
 
   const objectUrls: string[] = [];
   const added: HTMLTrackElement[] = [];
+  /** The transcription row's track while it holds the empty file, before its own. */
+  const placeholders = new Set<HTMLTrackElement>();
   let latest: ResolveResult | null = null;
   let offered: Candidate[] = [];
   let chosen: Candidate | null = null;
@@ -171,6 +174,7 @@ export function attachSubtitleDb(
     chosen = null;
     for (const t of added) t.remove();
     added.length = 0;
+    placeholders.clear();
     for (const u of objectUrls) URL.revokeObjectURL(u);
     objectUrls.length = 0;
   }
@@ -185,6 +189,15 @@ export function attachSubtitleDb(
     el.kind = 'subtitles';
     el.label = candidateLabel(c);
     el.srclang = c.subtitle.language;
+    // The transcription row is filled cue by cue, so it gets an empty file to load. A
+    // track with no src that is shown fails to load, and Chrome then drops it from
+    // its captions menu: the row the viewer picked vanished from the menu.
+    if (c.synthetic) {
+      const url = blobUrl('WEBVTT\n\n');
+      objectUrls.push(url);
+      el.src = url;
+      placeholders.add(el);
+    }
     video.append(el);
     added.push(el);
     if (el.track) el.track.mode = 'disabled';
@@ -263,6 +276,7 @@ export function attachSubtitleDb(
     const url = blobUrl(loaded.text);
     objectUrls.push(url);
     el.src = url;
+    placeholders.delete(el);
 
     for (const other of added) {
       if (other.track) other.track.mode = other === el ? 'showing' : 'disabled';
@@ -318,7 +332,7 @@ export function attachSubtitleDb(
     if (destroyed) return result;
 
     latest = result;
-    const next = result.candidates.slice(0, options.maxTracks ?? 30);
+    const next = menuOrder(result.candidates).slice(0, options.maxTracks ?? 30);
 
     // Rebuilding the track elements throws away the one the viewer is watching, so
     // only do it when the offer actually changed. Players fire loadedmetadata after
@@ -351,13 +365,14 @@ export function attachSubtitleDb(
    */
   const onTrackChange = () => {
     if (destroyed) return;
-    const empty = added.filter((t) => !t.src && t.track?.mode === 'showing');
+    const waiting = (t: HTMLTrackElement) => !t.src || placeholders.has(t);
+    const empty = added.filter((t) => waiting(t) && t.track?.mode === 'showing');
     if (empty.length === 0) return;
 
     // Something is already on screen, so this is the browser's duplicate of a choice
     // that has been made. An empty track showing beside a real one renders nothing
     // and makes the player's own menu show two languages enabled at once.
-    if (added.some((t) => t.src && t.track?.mode === 'showing')) {
+    if (added.some((t) => !waiting(t) && t.track?.mode === 'showing')) {
       for (const t of empty) {
         if (t.track) t.track.mode = 'disabled';
       }

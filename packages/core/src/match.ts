@@ -48,9 +48,7 @@ export function candidateLabel(c: Candidate): string {
   // media's own audio transcribed on the device, so it is labelled as such and marked
   // with the language it will produce rather than a cue count it does not have yet.
   if (c.synthetic) {
-    return s.language === 'auto'
-      ? 'AI transcription'
-      : `AI transcription (${languageName(s.language)})`;
+    return s.language === 'auto' ? 'AI subtitles' : `AI subtitles (${languageName(s.language)})`;
   }
   const bits: string[] = [languageName(s.language)];
   if (s.hearing_impaired) bits.push('HI');

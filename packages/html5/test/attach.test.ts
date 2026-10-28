@@ -150,6 +150,39 @@ afterEach(() => {
 });
 
 describe('html5 track adapter', () => {
+  it('lists AI subtitles first in the captions menu, inside the track cap', async () => {
+    const { video } = installDom();
+    const transcriber = Object.assign(
+      vi.fn(async () => ({ text: 'WEBVTT\n', format: 'vtt' as const })),
+      {},
+    );
+    const { handle } = attach(video, {
+      transcribe: { when: 'always' },
+      transcriber,
+      maxTracks: 2,
+    });
+    await handle.refresh();
+
+    expect(video.children.map((t) => t.label)).toEqual(['AI subtitles', 'English - 1386 lines']);
+    handle.destroy();
+  });
+
+  it('starts the transcription when AI subtitles is picked in the menu', async () => {
+    // Its track holds an empty file, so it has a src like a loaded one, and is still
+    // a request when the viewer turns it on.
+    const { video } = installDom();
+    const transcriber = vi.fn(async () => ({ text: 'WEBVTT\n', format: 'vtt' as const }));
+    const { handle } = attach(video, { transcribe: { when: 'always' }, transcriber });
+    await handle.refresh();
+    const ai = video.children[0];
+    expect(ai?.src).toMatch(/^blob:/);
+
+    if (ai) ai.track.mode = 'showing';
+    video.textTracks.emitChange();
+    await vi.waitFor(() => expect(transcriber).toHaveBeenCalledTimes(1));
+    handle.destroy();
+  });
+
   it('resolves eagerly on loadedmetadata, with no click and no bytes', async () => {
     const { video, tracks } = installDom();
     const { handle, calls } = attach(video);

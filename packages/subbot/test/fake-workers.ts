@@ -146,16 +146,55 @@ export function fakeSpawn(o: FakeOptions): { spawn: Spawn; log: FakeLog } {
 }
 
 /** The least of a media element the orchestrator reads. */
-export function fakeMedia(currentTime = 0, duration = Number.NaN): HTMLMediaElement {
+export interface FakeTextTrack {
+  label: string;
+  mode: string;
+  cues: unknown[];
+  addCue(c: unknown): void;
+  removeCue(c: unknown): void;
+}
+
+/** What the browser's captions menu does: Off, or one track by its label. */
+export interface CaptionsMenu {
+  pick(label: string | null): void;
+}
+
+export function fakeMedia(
+  currentTime = 0,
+  duration = Number.NaN,
+  opts: { controls?: boolean } = {},
+): HTMLMediaElement & CaptionsMenu {
   const listeners = new Map<string, Set<() => void>>();
+  const changes = new Set<() => void>();
+  const tracks: FakeTextTrack[] = [];
+  const textTracks = Object.assign(tracks, {
+    addEventListener: (_t: string, fn: () => void) => changes.add(fn),
+    removeEventListener: (_t: string, fn: () => void) => changes.delete(fn),
+  });
   const el = {
     currentSrc: 'https://x.test/a.mp4',
     src: 'https://x.test/a.mp4',
     currentTime,
     duration,
+    controls: opts.controls ?? false,
     parentElement: null,
-    textTracks: { length: 0 },
+    textTracks,
     querySelectorAll: () => [],
+    addTextTrack(_kind: string, label: string) {
+      const t: FakeTextTrack = {
+        label,
+        mode: 'disabled',
+        cues: [],
+        addCue: (c) => t.cues.push(c),
+        removeCue: (c) => t.cues.splice(t.cues.indexOf(c), 1),
+      };
+      tracks.push(t);
+      return t;
+    },
+    pick(label: string | null) {
+      for (const t of tracks) t.mode = t.label === label ? 'showing' : 'disabled';
+      for (const fn of changes) fn();
+    },
     addEventListener(type: string, fn: () => void) {
       if (!listeners.has(type)) listeners.set(type, new Set());
       listeners.get(type)?.add(fn);
@@ -168,5 +207,5 @@ export function fakeMedia(currentTime = 0, duration = Number.NaN): HTMLMediaElem
       for (const fn of listeners.get('seeking') ?? []) fn();
     },
   };
-  return el as unknown as HTMLMediaElement;
+  return el as unknown as HTMLMediaElement & CaptionsMenu;
 }
