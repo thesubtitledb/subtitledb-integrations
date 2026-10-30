@@ -1,0 +1,16 @@
+{
+  "name": "@subtitledb/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The TheSubtitleDB browser extension for Chrome and Firefox: subtitles from the corpus on any video, drawn over the player, and AI subtitles made on the device by SubBot.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "e2e": "playwright test --config playwright.config.ts",
+    "e2e:firefox": "node e2e/firefox/run.mjs",
+    "icons": "node scripts/icons.mjs"
+  }
+}

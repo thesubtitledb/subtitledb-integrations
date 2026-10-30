@@ -1,0 +1,118 @@
+name: Extension
+
+# The browser extension's own suite, run only when something it is built from changes,
+# so the rest of the repo's pull requests do not pay for two browsers.
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/extension/**
+      - packages/core/src/**
+      - packages/subbot/src/**
+      - packages/subbot/wasm/dist/**
+      - .github/workflows/extension.yml
+  pull_request:
+    paths:
+      - packages/extension/**
+      - packages/core/src/**
+      - packages/subbot/src/**
+      - packages/subbot/wasm/dist/**
+      - .github/workflows/extension.yml
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Lint, typecheck, unit, then the Chrome build in Chromium against the live API.
+  chromium:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - run: npm ci
+        working-directory: .
+
+      - name: Lint
+        run: ../../node_modules/.bin/biome ci .
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The full build: the headless shell cannot load extensions.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End to end
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: extension-playwright-report
+          path: packages/extension/playwright-report/
+          retention-days: 7
+
+      # For trying a pull request's build by hand: Load unpacked, or about:debugging.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: extension
+          path: |
+            packages/extension/dist/*.zip
+            packages/extension/dist/*.xpi
+          if-no-files-found: error
+          retention-days: 14
+
+  # The Firefox build: Mozilla's own linter, then real Firefox through geckodriver.
+  firefox:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - run: npm ci
+        working-directory: .
+
+      - name: Build
+        run: node build.mjs firefox
+
+      # What addons.mozilla.org runs on upload. A warning there is a warning here.
+      - name: addons-linter
+        run: npx --yes addons-linter@10.15.0 --warnings-as-errors dist/subtitledb-firefox-*.xpi
+
+      # Mozilla's release build rather than whatever the runner image carries.
+      - name: Install Firefox
+        run: |
+          set -eu
+          curl -sSfL -o "$RUNNER_TEMP/ff.tar.xz" \
+            'https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US'
+          tar -xJf "$RUNNER_TEMP/ff.tar.xz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/firefox/firefox" --version
+          "$GECKOWEBDRIVER/geckodriver" --version | head -1
+          echo "FIREFOX_BIN=$RUNNER_TEMP/firefox/firefox" >> "$GITHUB_ENV"
+
+      - name: End to end
+        run: npm run e2e:firefox

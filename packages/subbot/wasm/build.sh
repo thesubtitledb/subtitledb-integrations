@@ -4,7 +4,8 @@
 # Needs emsdk on PATH (emcc, emcmake) and cmake. Single thread on purpose: a pthread
 # build needs SharedArrayBuffer, which needs COOP and COEP on the host page, and the
 # helper runs on pages we do not control. WASM SIMD is on; every browser that runs
-# ES2022 has it.
+# ES2022 has it. DYNAMIC_EXECUTION=0 keeps eval and new Function out of the glue: the
+# browser extension runs this build under a CSP that forbids both.
 #
 #   WHISPER_SRC   an existing whisper.cpp checkout to use instead of cloning
 #   BUILD_DIR     where to configure (default: ../../../.build/whisper under the repo)
@@ -55,7 +56,7 @@ emcc -O3 -msimd128 -std=c++17 \
   --bind \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createSubbot -sENVIRONMENT=worker \
   -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=2048MB -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=1MB \
-  -sFILESYSTEM=0 -sWASM_BIGINT=1 -sASSERTIONS=0 \
+  -sFILESYSTEM=0 -sWASM_BIGINT=1 -sASSERTIONS=0 -sDYNAMIC_EXECUTION=0 \
   -sEXPORTED_RUNTIME_METHODS='["UTF8ToString"]' \
   -o "$out/subbot.js"
 ls -la "$out"

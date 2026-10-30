@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sintel (2010)</title></head>
+<body style="margin:0">
+<my-player></my-player>
+<script>
+  customElements.define('my-player', class extends HTMLElement {
+    connectedCallback() {
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = '<video src="/media/sintel-excerpt.webm" width="640" height="360" muted preload="auto"></video>';
+    }
+  });
+</script>
+</body>
+</html>

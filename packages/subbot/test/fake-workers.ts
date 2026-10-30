@@ -22,6 +22,10 @@ export interface FakeOptions {
   suffix?: Record<string, string>;
   /** Fail the audio open with this code. */
   audioError?: string;
+  /** Never answer the audio open, as a source that is still connecting. */
+  audioHang?: boolean;
+  /** Fail the ASR engine on init with this message, as a CSP that refuses the glue. */
+  asrError?: string;
   random?: boolean;
   lang?: string;
   /** The language each window in turn comes back in; `lang` after the list. */
@@ -65,9 +69,15 @@ class FakeWorker implements WorkerLike {
       this.role = m.role;
       if (m.role === 'asr') {
         this.model = /ggml-(.+)\.bin/.exec(m.modelUrl)?.[1] ?? m.modelUrl;
+        if (this.o.asrError) {
+          this.reply({ type: 'progress', what: 'wasm', loaded: 0, total: 1 }, 1);
+          this.reply({ type: 'error', message: this.o.asrError }, 2);
+          return;
+        }
         this.reply({ type: 'progress', what: 'wasm', loaded: 1, total: 1 }, 1);
         if (m.load) this.loadModel();
       } else {
+        if (this.o.audioHang) return;
         if (this.o.audioError) {
           this.reply({ type: 'error', message: 'cannot open', code: this.o.audioError }, 1);
           return;
