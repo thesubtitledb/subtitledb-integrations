@@ -35,6 +35,7 @@ import {
   readStyle,
   type Style,
 } from './shared.js';
+import { shorterTitles } from './sites.js';
 
 const SITE = 'https://thesubtitledb.org';
 const ALL = ['<all_urls>'];
@@ -372,9 +373,9 @@ async function search(): Promise<void> {
   $('list').replaceChildren(...[0, 1, 2].map(() => el('li', {}, el('div', { cls: 'skel' }))));
   setState(null);
   $<HTMLButtonElement>('go').disabled = true;
-  try {
-    const got = await query({
-      hint,
+  const lookup = (h: MediaHint) =>
+    query({
+      hint: h,
       lang,
       limit: 100,
       clientName: CLIENT,
@@ -384,6 +385,22 @@ async function search(): Promise<void> {
       convertTo: 'vtt',
       cues: true,
     });
+  try {
+    let got: QueryResult;
+    try {
+      got = await lookup(hint);
+    } catch (err) {
+      // A video's title often carries more than the film's: try it shorter.
+      const shorter = hint.title && !hint.imdbId ? shorterTitles(hint.title) : [];
+      if ((err as SubtitleDbError)?.code !== 'not_found' || !shorter.length) throw err;
+      got = await firstFound(
+        shorter.map((title) => () => lookup({ ...hint, title })),
+        err,
+      );
+      if (mine !== searchRun) return;
+      const used = got.hint.title;
+      if (used) ($('q') as HTMLInputElement).value = used;
+    }
     if (mine !== searchRun) return;
     result = got;
     shown = PAGE;
@@ -407,6 +424,18 @@ async function search(): Promise<void> {
   } finally {
     if (mine === searchRun) $<HTMLButtonElement>('go').disabled = false;
   }
+}
+
+/** The first lookup that finds a title, in order; `notFound` if none does. */
+async function firstFound(tries: (() => Promise<QueryResult>)[], notFound: unknown) {
+  for (const t of tries) {
+    try {
+      return await t();
+    } catch (err) {
+      if ((err as SubtitleDbError)?.code !== 'not_found') throw err;
+    }
+  }
+  throw notFound;
 }
 
 function setState(text: string | null, bad = false): void {

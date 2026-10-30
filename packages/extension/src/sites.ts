@@ -171,6 +171,30 @@ export function cleanTitle(raw: string, site?: Site): Guess {
   return out;
 }
 
+// Words a video's own title adds after the film's: "Sintel movie 4K", "Dune Official Trailer".
+const NOISE =
+  /\s+(?:(?:full|open|official|short|feature|animated|hd)\s+)?(?:movie|film|trailer|teaser|clip|4k|uhd|hd|2160p|1080p|720p)\b.*$/i;
+
+/**
+ * Shorter forms of a title that matched nothing, best first: the part before a spaced
+ * separator ("Sintel - Open Movie by Blender Foundation", "Sintel : Blender Foundation
+ * : Internet Archive"), then without trailing noise words. A colon with no space
+ * before it stays, so "Mission: Impossible" is not cut.
+ */
+export function shorterTitles(title: string): string[] {
+  const t = title.replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  const add = (s: string) => {
+    const v = s.replace(/[\s:,—–-]+$/, '').trim();
+    if (v.length > 1 && v !== t && !out.includes(v)) out.push(v);
+  };
+  const head = t.split(/\s+[-–—|•·:]\s+/)[0] ?? t;
+  add(head);
+  add(head.replace(NOISE, ''));
+  add(t.replace(NOISE, ''));
+  return out;
+}
+
 /**
  * An element's text with its pieces kept apart: players put the show, "S1:E3" and the
  * episode name in sibling spans, and textContent runs them together.
