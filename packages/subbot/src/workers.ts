@@ -275,6 +275,7 @@ export class AudioWorker {
   coverage: Array<[number, number]> = [];
   opened: Opened | null = null;
   private onOpened: ((o: Opened) => void) | null = null;
+  private onStopped: ((e: Error) => void) | null = null;
 
   constructor(spawn: Spawn, onFail: (e: Error) => void) {
     this.client = new Client<ToAudio, FromAudio>(spawn, onFail);
@@ -292,6 +293,8 @@ export class AudioWorker {
   open(source: SourceSpec, language?: string): Promise<Opened> {
     return new Promise<Opened>((resolve, reject) => {
       this.onOpened = resolve;
+      // Stopped before it opened, by a failure elsewhere: the run must not wait forever.
+      this.onStopped = reject;
       const off = this.client.on((m) => {
         if (m.type === 'error' && m.id === undefined) {
           off();
@@ -320,5 +323,6 @@ export class AudioWorker {
 
   terminate(): void {
     this.client.terminate();
+    if (!this.opened) this.onStopped?.(new SubbotError('the worker was stopped', 'aborted'));
   }
 }

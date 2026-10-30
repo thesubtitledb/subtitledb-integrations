@@ -259,6 +259,7 @@ The script tag itself, built into the files cdn.thesubtitledb.org serves.
 | Kodi 19+ | [plugins/kodi](plugins/kodi/README.md) |
 | VLC 3 | [plugins/vlc](plugins/vlc/README.md) |
 | Bazarr | [plugins/bazarr](plugins/bazarr/README.md) |
+| Chrome 116+ and Firefox 142+ | [packages/extension](packages/extension/README.md) |
 
 They all rank by the same rules, tested against one shared file,
 `plugins/shared/match-cases.json`. [plugins/hosts](plugins/hosts/README.md) runs each
@@ -279,6 +280,7 @@ changes, and a published one never changes.
 | `kodi-v*` | the add-on zip | the add-on's `addon.xml` |
 | `vlc-v*` | `subtitledb.lua` | `S.VERSION` in that file |
 | `bazarr-v*` | the provider, the shared client and `install.py` | `VERSION` in `plugins/bazarr/provider.py` |
+| `extension-v*` | the Chrome zip and the Firefox xpi | `packages/extension/package.json` |
 
 The CDN serves the release files unchanged, so either copy verifies:
 

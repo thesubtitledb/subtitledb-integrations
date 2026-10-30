@@ -276,6 +276,18 @@ describe('failure', () => {
     expect(log.terminated).toBe(log.spawned);
   });
 
+  it('rejects with an engine error that comes while the audio is still opening', async () => {
+    const { run, log, states } = start({
+      truth: [],
+      duration: 10,
+      audioHang: true,
+      asrError: 'unsafe-eval is not allowed',
+    });
+    await expect(run).rejects.toThrow('unsafe-eval is not allowed');
+    expect(states.at(-1)).toMatchObject({ state: 'error' });
+    expect(log.terminated).toBe(log.spawned);
+  });
+
   it('is cancelled by the signal', async () => {
     const ac = new AbortController();
     const { spawn, log } = fakeSpawn({

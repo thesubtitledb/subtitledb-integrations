@@ -18,6 +18,7 @@
 #   kodi-v<ver>      the add-on's addon.xml: the zip Kodi installs
 #   vlc-v<ver>       S.VERSION in plugins/vlc/subtitledb.lua: the script itself
 #   bazarr-v<ver>    VERSION in plugins/bazarr/provider.py: the provider, the client, install.py
+#   extension-v<ver> packages/extension/package.json: the Chrome zip and the Firefox xpi
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo=${GITHUB_REPOSITORY:-thesubtitledb/subtitledb-integrations}
@@ -84,6 +85,12 @@ build() {
   mkdir -p "$out/bazarr-v$ver"
   cp "$zip" "$out/bazarr-v$ver/"
 
+  ver=$(node -p "require('./packages/extension/package.json').version")
+  mkdir -p "$out/extension-v$ver"
+  node packages/extension/build.mjs
+  cp "packages/extension/dist/subtitledb-chrome-$ver.zip" "packages/extension/dist/subtitledb-firefox-$ver.xpi" \
+    "$out/extension-v$ver/"
+
   for dir in "$out"/*/; do
     [ -f "$dir/SHA256SUMS" ] || sums "$dir"
   done
@@ -101,6 +108,7 @@ sources() {
     kodi) echo plugins/kodi/service.subtitles.subtitledb plugins/kodi/build.py plugins/python/subtitledb ;;
     vlc) echo plugins/vlc/subtitledb.lua ;;
     bazarr) echo plugins/bazarr/provider.py plugins/bazarr/install.py plugins/python/subtitledb ;;
+    extension) echo packages/extension/src packages/extension/static packages/extension/build.mjs packages/core/src packages/subbot/src packages/subbot/wasm/dist ;;
   esac
 }
 
@@ -137,6 +145,7 @@ title() {
     kodi) echo "Kodi add-on ${1##*-v}" ;;
     vlc) echo "VLC extension ${1##*-v}" ;;
     bazarr) echo "Bazarr provider ${1##*-v}" ;;
+    extension) echo "Browser extension ${1##*-v}" ;;
   esac
 }
 

@@ -2,7 +2,9 @@
 
 Run from the repo root unless a `cd` is given. CI is `.github/workflows/ci.yml`, on every
 pull request and on push to main. Every job blocks, and on main the `release` job runs
-only after all of them pass.
+only after all of them pass. The browser extension has its own workflow,
+`.github/workflows/extension.yml`, which runs only when the extension, `packages/core/src`
+or `packages/subbot/src` changes; the root `npm test` leaves the extension out.
 
 | Suite | Command | Proves | CI job |
 |---|---|---|---|
@@ -17,6 +19,9 @@ only after all of them pass.
 | `plugins/dotnet/tests/*`, xunit | `cd plugins/dotnet && dotnet test SubtitleDb.sln` | the C# client and finder, and the Jellyfin and Emby providers. Warnings are errors | `dotnet` |
 | `plugins/vlc/tests/run.lua` | `cd plugins/vlc && bash tests/get-lua.sh && tests/.lua/bin/lua tests/run.lua` | the VLC extension loaded with no `vlc` table, its own JSON decoder on the shared cases, and a scan for Lua 5.4-only syntax | `lua` |
 | `e2e-bench/ia.spec.ts`, the SubBot bench | `npm run bench:ia`; `BENCH_CDN=https://cdn.thesubtitledb.org BENCH_LABEL=main npm run bench:ia` for the released loader | SubBot on films and episodes streamed from the Internet Archive, two minutes each in real time: time to live and to the first line, word error rate against a corpus file, decoder loops on screen, how far ahead of the playhead the lines reach. Needs a Chrome build with H.264 and AAC (Playwright's own is); results in `test-results/bench-ia/` | none: run by hand |
+| `packages/extension/test/*.test.ts`, vitest | `cd packages/extension && npm test` | the browser extension: cue timing and markup, site title and episode detection, the manifest for each browser, the reproducible zip, the client name and User-Agent | `extension`: `unit` |
+| `packages/extension/e2e/*.spec.ts`, Playwright Chromium | `cd packages/extension && node build.mjs && npm run e2e` | the built Chrome extension loaded into Chromium against the live API: search, load, sync, hide, appearance, a local file, a video in an iframe, in a shadow root and in fullscreen, title detection on each supported site, and the AI subtitles worker bridge | `extension`: `chromium` |
+| `packages/extension/e2e/firefox/run.mjs`, Firefox and geckodriver | `cd packages/extension && node build.mjs firefox && npm run e2e:firefox` | the Firefox build installed as a temporary add-on in real Firefox: search, load and the overlay against the live API. The job also runs `addons-linter` over the xpi | `extension`: `firefox` |
 | `plugins/hosts/`, the live hosts harness | Actions > Live hosts > Run workflow (`.github/workflows/hosts.yml`) | each plugin installed into real Jellyfin, Emby, Kodi, VLC and Bazarr on GitHub runners, searching and downloading through the host against the live API. [plugins/hosts](../plugins/hosts/README.md) explains it | none: run by hand |
 
 The `python` job also runs `ruff check .` over every Python tree, `python3

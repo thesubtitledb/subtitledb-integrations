@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sintel (2010)</title></head>
+<body style="margin:0;background:#111">
+<div id="wrap" style="width:640px;height:360px;position:relative">
+  <video id="v" src="/media/sintel-excerpt.webm" width="640" height="360" muted playsinline preload="auto"></video>
+</div>
+<button id="fsWrap" type="button">Wrapper fullscreen</button>
+<button id="fsVideo" type="button">Video fullscreen</button>
+<script>
+  fsWrap.onclick = () => wrap.requestFullscreen();
+  fsVideo.onclick = () => v.requestFullscreen();
+</script>
+</body>
+</html>

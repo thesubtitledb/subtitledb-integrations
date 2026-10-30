@@ -44,7 +44,8 @@ export default defineConfig({
     // and runs under vitest.live.config.ts, so a network blip can never look like a
     // logic regression.
     include: ['packages/*/test/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/*.live.test.ts'],
+    // The extension has its own suite and workflow, run only when it changes.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/*.live.test.ts', 'packages/extension/**'],
     environment: 'node',
   },
 });

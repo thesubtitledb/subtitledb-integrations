@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "@subtitledb/core": ["../core/src/index.ts"],
+      "@subtitledb/subbot": ["../subbot/src/index.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "types/*.d.ts", "test/**/*.ts", "e2e/**/*.ts", "*.config.ts"]
+}
