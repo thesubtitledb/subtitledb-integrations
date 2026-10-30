@@ -742,6 +742,10 @@ createClient({
 preflight before every new path, and an attribution string is not worth a round trip.
 The subtitle download carries it too, or `downloadClient` in its place when that is set.
 
+`removeWatermark: true` (or `'start'`, `'end'`) sends `remove_watermark` on the subtitle
+download, so the API leaves out the site and credit cues stamped on either end of the
+file. Off by default.
+
 A download is read only from the API's own hosts, and a web page or an empty body is
 refused with a `download_failed` error rather than handed on as a subtitle.
 

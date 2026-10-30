@@ -111,7 +111,12 @@ let lang = 'en';
 let style: Style = DEFAULT_STYLE;
 let quality: AiStart['quality'] = 'balanced';
 let aiTimer: ReturnType<typeof setInterval> | undefined;
-const client = createClient({ client: CLIENT, downloadClient: CLIENT, fetch: apiFetch });
+const client = createClient({
+  client: CLIENT,
+  downloadClient: CLIENT,
+  fetch: apiFetch,
+  removeWatermark: true,
+});
 
 // ------------------------------------------------------------------ talking to the tab
 
@@ -375,6 +380,7 @@ async function search(): Promise<void> {
       clientName: CLIENT,
       downloadClient: CLIENT,
       fetch: apiFetch,
+      removeWatermark: true,
       convertTo: 'vtt',
       cues: true,
     });

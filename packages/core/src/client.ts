@@ -52,6 +52,12 @@ export interface ClientOptions {
    */
   antispamId?: string | undefined;
   /**
+   * Have the API leave out the credit and site cues stamped at the start and end of
+   * a file: `true` for both ends, `'start'` or `'end'` for one. Sent as
+   * `remove_watermark` on the subtitle download. Off by default.
+   */
+  removeWatermark?: boolean | 'start' | 'end' | undefined;
+  /**
    * An API key from thesubtitledb.org/account/keys. Optional: every lookup and download
    * works without one. search() needs one; nothing else does.
    * Sent as a Bearer header, so keep it server-side: a key in page code is public. With
@@ -204,6 +210,7 @@ export class SubtitleDbClient {
   private readonly client: string | undefined;
   private readonly downloadClient: string | undefined;
   private readonly antispamId: string | undefined;
+  private readonly removeWatermark: 'true' | 'start' | 'end' | undefined;
   private readonly key: string | undefined;
 
   constructor(opts: ClientOptions = {}) {
@@ -223,6 +230,8 @@ export class SubtitleDbClient {
     this.client = opts.client;
     this.downloadClient = opts.downloadClient ?? opts.client;
     this.antispamId = opts.antispamId;
+    this.removeWatermark =
+      opts.removeWatermark === true ? 'true' : opts.removeWatermark || undefined;
     this.key = opts.key?.trim() || undefined;
     if (this.key && plainHttp(this.apiBase)) {
       throw new SubtitleDbError({
@@ -490,8 +499,8 @@ export class SubtitleDbClient {
   }
 
   /**
-   * Append the download's client name and the antispam id to a URL this client did not
-   * build.
+   * Append the download's client name, the antispam id and remove_watermark to a URL
+   * this client did not build.
    *
    * `url()` handles the /v1 requests; the subtitle download goes to download_url, which
    * points at the /get/ redirect on the API host but is handed to us whole, so it gets
@@ -499,11 +508,12 @@ export class SubtitleDbClient {
    * alone rather than dropped: the download still matters more than the attribution.
    */
   private forDownload(raw: string): string {
-    if (!this.downloadClient && !this.antispamId) return raw;
+    if (!this.downloadClient && !this.antispamId && !this.removeWatermark) return raw;
     try {
       const u = new URL(raw);
       if (this.downloadClient) u.searchParams.set('client', this.downloadClient);
       if (this.antispamId) u.searchParams.set('antispam_id', this.antispamId);
+      if (this.removeWatermark) u.searchParams.set('remove_watermark', this.removeWatermark);
       return u.toString();
     } catch {
       return raw;

@@ -30,6 +30,6 @@
     "build:wasm": "bash wasm/build.sh"
   },
   "dependencies": {
-    "@subtitledb/core": "0.5.9"
+    "@subtitledb/core": "0.5.10"
   }
 }

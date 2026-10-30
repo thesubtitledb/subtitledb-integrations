@@ -395,6 +395,16 @@ describe('SubtitleDbClient', () => {
     );
   });
 
+  it('asks for the watermark to be removed only when told to', () => {
+    const sub = { download_url: 'https://api.thesubtitledb.org/get/1' };
+    const mode = (o: ConstructorParameters<typeof SubtitleDbClient>[0]) =>
+      new URL(new SubtitleDbClient(o).downloadUrl(sub)).searchParams.get('remove_watermark');
+    expect(mode({})).toBeNull();
+    expect(mode({ removeWatermark: false })).toBeNull();
+    expect(mode({ removeWatermark: true })).toBe('true');
+    expect(mode({ removeWatermark: 'end' })).toBe('end');
+  });
+
   it('decodes the download with the requested charset, sniffing a BOM for auto', async () => {
     // "hi" as UTF-16LE with a byte-order mark. res.text() would read this as UTF-8 and
     // produce mojibake; the encoding option is for a deployment that sends such bytes.

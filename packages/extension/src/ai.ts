@@ -94,6 +94,7 @@ function create(): AiApi {
         convertTo: 'vtt',
         clientName: CLIENT,
         downloadClient: CLIENT,
+        removeWatermark: true,
         languages: req.languages.length ? req.languages : localeLanguages(),
         transcribe: {
           when: 'always',
