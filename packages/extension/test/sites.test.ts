@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTitle, parseEpisode, SITES, siteFor } from '../src/sites.js';
+import { cleanTitle, parseEpisode, SITES, shorterTitles, siteFor } from '../src/sites.js';
 
 describe('siteFor', () => {
   it.each([
@@ -86,5 +86,22 @@ describe('cleanTitle', () => {
     expect(cleanTitle('Heat 1995')).toEqual({ title: 'Heat', year: 1995 });
     expect(cleanTitle('Blade Runner 2049')).toEqual({ title: 'Blade Runner 2049' });
     expect(cleanTitle('2001: A Space Odyssey')).toEqual({ title: '2001: A Space Odyssey' });
+  });
+});
+
+describe('shorterTitles', () => {
+  it('tries the part before a separator, then without noise words', () => {
+    // Real titles that matched nothing whole: YouTube, Internet Archive, Wikimedia Commons.
+    expect(shorterTitles('Sintel - Open Movie by Blender Foundation')[0]).toBe('Sintel');
+    expect(
+      shorterTitles('Sintel : Blender Foundation : Free Download, Borrow, and Streaming')[0],
+    ).toBe('Sintel');
+    expect(shorterTitles('Sintel movie 4K')).toEqual(['Sintel']);
+    expect(shorterTitles('Dune: Part Two Official Trailer 2')).toEqual(['Dune: Part Two']);
+  });
+
+  it('keeps a colon that is part of the name, and offers nothing it cannot shorten', () => {
+    expect(shorterTitles('Mission: Impossible - Dead Reckoning')).toEqual(['Mission: Impossible']);
+    expect(shorterTitles('Heat')).toEqual([]);
   });
 });
