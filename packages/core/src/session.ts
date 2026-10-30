@@ -31,6 +31,8 @@ export interface SessionOptions {
    * request and on the download. Set by the loader; see ClientOptions.antispamId.
    */
   antispamId?: string | undefined;
+  /** Forwarded to the client; see ClientOptions.removeWatermark. */
+  removeWatermark?: ClientOptions['removeWatermark'];
   /** An API key, forwarded to the client; see ClientOptions.key. */
   key?: string | undefined;
 
@@ -177,6 +179,7 @@ export class SubtitleSession {
         ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
         ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
         ...(opts.antispamId !== undefined ? { antispamId: opts.antispamId } : {}),
+        ...(opts.removeWatermark !== undefined ? { removeWatermark: opts.removeWatermark } : {}),
         ...(opts.key !== undefined ? { key: opts.key } : {}),
       });
     const ttl = opts.cacheTtlMs ?? 5 * 60_000;

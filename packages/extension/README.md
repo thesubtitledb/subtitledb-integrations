@@ -51,6 +51,9 @@ and download, and a User-Agent ending `TheSubtitleDB-Extension/<v> (chrome)` or
 `(firefox)`: set on each fetch in Firefox, and by a `declarativeNetRequest` session rule
 in Chrome, which does not let a fetch set it.
 
+Every download asks for `remove_watermark=true`, so the site and credit lines some
+files carry at either end are not drawn over the video.
+
 ## Build and test
 
 ```bash

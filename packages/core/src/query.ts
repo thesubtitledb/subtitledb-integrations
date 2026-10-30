@@ -60,6 +60,8 @@ export interface QueryOptions extends QueryConvert {
   /** The name a download is recorded under; see ClientOptions.downloadClient. */
   downloadClient?: string | undefined;
   fetch?: ClientOptions['fetch'];
+  /** See ClientOptions.removeWatermark. */
+  removeWatermark?: ClientOptions['removeWatermark'];
   /** An API key; see ClientOptions.key. */
   key?: string | undefined;
 }
@@ -179,6 +181,7 @@ export async function query(opts: QueryOptions): Promise<QueryResult> {
     ...(opts.clientName !== undefined ? { clientName: opts.clientName } : {}),
     ...(opts.downloadClient !== undefined ? { downloadClient: opts.downloadClient } : {}),
     ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
+    ...(opts.removeWatermark !== undefined ? { removeWatermark: opts.removeWatermark } : {}),
     ...(opts.key !== undefined ? { key: opts.key } : {}),
     onError: (err) => {
       failure ??= err;

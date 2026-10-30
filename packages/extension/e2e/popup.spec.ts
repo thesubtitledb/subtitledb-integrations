@@ -48,6 +48,10 @@ test('finds the title, searches the API, and draws the picked file over the vide
 
   // The downloads are recorded against the extension, not the browser.
   expect(searches.some((u) => u.includes('client=chrome-extension'))).toBe(true);
+  // And asked for without the site and credit lines stamped on either end.
+  expect(searches.some((u) => u.includes('/get/') && u.includes('remove_watermark=true'))).toBe(
+    true,
+  );
   const rules = await popup.evaluate(() =>
     (
       chrome as unknown as {
