@@ -37,7 +37,8 @@ from subtitledb import Client
 
 CLIENT = 'MediaBrowser Client="subtitledb-ci", Device="ci", DeviceId="subtitledb-ci", Version="1.0"'
 USER, PASSWORD = "ci", "ci-password"
-PROVIDER = "SubtitleDB"
+#: What each server lists the plugin and its provider as.
+NAMES = {"jellyfin": "TSDb", "emby": "SubtitleDB"}
 SUBTITLE_SUFFIXES = (".srt", ".ass", ".ssa", ".sub", ".vtt")
 #: Both servers ask in ISO 639-2 codes, and spell Brazilian Portuguese "pob".
 ALPHA3 = {"en": "eng", "es": "spa", "pb": "pob"}
@@ -56,6 +57,7 @@ class Failure(Exception):
 class Server:
     def __init__(self, kind: str, base: str):
         self.kind = kind
+        self.name = NAMES[kind]
         self.base = base.rstrip("/")
         self.token = ""
         self.user_id = ""
@@ -128,12 +130,12 @@ class Server:
         """Install from a repository the way Jellyfin's catalog does, then restart. A
         copied folder skips all of what this runs through: the manifest parsing, the
         ABI filter, the MD5 check and the unpacking."""
-        self.call("POST", "/Repositories", [{"Name": PROVIDER, "Url": manifest, "Enabled": True}])
-        listed = [p for p in self.call("GET", "/Packages") or [] if p.get("name") == PROVIDER]
+        self.call("POST", "/Repositories", [{"Name": self.name, "Url": manifest, "Enabled": True}])
+        listed = [p for p in self.call("GET", "/Packages") or [] if p.get("name") == self.name]
         if not listed:
-            raise Failure("the catalog has no %s after adding %s" % (PROVIDER, manifest))
-        print("catalog %s %s" % (PROVIDER, [v.get("version") for v in listed[0]["versions"]]))
-        self.call("POST", "/Packages/Installed/" + PROVIDER,
+            raise Failure("the catalog has no %s after adding %s" % (self.name, manifest))
+        print("catalog %s %s" % (self.name, [v.get("version") for v in listed[0]["versions"]]))
+        self.call("POST", "/Packages/Installed/" + self.name,
                   query={"assemblyGuid": listed[0]["guid"], "repositoryUrl": manifest})
         self.call("POST", "/System/Restart")
         # The old process answers for a moment after it is asked to go.
@@ -150,14 +152,14 @@ class Server:
 
     def plugin(self):
         plugins = self.call("GET", "/Plugins") or []
-        ours = [p for p in plugins if p.get("Name") == PROVIDER]
+        ours = [p for p in plugins if p.get("Name") == self.name]
         if not ours:
             names = [p.get("Name") for p in plugins]
-            raise Failure("%s is not loaded; the server lists %s" % (PROVIDER, names))
+            raise Failure("%s is not loaded; the server lists %s" % (self.name, names))
         # Jellyfin says Active, NotSupported or Malfunctioned; Emby has no status.
         status = ours[0].get("Status")
         if status not in (None, "Active"):
-            raise Failure("%s loaded as %s" % (PROVIDER, status))
+            raise Failure("%s loaded as %s" % (self.name, status))
         return ours[0]
 
     def configure(self, plugin, **settings):
@@ -170,7 +172,7 @@ class Server:
         held = self.call("GET", path) or {}
         wrong = {k: held.get(k) for k, v in settings.items() if held.get(k) != v}
         if wrong:
-            raise Failure("%s kept %s after being set to %s" % (PROVIDER, wrong, settings))
+            raise Failure("%s kept %s after being set to %s" % (self.name, wrong, settings))
         return held
 
     def add_library(self, name, collection, path):
@@ -195,7 +197,7 @@ class Server:
 
     def search(self, item, alpha3):
         found = self.call("GET", "/Items/%s/RemoteSearch/Subtitles/%s" % (item["Id"], alpha3)) or []
-        return found, [s for s in found if s.get("ProviderName") == PROVIDER]
+        return found, [s for s in found if s.get("ProviderName") == self.name]
 
     def download(self, item, subtitle):
         path = "/Items/%s/RemoteSearch/Subtitles/%s" % (
@@ -294,28 +296,28 @@ def check_item(server, client, video, sample, item):
         found, ours = server.search(item, alpha3)
         took = time.time() - started
         print("  search %s %.1fs: %d results, %d from %s" % (
-            alpha3, took, len(found), len(ours), PROVIDER))
+            alpha3, took, len(found), len(ours), server.name))
         for sub in ours[:3]:
             print("    %s | %s | %s | %s" % (
                 sub.get("Id"), row_language(sub), sub.get("Name"), sub.get("Comment")))
         if not sample.known:
             if ours:
                 raise Failure("%s offered %d for %s, a title the index does not have" % (
-                    PROVIDER, len(ours), video.name))
+                    server.name, len(ours), video.name))
             continue
         if not ours:
-            raise Failure("%s offered nothing in %s for %s" % (PROVIDER, alpha3, video.name))
+            raise Failure("%s offered nothing in %s for %s" % (server.name, alpha3, video.name))
         others = sorted({str(row_language(s)) for s in ours if row_language(s) != alpha3})
         if others:
-            raise Failure("asked for %s, %s also offered %s" % (alpha3, PROVIDER, others))
+            raise Failure("asked for %s, %s also offered %s" % (alpha3, server.name, others))
         held = baseline.row_ids(client, sample, code)
         strays = [s.get("Id") for s in ours if row_id(s) not in held]
         if strays:
             raise Failure("%s offered %d of %d rows that are not %s's own in %s, first %s" % (
-                PROVIDER, len(strays), len(ours), sample.name, code, strays[0]))
+                server.name, len(strays), len(ours), sample.name, code, strays[0]))
         problem = baseline.count_problem(len(ours), code in sample.many)
         if problem:
-            raise Failure("%s %s in %s for %s" % (PROVIDER, problem, alpha3, video.name))
+            raise Failure("%s %s in %s for %s" % (server.name, problem, alpha3, video.name))
 
         server.download(item, ours[0])
         new, end = [], time.time() + 30

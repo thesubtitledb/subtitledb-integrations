@@ -141,7 +141,7 @@ namespace SubtitleDb.Jellyfin
 
         private static bool IsOurs(string? provider)
         {
-            return string.Equals(provider, "SubtitleDB", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(provider, SubtitleDbSubtitleProvider.ProviderName, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>The language of the audio <paramref name="item"/> starts in, or null.</summary>

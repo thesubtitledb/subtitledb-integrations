@@ -20,7 +20,7 @@ namespace SubtitleDb.Jellyfin.Tests
     /// </summary>
     public class PlaybackLookupTests
     {
-        private static readonly string[] Providers = { "Open Subtitles", "SubtitleDB", "Podnapisi" };
+        private static readonly string[] Providers = { "Open Subtitles", "TSDb", "Podnapisi" };
 
         [Fact]
         public void AnEpisodeIsAskedForAsJellyfinAsksForItAndOfSubtitleDbAlone()
@@ -64,7 +64,7 @@ namespace SubtitleDb.Jellyfin.Tests
             };
 
             var request = PlaybackLookup.Request(
-                film, "fre", new LibraryOptions { RequirePerfectSubtitleMatch = false }, new[] { "SubtitleDB" });
+                film, "fre", new LibraryOptions { RequirePerfectSubtitleMatch = false }, new[] { "TSDb" });
 
             Assert.Equal(VideoContentType.Movie, request.ContentType);
             Assert.Equal(2023, request.ProductionYear);

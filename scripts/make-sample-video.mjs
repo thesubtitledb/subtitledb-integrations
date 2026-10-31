@@ -19,8 +19,9 @@ const out = join(root, 'examples', 'media', 'sample.webm');
 
 // Long enough for the first cue of a real subtitle to fall inside the clip: the
 // e2e suite seeks to it and asserts the browser has it on screen, which is the only
-// check that a player has not quietly hidden the track again.
-const SECONDS = 15;
+// check that a player has not quietly hidden the track again. The Matrix's top
+// English subtitle starts at 47.9 s, so 15 s stopped being enough.
+const SECONDS = 90;
 
 async function exists(p) {
   try {
