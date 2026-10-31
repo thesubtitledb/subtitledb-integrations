@@ -137,8 +137,9 @@ test('the debug option reports a play as it goes: first frame, seek, pause, hidd
   expect((first.fl ?? 0) & (1 | 32)).toBe(1 | 32);
   expect(Number(first.st)).toBeGreaterThan(0);
   // The sample is recorded in a browser, which writes no length into the file, so the
-  // browser playing it may call its length unknown, as it does a live stream's.
-  expect(first.du === 15 || first.li === 1, `du ${first.du}, li ${first.li}`).toBe(true);
+  // browser playing it may call its length unknown, as it does a live stream's. The
+  // length is SECONDS in scripts/make-sample-video.mjs.
+  expect(first.du === 90 || first.li === 1, `du ${first.du}, li ${first.li}`).toBe(true);
 
   // Past the two seconds a pause must clear after the last report.
   await page.waitForTimeout(2500);
