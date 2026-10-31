@@ -168,7 +168,7 @@ namespace SubtitleDb.Jellyfin.Tests
                 new Microsoft.Extensions.Logging.Abstractions.NullLogger<SubtitleDbSubtitleProvider>(),
                 new StubHttpClientFactory());
 
-            Assert.Equal("SubtitleDB", provider.Name);
+            Assert.Equal("TSDb", provider.Name);
             Assert.Contains(VideoContentType.Movie, provider.SupportedMediaTypes);
             Assert.Contains(VideoContentType.Episode, provider.SupportedMediaTypes);
         }

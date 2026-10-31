@@ -46,7 +46,10 @@ namespace SubtitleDb.Jellyfin
             _services = services;
         }
 
-        public string Name => "SubtitleDB";
+        /// <summary>What Jellyfin lists. Libraries keep a disabled provider by this name.</summary>
+        public const string ProviderName = "TSDb";
+
+        public string Name => ProviderName;
 
         public IEnumerable<VideoContentType> SupportedMediaTypes =>
             new[] { VideoContentType.Episode, VideoContentType.Movie };

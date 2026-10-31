@@ -67,7 +67,7 @@ def test_the_jellyfin_notes_are_not_the_shared_ones():
 
 
 def test_only_our_own_assemblies_are_published(tmp_path):
-    folder = tmp_path / "SubtitleDB_0.1.0"
+    folder = tmp_path / "TSDb_0.1.0"
     published(folder)
 
     build.keep_only_ours(folder)
@@ -131,7 +131,7 @@ def test_the_repository_and_the_zip_name_the_same_plugin(tmp_path, monkeypatch):
     with zipfile.ZipFile(repo / "subtitledb-jellyfin-0.1.0.zip") as zf:
         meta = json.loads(zf.read("meta.json"))
     assert package["guid"] == meta["guid"] == build.GUID
-    assert package["name"] == meta["name"] == "SubtitleDB"
+    assert package["name"] == meta["name"] == "TSDb"
     assert package["versions"][0]["timestamp"] == meta["timestamp"]
 
 
@@ -209,7 +209,7 @@ def test_a_zip_without_meta_json_at_its_root_fails_the_repository(tmp_path, monk
     monkeypatch.setattr(build, "DIST", tmp_path)
     nested = tmp_path / "nested.zip"
     with zipfile.ZipFile(nested, "w") as zf:
-        zf.writestr("SubtitleDB_0.1.0/meta.json", "{}")
+        zf.writestr("TSDb_0.1.0/meta.json", "{}")
 
     with pytest.raises(KeyError):
         build.build_repo(RELEASES, nested)
@@ -262,7 +262,7 @@ def test_the_manifest_says_what_jellyfin_reads(tmp_path, monkeypatch):
 
     build.build_jellyfin("dotnet", "0.1.0")
 
-    folder = tmp_path / "jellyfin" / "SubtitleDB_0.1.0"
+    folder = tmp_path / "jellyfin" / "TSDb_0.1.0"
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
     assert meta["guid"] == build.GUID
     assert meta["version"] == "0.1.0"
@@ -278,7 +278,7 @@ def test_the_jellyfin_folder_carries_the_license(tmp_path, monkeypatch):
 
     build.build_jellyfin("dotnet", "0.1.0")
 
-    text = (tmp_path / "jellyfin" / "SubtitleDB_0.1.0" / "LICENSE").read_text(encoding="utf-8")
+    text = (tmp_path / "jellyfin" / "TSDb_0.1.0" / "LICENSE").read_text(encoding="utf-8")
     assert text == build.LICENSE.read_text(encoding="utf-8")
 
 

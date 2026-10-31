@@ -498,7 +498,7 @@ def run(kind, url, root: pathlib.Path, logs: pathlib.Path, api_base: str) -> int
     edge.play("no languages", "unasked", "no download languages")
     edge.set_library(SubtitleDownloadLanguages=["eng"])
 
-    edge.set_library(DisabledSubtitleFetchers=["SubtitleDB"])
+    edge.set_library(DisabledSubtitleFetchers=[M.NAMES[kind]])
     edge.play("not ticked", "unasked", "SubtitleDB not ticked for the library")
     edge.set_library(DisabledSubtitleFetchers=[])
 

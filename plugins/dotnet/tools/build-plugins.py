@@ -6,7 +6,7 @@
 
 Writes plugins/dotnet/dist:
 
-    jellyfin/SubtitleDB_<version>/       the folder to drop in Jellyfin's plugins dir
+    jellyfin/TSDb_<version>/       the folder to drop in Jellyfin's plugins dir
     subtitledb-jellyfin-<version>.zip    that folder's files, with no folder around them
     emby/SubtitleDb.Emby.dll             the one file to drop in Emby's plugins dir
     subtitledb-emby-<version>.zip
@@ -53,6 +53,9 @@ EMBY = ("SubtitleDb.Emby.dll",)
 # The oldest server this is built against. Jellyfin refuses a plugin whose targetAbi
 # is above its own, so this is a floor, not a pin.
 JELLYFIN_TARGET_ABI = "10.10.0.0"
+
+# What Jellyfin lists the plugin as. Plugin.Name and the provider's Name match it.
+NAME = "TSDb"
 
 GUID = "e8067282-ad64-415a-b9ed-9057e6679483"
 
@@ -125,7 +128,7 @@ def zip_folder(folder: pathlib.Path, archive: pathlib.Path) -> pathlib.Path:
 
 
 def build_jellyfin(dotnet: str, ver: str) -> pathlib.Path:
-    folder = DIST / "jellyfin" / ("SubtitleDB_" + ver)
+    folder = DIST / "jellyfin" / (NAME + "_" + ver)
     if folder.exists():
         shutil.rmtree(folder)
     project = ROOT / "src" / "SubtitleDb.Jellyfin" / "SubtitleDb.Jellyfin.csproj"
@@ -140,7 +143,7 @@ def build_jellyfin(dotnet: str, ver: str) -> pathlib.Path:
         "changelog": notes(),
         "description": "Subtitles from the SubtitleDB open index. No account and no key.",
         "guid": GUID,
-        "name": "SubtitleDB",
+        "name": NAME,
         "overview": "Subtitles from the SubtitleDB open index",
         "owner": "SubtitleDB",
         "targetAbi": JELLYFIN_TARGET_ABI,

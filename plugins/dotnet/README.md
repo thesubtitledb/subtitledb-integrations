@@ -11,13 +11,13 @@ src/SubtitleDb.Emby       the provider for Emby 4.8 and later, netstandard2.0
 ## Install
 
 Jellyfin: in Dashboard > Plugins > Repositories, add
-`https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install SubtitleDB from
+`https://cdn.thesubtitledb.org/plugins/jellyfin/manifest.json`, install TSDb from
 the catalog and restart. Updates come through the same repository.
 
 Emby: unzip [subtitledb-emby.zip](https://cdn.thesubtitledb.org/plugins/emby/subtitledb-emby.zip)
 into Emby's `plugins` directory and restart.
 
-Then tick SubtitleDB and pick the download languages in each library's settings:
+Then tick TSDb (Jellyfin) or SubtitleDB (Emby) and pick the download languages in each library's settings:
 
 - Jellyfin: Dashboard > Libraries > Manage library > Subtitle Downloads
 - Emby: Settings > Library, edit the library with "Show advanced settings" on
@@ -85,7 +85,7 @@ Needs the .NET 8 SDK.
 
 | Output | Use |
 |---|---|
-| `dist/jellyfin/SubtitleDB_<version>/` | copy into Jellyfin's `plugins` directory |
+| `dist/jellyfin/TSDb_<version>/` | copy into Jellyfin's `plugins` directory |
 | `dist/subtitledb-jellyfin-<version>.zip` | the same files, zipped |
 | `dist/emby/SubtitleDb.Emby.dll` | copy into Emby's `plugins` directory |
 | `dist/subtitledb-emby-<version>.zip` | the same file, zipped |

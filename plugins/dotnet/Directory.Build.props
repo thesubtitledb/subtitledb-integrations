@@ -6,13 +6,13 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.6</Version>
+    <Version>0.4.7</Version>
     <!-- What changed in this version, in a sentence or two, for both hosts. Stamped
          into the assemblies; change it with the version. -->
-    <PackageReleaseNotes>No change in behaviour. The Jellyfin catalog's notes for 0.4.2 and 0.4.5 no longer describe a change made only to Emby.</PackageReleaseNotes>
+    <PackageReleaseNotes>The Jellyfin plugin is named TSDb. No change for Emby.</PackageReleaseNotes>
     <!-- What Jellyfin shows in its plugin catalog beside the update. Jellyfin only:
          an Emby-only change does not belong here. -->
-    <JellyfinReleaseNotes>No change in behaviour. The notes for 0.4.2 and 0.4.5 no longer describe a change made only to Emby.</JellyfinReleaseNotes>
+    <JellyfinReleaseNotes>The plugin is named TSDb, in the catalog, the plugin list and the library's subtitle downloaders.</JellyfinReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>

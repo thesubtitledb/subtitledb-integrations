@@ -39,10 +39,10 @@ def page_name(server, plugin):
     query = {"PageType": "PluginConfiguration"} if server.kind == "emby" else None
     pages = server.call("GET", "/web/ConfigurationPages", query=query) or []
     ours = [p["Name"] for p in pages if same_id(p.get("PluginId"), plugin["Id"])]
-    print("the server lists %s for %s" % (ours, M.PROVIDER))
+    print("the server lists %s for %s" % (ours, server.name))
     if len(ours) != 1:
         raise M.Failure("%s should have one settings page, the server lists %s" % (
-            M.PROVIDER, [(p.get("Name"), p.get("PluginId")) for p in pages]))
+            server.name, [(p.get("Name"), p.get("PluginId")) for p in pages]))
     return ours[0]
 
 

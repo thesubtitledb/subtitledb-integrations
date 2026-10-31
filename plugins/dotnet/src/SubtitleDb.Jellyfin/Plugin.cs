@@ -25,7 +25,7 @@ namespace SubtitleDb.Jellyfin
         /// </summary>
         public static Plugin? Instance { get; private set; }
 
-        public override string Name => "SubtitleDB";
+        public override string Name => "TSDb";
 
         public override Guid Id => Guid.Parse("e8067282-ad64-415a-b9ed-9057e6679483");
 
