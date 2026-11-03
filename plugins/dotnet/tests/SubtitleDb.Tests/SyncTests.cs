@@ -185,7 +185,7 @@ namespace SubtitleDb.Tests
             var info = Ffmpeg.ParseProbe(Encoding.UTF8.GetBytes(
                 "{\"format\":{\"duration\":\"100.5\"},\"streams\":["
                 + "{\"index\":0,\"codec_type\":\"audio\",\"codec_name\":\"eac3\",\"channels\":6,\"disposition\":{\"default\":1}},"
-                + "{\"index\":1,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\",\"title\":\"English (Forced)\"}},"
+                + "{\"index\":1,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\",\"title\":\"English (Forced)\"},\"disposition\":{\"default\":0,\"forced\":0}},"
                 + "{\"index\":2,\"codec_type\":\"subtitle\",\"codec_name\":\"hdmv_pgs_subtitle\",\"tags\":{\"language\":\"eng\"}},"
                 + "{\"index\":3,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"spa\"},\"disposition\":{\"default\":1}},"
                 + "{\"index\":4,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\"}}]}"));

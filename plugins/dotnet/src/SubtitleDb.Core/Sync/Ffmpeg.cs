@@ -100,7 +100,7 @@ namespace SubtitleDb.Core.Sync
                     if (s.TryGetProperty("disposition", out var disp))
                     {
                         stream.IsDefault = Flag(disp, "default");
-                        stream.IsForced = Flag(disp, "forced");
+                        stream.IsForced |= Flag(disp, "forced");
                     }
 
                     streams.Add(stream);
