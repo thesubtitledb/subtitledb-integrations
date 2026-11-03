@@ -43,6 +43,15 @@ namespace SubtitleDb.Core.Sync
         /// <summary>A reference track with fewer cues says too little to line up against.</summary>
         public const int MinReferenceCues = 20;
 
+        /// <summary>
+        /// A reference track is read from the start up to this many cues, and never past
+        /// <see cref="ReferenceSeconds"/> of the video: enough to find the shift, a few
+        /// seconds of reading on any file.
+        /// </summary>
+        public const int ReferenceCues = 50;
+
+        public const double ReferenceSeconds = 900;
+
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         /// <summary><c>video.SYNCED - TSDb.eng.srt</c> in <paramref name="folder"/>.</summary>
@@ -171,15 +180,16 @@ namespace SubtitleDb.Core.Sync
 
                 foreach (var track in tracks.Take(MaxReferenceTracks))
                 {
-                    var reference = SubtitleDoc.Parse(await ffmpeg.SubtitleAsync(video, track, cancellationToken).ConfigureAwait(false), "srt");
+                    var srt = await ffmpeg.SubtitleAsync(video, track, ReferenceCues, ReferenceSeconds, cancellationToken).ConfigureAwait(false);
+                    var cues = SubtitleDoc.Parse(srt, "srt").Cues.Take(ReferenceCues).ToList();
                     var against = "subtitle stream " + track.Index + (track.Language != null ? " (" + track.Language + ")" : string.Empty);
-                    if (reference.Cues.Count < MinReferenceCues)
+                    if (cues.Count < MinReferenceCues)
                     {
-                        said.Add(against + " has " + reference.Cues.Count + " cues");
+                        said.Add(against + " has " + cues.Count + " cues");
                         continue;
                     }
 
-                    var windows = new[] { new Window(Signals.FromCues(reference.Cues, Signals.Rate), 0) };
+                    var windows = new[] { new Window(Signals.FromCues(cues, Signals.Rate), 0) };
                     var result = Aligner.Align(windows, doc.Cues, new AlignOptions { Lead = 0 });
                     if (Sure(result, minConfidence))
                     {

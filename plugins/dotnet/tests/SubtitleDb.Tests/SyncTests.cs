@@ -115,7 +115,7 @@ namespace SubtitleDb.Tests
         public async Task A_subtitle_is_lined_up_against_a_text_track_inside_the_video()
         {
             var dir = Scratch();
-            var cues = RandomCues(300, 3);
+            var cues = RandomCues(1200, 3);
             var reference = Path.Combine(dir, "ref.srt");
             File.WriteAllText(reference, Srts(cues, 0));
             // First a forced track nobody flagged: a few cues, read and passed over.
@@ -123,17 +123,24 @@ namespace SubtitleDb.Tests
             File.WriteAllText(forced, Srts(cues.Take(3), 0));
             var video = Path.Combine(dir, "film.mkv");
             Run("ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-i", forced, "-i", reference,
-                "-map", "0", "-map", "1", "-map", "2", "-t", "300", "-c:a", "flac", "-c:s", "srt",
+                "-map", "0", "-map", "1", "-map", "2", "-t", "1200", "-c:a", "flac", "-c:s", "srt",
                 "-metadata:s:s:0", "language=eng", "-metadata:s:s:1", "language=eng", video);
+            var ffmpeg = new Ffmpeg("ffmpeg", "ffprobe");
+
+            // Only the start of the track is read.
+            var head = SubtitleDoc.Parse(await ffmpeg.SubtitleAsync(video, new ProbeStream { Index = 2 }, Syncer.ReferenceCues, Syncer.ReferenceSeconds, CancellationToken.None), "srt");
+            Assert.InRange(head.Cues.Count, Syncer.ReferenceCues, Syncer.ReferenceCues + 1);
+            Assert.True(cues.Count > 150, cues.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             var late = Encoding.UTF8.GetBytes(Srts(cues, 3.2));
-            var outcome = await Syncer.RunAsync(new Ffmpeg("ffmpeg", "ffprobe"), video, late, "srt", "eng", true, false, CancellationToken.None);
+            var outcome = await Syncer.RunAsync(ffmpeg, video, late, "srt", "eng", true, false, CancellationToken.None);
 
             Assert.True(outcome.Bytes != null, outcome.Said);
             Assert.StartsWith("lined up against subtitle stream 2 (eng)", outcome.Said, StringComparison.Ordinal);
             Assert.InRange(outcome.Result!.Shift, -3.25, -3.15);
             var synced = SubtitleDoc.Parse(Encoding.UTF8.GetString(outcome.Bytes!), "srt");
             Assert.InRange(synced.Cues[10].Start - cues[10].Start, -0.05, 0.05);
+            Assert.InRange(synced.Cues[150].Start - cues[150].Start, -0.05, 0.05);
             Assert.DoesNotContain("(syncing)", Encoding.UTF8.GetString(outcome.Bytes!), StringComparison.Ordinal);
         }
 
@@ -185,7 +192,7 @@ namespace SubtitleDb.Tests
             var info = Ffmpeg.ParseProbe(Encoding.UTF8.GetBytes(
                 "{\"format\":{\"duration\":\"100.5\"},\"streams\":["
                 + "{\"index\":0,\"codec_type\":\"audio\",\"codec_name\":\"eac3\",\"channels\":6,\"disposition\":{\"default\":1}},"
-                + "{\"index\":1,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\",\"title\":\"English (Forced)\"},\"disposition\":{\"default\":0,\"forced\":0}},"
+                + "{\"index\":1,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\",\"title\":\"English (Forced)\"}},"
                 + "{\"index\":2,\"codec_type\":\"subtitle\",\"codec_name\":\"hdmv_pgs_subtitle\",\"tags\":{\"language\":\"eng\"}},"
                 + "{\"index\":3,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"spa\"},\"disposition\":{\"default\":1}},"
                 + "{\"index\":4,\"codec_type\":\"subtitle\",\"codec_name\":\"subrip\",\"tags\":{\"language\":\"eng\"}}]}"));
