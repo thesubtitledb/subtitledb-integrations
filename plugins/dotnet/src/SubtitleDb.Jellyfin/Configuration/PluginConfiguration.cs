@@ -19,5 +19,11 @@ namespace SubtitleDb.Jellyfin.Configuration
 
         /// <summary>Look a video up when it starts playing, and save the best match.</summary>
         public bool LookUpOnPlay { get; set; } = true;
+
+        /// <summary>Line each download up against a text subtitle inside the video, into a SYNCED copy.</summary>
+        public bool SyncWithSubtitles { get; set; }
+
+        /// <summary>Line each download up against the video's speech, into a SYNCED copy.</summary>
+        public bool SyncWithAudio { get; set; }
     }
 }

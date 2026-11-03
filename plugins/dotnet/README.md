@@ -30,8 +30,37 @@ Emby:
 | Setting | Default |
 |---|---|
 | Get latest subtitles on play | on |
+| Sync subtitles with other subtitle tracks (Jellyfin) | off |
+| Sync subtitles with audio (uses CPU/GPU) (Jellyfin) | off |
 | Subtitles per language, 100 to 2000 | 500 |
 | API address | `https://api.thesubtitledb.org` |
+
+## SYNCED track (Jellyfin)
+
+With either sync setting on, every TSDb download also writes
+`<video>.SYNCED - TSDb.<lang>.<ext>` where Jellyfin saves subtitles, with `(syncing) ` at
+the start of every cue, and refreshes the video so it is listed. One job at a time then
+lines it up with Jellyfin's own ffmpeg:
+
+- Other subtitle tracks: against a text subtitle inside the video (not forced, the same
+  language first), with at least 20 cues. A track titled "Forced" counts as forced, and
+  when the first track has too few cues the next one is read. Reading a track reads the
+  whole file: about 3 minutes for a 5.6 GB film on a USB disk.
+- Audio: against the speech in four 2-minute samples of the default audio track, found
+  with Silero VAD v5 run in C# (no ONNX Runtime). From 5 channels up only the centre
+  channel is read.
+
+The match is a shift and a speed (framerate) correction, as in
+[subtitledb-sync](https://github.com/thesubtitledb/subtitledb-sync). At confidence 0.5 and
+over the file is rewritten with the new times and without the mark; otherwise, or after
+15 minutes, it is deleted. Each outcome is one Information line in Jellyfin's log. A
+file already synced is not done again when the same subtitle is downloaded again. Nothing
+is sent anywhere: it all runs in Jellyfin.
+
+Checked on a home Jellyfin 12.2: a 103-minute film synced against its audio in 8 s
+(confidence 0.79, already in sync); a film whose TSDb subtitle ran 24.2 s early was
+lined up against its own English track (confidence 1.00, 0.1 s from that track).
+Jellyfin lists the result as "SYNCED - TSDb - English - SUBRIP - External".
 
 ## Search
 

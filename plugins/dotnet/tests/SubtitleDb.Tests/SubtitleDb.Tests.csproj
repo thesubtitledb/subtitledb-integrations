@@ -20,4 +20,8 @@
     <ProjectReference Include="../../src/SubtitleDb.Core/SubtitleDb.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="silero-sintel-20s.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

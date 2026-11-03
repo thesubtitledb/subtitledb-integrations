@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -92,20 +93,22 @@ namespace SubtitleDb.Jellyfin
                 }
 
                 _logger.LogDebug(
-                    "SubtitleDB: {Count} candidates for {Path} at rung {Tier}, {Unrenderable} unrenderable, {Wrong} for another episode",
+                    "TSDb: {Count} candidates for {Path} at rung {Tier}, {Unrenderable} unrenderable, {Wrong} for another episode",
                     found.Candidates.Count,
                     request.MediaPath,
                     found.Tier,
                     found.Unrenderable,
                     found.WrongEpisode);
 
-                return candidates.Select(c => Describe(c, Name)).ToList();
+                var described = candidates.Select(c => Describe(c, Name)).ToList();
+                Remember(described, request.MediaPath);
+                return described;
             }
             catch (SubtitleDbException err)
             {
                 // A provider that throws here is one Jellyfin logs as an error with a
                 // stack trace. An API that is down or slow is neither, so one line.
-                _logger.LogWarning("SubtitleDB: search failed for {Path}: {Message}", request.MediaPath, err.Message);
+                _logger.LogWarning("TSDb: search failed for {Path}: {Message}", request.MediaPath, err.Message);
                 return Array.Empty<RemoteSubtitleInfo>();
             }
         }
@@ -131,7 +134,7 @@ namespace SubtitleDb.Jellyfin
             // the file lives today, and that address is not ours to keep.
             var bytes = await client.DownloadAsync(row.DownloadUrl!, cancellationToken).ConfigureAwait(false);
 
-            return new SubtitleResponse
+            var response = new SubtitleResponse
             {
                 // The stored format, whatever the extension says. A file saved as .srt
                 // that is really ASS renders as a screen of tag soup.
@@ -140,6 +143,37 @@ namespace SubtitleDb.Jellyfin
                 IsHearingImpaired = row.HearingImpaired,
                 Stream = new MemoryStream(bytes),
             };
+
+            if (Searched.TryGetValue(id, out var video))
+            {
+                (_services?.GetService(typeof(SyncedTrack)) as SyncedTrack)?.Downloaded(video, bytes, response.Format, response.Language);
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// The video each offered subtitle was offered for. Jellyfin downloads by id
+        /// alone, and the SYNCED copy needs the video; it always searches first.
+        /// </summary>
+        internal static ConcurrentDictionary<string, string> Searched { get; } = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+
+        internal static void Remember(IEnumerable<RemoteSubtitleInfo> offered, string? mediaPath)
+        {
+            if (string.IsNullOrEmpty(mediaPath))
+            {
+                return;
+            }
+
+            if (Searched.Count > 5000)
+            {
+                Searched.Clear();
+            }
+
+            foreach (var info in offered)
+            {
+                Searched[info.Id] = mediaPath!;
+            }
         }
 
         /// <summary>
@@ -164,7 +198,7 @@ namespace SubtitleDb.Jellyfin
             {
                 // A library call shaped differently in another Jellyfin version costs
                 // this one rung, not the search.
-                _logger.LogDebug(err, "SubtitleDB: no series id for {Path}", request.MediaPath);
+                _logger.LogDebug(err, "TSDb: no series id for {Path}", request.MediaPath);
                 return null;
             }
         }

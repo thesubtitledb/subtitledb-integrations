@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Silero VAD v5 weights for Sync/Silero.cs, from tools/silero-weights.py. -->
+    <EmbeddedResource Include="Sync/silero_v5_16k.bin" LogicalName="SubtitleDb.Core.Sync.silero_v5_16k.bin" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The URL builder and the host allow-list are not API, but they are exactly
          what a test should hold to: a download that follows a redirect off our hosts
          is the failure worth naming. -->

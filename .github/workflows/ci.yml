@@ -158,6 +158,10 @@ jobs:
           # Under the job's temp directory, apart from the runner's own copies.
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
 
+      # The sync tests run the host's ffmpeg and ffprobe, as the plugin does.
+      - name: ffmpeg
+        run: command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+
       # Warnings are errors in Directory.Build.props, so this is the typecheck step
       # as well as the build one.
       - name: Tests
