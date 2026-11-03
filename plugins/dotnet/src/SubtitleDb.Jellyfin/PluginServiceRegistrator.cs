@@ -18,6 +18,10 @@ namespace SubtitleDb.Jellyfin
         {
             serviceCollection.AddSingleton<ISubtitleProvider, SubtitleDbSubtitleProvider>();
             serviceCollection.AddHostedService<PlaybackLookup>();
+
+            // One instance: the provider hands it downloads, and as a hosted service it syncs them.
+            serviceCollection.AddSingleton<SyncedTrack>();
+            serviceCollection.AddHostedService(services => services.GetRequiredService<SyncedTrack>());
         }
     }
 }

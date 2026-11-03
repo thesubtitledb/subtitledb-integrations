@@ -34,6 +34,25 @@
                         video has subtitles. A new subtitle is listed from the next play.
                     </div>
                 </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="SyncWithSubtitles" name="SyncWithSubtitles" type="checkbox" is="emby-checkbox" />
+                        <span>Sync subtitles with other subtitle tracks</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Each download also gets a SYNCED - TSDb copy, lined up against a text subtitle
+                        inside the video. It reads "(syncing)" until done, and is removed if it cannot be lined up.
+                    </div>
+                </div>
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input id="SyncWithAudio" name="SyncWithAudio" type="checkbox" is="emby-checkbox" />
+                        <span>Sync subtitles with audio (uses CPU/GPU)</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        The same, lined up against the speech in eight minutes of the video's audio.
+                    </div>
+                </div>
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="PerLanguage">Subtitles per language</label>
                     <input id="PerLanguage" name="PerLanguage" type="number" is="emby-input"
@@ -72,6 +91,8 @@
                     document.querySelector('#ApiBase').value = config.ApiBase;
                     document.querySelector('#PerLanguage').value = config.PerLanguage;
                     document.querySelector('#LookUpOnPlay').checked = config.LookUpOnPlay;
+                    document.querySelector('#SyncWithSubtitles').checked = config.SyncWithSubtitles;
+                    document.querySelector('#SyncWithAudio').checked = config.SyncWithAudio;
                     Dashboard.hideLoadingMsg();
                 }, () => subtitleDbFailed('The settings could not be loaded.'));
             });
@@ -84,6 +105,8 @@
                     config.ApiBase = document.querySelector('#ApiBase').value;
                     config.PerLanguage = parseInt(document.querySelector('#PerLanguage').value, 10);
                     config.LookUpOnPlay = document.querySelector('#LookUpOnPlay').checked;
+                    config.SyncWithSubtitles = document.querySelector('#SyncWithSubtitles').checked;
+                    config.SyncWithAudio = document.querySelector('#SyncWithAudio').checked;
                     return ApiClient.updatePluginConfiguration(SubtitleDbConfig.pluginUniqueId, config);
                 }).then(Dashboard.processPluginConfigurationUpdateResult,
                     () => subtitleDbFailed('The settings could not be saved.'));

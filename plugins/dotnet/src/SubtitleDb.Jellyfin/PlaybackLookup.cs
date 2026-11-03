@@ -74,7 +74,7 @@ namespace SubtitleDb.Jellyfin
             }
             catch (Exception err)
             {
-                _logger.LogError(err, "SubtitleDB: the lookup on play is off, this Jellyfin's playback event is not the one it was built for");
+                _logger.LogError(err, "TSDb: the lookup on play is off, this Jellyfin's playback event is not the one it was built for");
             }
 
             return Task.CompletedTask;
@@ -88,7 +88,7 @@ namespace SubtitleDb.Jellyfin
             }
             catch (Exception err)
             {
-                _logger.LogDebug(err, "SubtitleDB: the lookup on play was never on");
+                _logger.LogDebug(err, "TSDb: the lookup on play was never on");
             }
 
             _stopping.Cancel();
@@ -188,7 +188,7 @@ namespace SubtitleDb.Jellyfin
             }
             catch (Exception err)
             {
-                _logger.LogError(err, "SubtitleDB: the lookup on play did not start");
+                _logger.LogError(err, "TSDb: the lookup on play did not start");
             }
         }
 
@@ -202,11 +202,11 @@ namespace SubtitleDb.Jellyfin
                     var said = await LookUpCoreAsync(video, timeout.Token).ConfigureAwait(false);
                     if (said.StartsWith("saved", StringComparison.Ordinal))
                     {
-                        _logger.LogInformation("SubtitleDB: {Path} started playing, {Said}", video.Path, said);
+                        _logger.LogInformation("TSDb: {Path} started playing, {Said}", video.Path, said);
                     }
                     else
                     {
-                        _logger.LogDebug("SubtitleDB: {Path} started playing, {Said}", video.Path, said);
+                        _logger.LogDebug("TSDb: {Path} started playing, {Said}", video.Path, said);
                     }
                 }
             }
@@ -216,17 +216,17 @@ namespace SubtitleDb.Jellyfin
             }
             catch (SubtitleDbException err)
             {
-                _logger.LogWarning("SubtitleDB: the lookup on play failed for {Path}: {Message}", video.Path, err.Message);
+                _logger.LogWarning("TSDb: the lookup on play failed for {Path}: {Message}", video.Path, err.Message);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("SubtitleDB: the lookup on play gave up on {Path} after 2 minutes", video.Path);
+                _logger.LogWarning("TSDb: the lookup on play gave up on {Path} after 2 minutes", video.Path);
             }
             catch (Exception err)
             {
                 // A Jellyfin whose library or subtitle calls differ from the ones this was
                 // built against lands here, with the playback itself untouched.
-                _logger.LogError(err, "SubtitleDB: the lookup on play failed for {Path}", video.Path);
+                _logger.LogError(err, "TSDb: the lookup on play failed for {Path}", video.Path);
             }
         }
 
@@ -249,7 +249,7 @@ namespace SubtitleDb.Jellyfin
                 catch (Exception err)
                 {
                     // Every language is asked, as when the setting is off.
-                    _logger.LogDebug(err, "SubtitleDB: cannot tell what language {Path} is in", video.Path);
+                    _logger.LogDebug(err, "TSDb: cannot tell what language {Path} is in", video.Path);
                 }
             }
 
