@@ -35,6 +35,9 @@ Emby:
 | Subtitles per language, 100 to 2000 | 500 |
 | API address | `https://api.thesubtitledb.org` |
 
+[src/SubtitleDb.Jellyfin](src/SubtitleDb.Jellyfin/README.md) says what each Jellyfin
+setting does.
+
 ## SYNCED track (Jellyfin)
 
 With either sync setting on, every TSDb download also writes
