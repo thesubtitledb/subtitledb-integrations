@@ -149,18 +149,30 @@ namespace SubtitleDb.Core.Sync
             return o;
         }
 
-        /// <summary>A text subtitle stream as SRT.</summary>
-        public async Task<string> SubtitleAsync(string video, ProbeStream stream, CancellationToken cancellationToken)
+        /// <summary>
+        /// The start of a text subtitle stream as SRT: its first <paramref name="cues"/> cues,
+        /// from at most the first <paramref name="seconds"/> of the video. Reading stops
+        /// there, so a large file costs no more than a small one.
+        /// </summary>
+        public async Task<string> SubtitleAsync(string video, ProbeStream stream, int cues, double seconds, CancellationToken cancellationToken)
         {
             var srt = await RunAsync(
                 _ffmpeg,
-                new[] { "-nostdin", "-v", "error", "-i", video, "-map", "0:" + stream.Index.ToString(CultureInfo.InvariantCulture), "-f", "srt", "-" },
-                cancellationToken).ConfigureAwait(false);
+                new[]
+                {
+                    "-nostdin", "-v", "error", "-i", video, "-map", "0:" + stream.Index.ToString(CultureInfo.InvariantCulture),
+                    "-t", seconds.ToString("0.###", CultureInfo.InvariantCulture), "-flush_packets", "1", "-f", "srt", "-",
+                },
+                cancellationToken,
+                output => Arrows(output) > cues).ConfigureAwait(false);
             return Encoding.UTF8.GetString(srt);
         }
 
-        /// <summary>Runs a program to the end and returns what it wrote; IOException when it fails.</summary>
-        internal static async Task<byte[]> RunAsync(string program, IEnumerable<string> args, CancellationToken cancellationToken)
+        /// <summary>
+        /// Runs a program and returns what it wrote; IOException when it fails. With
+        /// <paramref name="enough"/>, stops it as soon as that says the output is enough.
+        /// </summary>
+        internal static async Task<byte[]> RunAsync(string program, IEnumerable<string> args, CancellationToken cancellationToken, Func<MemoryStream, bool>? enough = null)
         {
             var info = new ProcessStartInfo(program, string.Join(" ", args.Select(Quote)))
             {
@@ -194,12 +206,26 @@ namespace SubtitleDb.Core.Sync
             using (cancellationToken.Register(() => Kill(process)))
             {
                 var output = new MemoryStream();
-                var copy = process.StandardOutput.BaseStream.CopyToAsync(output, 81920, cancellationToken);
                 var errors = process.StandardError.ReadToEndAsync();
-                await Task.WhenAll(copy, errors).ConfigureAwait(false);
+                var stdout = process.StandardOutput.BaseStream;
+                var buffer = new byte[81920];
+                var stopped = false;
+                int n;
+                while ((n = await stdout.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    output.Write(buffer, 0, n);
+                    if (enough != null && enough(output))
+                    {
+                        stopped = true;
+                        Kill(process);
+                        break;
+                    }
+                }
+
+                await errors.ConfigureAwait(false);
                 process.WaitForExit();
                 cancellationToken.ThrowIfCancellationRequested();
-                if (process.ExitCode != 0)
+                if (!stopped && process.ExitCode != 0)
                 {
                     var said = errors.Result.Trim();
                     throw new IOException(Path.GetFileName(program) + " exited " + process.ExitCode.ToString(CultureInfo.InvariantCulture)
@@ -235,6 +261,22 @@ namespace SubtitleDb.Core.Sync
 
             sb.Append('\\', slashes * 2);
             return sb.Append('"').ToString();
+        }
+
+        /// <summary>SRT time lines so far, one per cue.</summary>
+        private static int Arrows(MemoryStream output)
+        {
+            var bytes = output.GetBuffer();
+            var count = 0;
+            for (var i = 0; i + 2 < output.Length; i++)
+            {
+                if (bytes[i] == '-' && bytes[i + 1] == '-' && bytes[i + 2] == '>')
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static void Kill(Process process)

@@ -42,10 +42,11 @@ With either sync setting on, every TSDb download also writes
 the start of every cue, and refreshes the video so it is listed. One job at a time then
 lines it up with Jellyfin's own ffmpeg:
 
-- Other subtitle tracks: against a text subtitle inside the video (not forced, the same
-  language first), with at least 20 cues. A track titled "Forced" counts as forced, and
-  when the first track has too few cues the next one is read. Reading a track reads the
-  whole file: about 3 minutes for a 5.6 GB film on a USB disk.
+- Other subtitle tracks: against the first 50 cues of a text subtitle inside the video
+  (not forced, the same language first), read from the start and never past its first
+  15 minutes, so a large file costs no more than a small one. At least 20 cues are
+  needed. A track titled "Forced" counts as forced, and when the first track has too
+  few cues the next one is read.
 - Audio: against the speech in four 2-minute samples of the default audio track, found
   with Silero VAD v5 run in C# (no ONNX Runtime). From 5 channels up only the centre
   channel is read.
