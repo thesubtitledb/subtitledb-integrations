@@ -31,6 +31,7 @@ namespace SubtitleDb.Jellyfin
         private readonly IProviderManager _providers;
         private readonly IFileSystem _fileSystem;
         private readonly IMediaEncoder _encoder;
+        private readonly PlayGate _gate;
         private readonly ILogger<SyncedTrack> _logger;
         private readonly Channel<Job> _jobs = Channel.CreateUnbounded<Job>(new UnboundedChannelOptions { SingleReader = true });
         private readonly ConcurrentDictionary<string, Job> _pending = new ConcurrentDictionary<string, Job>(StringComparer.Ordinal);
@@ -43,12 +44,14 @@ namespace SubtitleDb.Jellyfin
             IProviderManager providers,
             IFileSystem fileSystem,
             IMediaEncoder encoder,
+            PlayGate gate,
             ILogger<SyncedTrack> logger)
         {
             _library = library;
             _providers = providers;
             _fileSystem = fileSystem;
             _encoder = encoder;
+            _gate = gate;
             _logger = logger;
         }
 
@@ -94,14 +97,22 @@ namespace SubtitleDb.Jellyfin
                     return;
                 }
 
-                var job = Prepare(videoPath!, subtitle, format, language, config.SyncWithSubtitles, config.SyncWithAudio);
-                if (job == null)
+                var video = Find(videoPath!);
+                if (video == null)
                 {
                     return;
                 }
 
-                _pending[job.Path] = job;
-                _jobs.Writer.TryWrite(job);
+                // A player holding the video's list would lose its tracks to a new file.
+                Job? job = null;
+                if (_gate.TryChangeNow(video.Id, () => job = Prepare(video, videoPath!, subtitle, format, language, config.SyncWithSubtitles, config.SyncWithAudio)))
+                {
+                    Queue(job);
+                }
+                else
+                {
+                    _ = PrepareLaterAsync(video, videoPath!, subtitle, format, language, config.SyncWithSubtitles, config.SyncWithAudio);
+                }
             }
             catch (Exception err)
             {
@@ -109,14 +120,49 @@ namespace SubtitleDb.Jellyfin
             }
         }
 
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private Job? Prepare(string videoPath, byte[] subtitle, string? format, string? language, bool withTracks, bool withAudio)
+        private async Task PrepareLaterAsync(Video video, string videoPath, byte[] subtitle, string? format, string? language, bool withTracks, bool withAudio)
         {
-            if (!(_library.FindByPath(videoPath, false) is Video video))
+            try
             {
-                return null;
+                Job? job = null;
+                await _gate.ChangeAsync(
+                    video.Id,
+                    () =>
+                    {
+                        job = Prepare(video, videoPath, subtitle, format, language, withTracks, withAudio);
+                        return Task.CompletedTask;
+                    },
+                    _stopping.Token).ConfigureAwait(false);
+                Queue(job);
             }
+            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+            {
+                // Jellyfin is stopping.
+            }
+            catch (Exception err)
+            {
+                _logger.LogError(err, "TSDb: no SYNCED subtitle for {Path}", videoPath);
+            }
+        }
 
+        private void Queue(Job? job)
+        {
+            if (job != null)
+            {
+                _pending[job.Path] = job;
+                _jobs.Writer.TryWrite(job);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private Video? Find(string videoPath)
+        {
+            return _library.FindByPath(videoPath, false) as Video;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private Job? Prepare(Video video, string videoPath, byte[] subtitle, string? format, string? language, bool withTracks, bool withAudio)
+        {
             var extension = string.IsNullOrWhiteSpace(format) ? "srt" : format!.Trim().ToLowerInvariant();
             var lang = Languages.ToAlpha3(language);
             if (string.IsNullOrEmpty(lang))
@@ -191,6 +237,7 @@ namespace SubtitleDb.Jellyfin
         private async Task SyncAsync(Job job)
         {
             var started = DateTime.UtcNow;
+            var synced = false;
             try
             {
                 using var limit = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
@@ -204,14 +251,15 @@ namespace SubtitleDb.Jellyfin
                     return;
                 }
 
+                // Rewritten in place, it keeps its number in a player's list.
                 if (outcome.Bytes != null)
                 {
                     File.WriteAllBytes(job.Path, outcome.Bytes);
                     _logger.LogInformation("TSDb: {Path} {Said}, in {Seconds:0.0} s", job.Path, outcome.Said, (DateTime.UtcNow - started).TotalSeconds);
+                    synced = true;
                 }
                 else
                 {
-                    Delete(job.Path);
                     _logger.LogInformation("TSDb: {Path} not synced and removed: {Said}", job.Path, outcome.Said);
                 }
             }
@@ -222,7 +270,6 @@ namespace SubtitleDb.Jellyfin
             }
             catch (Exception err)
             {
-                Delete(job.Path);
                 if (err is OperationCanceledException)
                 {
                     _logger.LogWarning("TSDb: {Path} not synced and removed: gave up after {Minutes} minutes", job.Path, Limit.TotalMinutes);
@@ -237,7 +284,41 @@ namespace SubtitleDb.Jellyfin
                 _pending.TryRemove(new KeyValuePair<string, Job>(job.Path, job));
             }
 
-            Refresh(job.Video);
+            if (synced)
+            {
+                Refresh(job.Video);
+            }
+            else
+            {
+                _ = RemoveAsync(job);
+            }
+        }
+
+        /// <summary>Removes a SYNCED copy that could not be synced, once no player holds the video's list.</summary>
+        private async Task RemoveAsync(Job job)
+        {
+            try
+            {
+                await _gate.ChangeAsync(
+                    job.Video.Id,
+                    () =>
+                    {
+                        // A newer download for the same file may have written it again meanwhile.
+                        if (!_pending.ContainsKey(job.Path))
+                        {
+                            Delete(job.Path);
+                            Refresh(job.Video);
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                    _stopping.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Jellyfin is stopping: a marked file nobody will finish would stay marked for good.
+                Delete(job.Path);
+            }
         }
 
         /// <summary>ffprobe sits beside ffmpeg in every Jellyfin package.</summary>

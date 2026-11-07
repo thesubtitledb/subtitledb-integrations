@@ -98,8 +98,16 @@ it has subtitles already. The library's subtitle settings decide what it asks fo
 - With SubtitleDB unticked for the library, nothing is asked.
 
 Each video is asked for at most once in 10 minutes, and a subtitle already beside it is
-not saved again. Players read the subtitle list as playback starts, so a new subtitle is
-listed from the next play.
+not saved again.
+
+Jellyfin: the lookup runs when the player asks for the video's tracks (PlaybackInfo),
+before Jellyfin answers, and the player waits up to 4 seconds for it. A subtitle found
+in time is in the list the player starts with, and so is its SYNCED copy, which is
+rewritten in place once synced. A player picks tracks by number, and Jellyfin numbers
+files beside a video before the tracks inside it, so while a video plays the plugin adds
+and removes no file: one found late, or a SYNCED copy that could not be synced and is
+removed, waits until the video stops. Emby: players read the subtitle list as playback
+starts, so a new subtitle is listed from the next play.
 
 ## When the API fails
 

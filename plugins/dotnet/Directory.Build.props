@@ -6,13 +6,13 @@
     <!-- A warning in a plugin is a bug a user meets months later, in a log nobody
          reads. Cheaper to fail the build. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.5.1</Version>
+    <Version>0.5.2</Version>
     <!-- What changed in this version, in a sentence or two, for both hosts. Stamped
          into the assemblies; change it with the version. -->
-    <PackageReleaseNotes>Jellyfin: syncing against a subtitle track reads only its first 50 cues, seconds on any file. No change for Emby.</PackageReleaseNotes>
+    <PackageReleaseNotes>Jellyfin: the subtitle found on play is in the list the player starts with, and no file is added or removed while a video plays. No change for Emby.</PackageReleaseNotes>
     <!-- What Jellyfin shows in its plugin catalog beside the update. Jellyfin only:
          an Emby-only change does not belong here. -->
-    <JellyfinReleaseNotes>Syncing against a subtitle track inside the video reads only its first 50 cues: seconds, where a large film took minutes.</JellyfinReleaseNotes>
+    <JellyfinReleaseNotes>A TSDb subtitle found when you press play is in the subtitle list straight away. Picking a subtitle no longer fails after TSDb saves a file mid-play: no file is added or removed while a video plays.</JellyfinReleaseNotes>
     <Authors>SubtitleDB</Authors>
     <Company>SubtitleDB</Company>
     <Product>SubtitleDB</Product>
