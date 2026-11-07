@@ -1,6 +1,7 @@
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Subtitles;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace SubtitleDb.Jellyfin
@@ -17,7 +18,14 @@ namespace SubtitleDb.Jellyfin
         public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
         {
             serviceCollection.AddSingleton<ISubtitleProvider, SubtitleDbSubtitleProvider>();
-            serviceCollection.AddHostedService<PlaybackLookup>();
+            serviceCollection.AddSingleton<PlayGate>();
+
+            // One instance: the PlaybackInfo filter calls it, and as a hosted service it
+            // hears playback start and stop.
+            serviceCollection.AddSingleton<PlaybackLookup>();
+            serviceCollection.AddHostedService(services => services.GetRequiredService<PlaybackLookup>());
+            serviceCollection.AddSingleton<PlaybackInfoFilter>();
+            serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<PlaybackInfoFilter>());
 
             // One instance: the provider hands it downloads, and as a hosted service it syncs them.
             serviceCollection.AddSingleton<SyncedTrack>();

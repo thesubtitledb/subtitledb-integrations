@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -8,6 +9,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SubtitleDb.Jellyfin;
 using Xunit;
@@ -91,8 +93,9 @@ namespace SubtitleDb.Jellyfin.Tests
 
             new PluginServiceRegistrator().RegisterServices(services, null!);
 
-            Assert.Contains(services, d =>
-                d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(PlaybackLookup));
+            // One instance, which the PlaybackInfo filter also calls.
+            Assert.Contains(services, d => d.ServiceType == typeof(PlaybackLookup) && d.Lifetime == ServiceLifetime.Singleton);
+            Assert.Equal(2, services.Count(d => d.ServiceType == typeof(IHostedService) && d.ImplementationFactory != null));
         }
 
         [Fact]
