@@ -127,9 +127,10 @@ namespace SubtitleDb.Tests
                 "-metadata:s:s:0", "language=eng", "-metadata:s:s:1", "language=eng", video);
             var ffmpeg = new Ffmpeg("ffmpeg", "ffprobe");
 
-            // Only the start of the track is read.
+            // Only the start of the track is read. ffmpeg writes in chunks, so a few cues
+            // past the limit can arrive with the last one before it is stopped.
             var head = SubtitleDoc.Parse(await ffmpeg.SubtitleAsync(video, new ProbeStream { Index = 2 }, Syncer.ReferenceCues, Syncer.ReferenceSeconds, CancellationToken.None), "srt");
-            Assert.InRange(head.Cues.Count, Syncer.ReferenceCues, Syncer.ReferenceCues + 1);
+            Assert.InRange(head.Cues.Count, Syncer.ReferenceCues, Syncer.ReferenceCues + 10);
             Assert.True(cues.Count > 150, cues.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             var late = Encoding.UTF8.GetBytes(Srts(cues, 3.2));
