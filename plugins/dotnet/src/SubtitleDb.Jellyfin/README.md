@@ -17,7 +17,7 @@ The settings are on the plugin's page, under Dashboard > Plugins > TSDb.
 
 | Setting | Default | What it does |
 |---|---|---|
-| Get latest subtitles on play | On | When a film or episode starts, saves the best TSDb match beside it, even when it has subtitles already. It follows the library's subtitle download settings. A new subtitle is listed from the next play. |
+| Get latest subtitles on play | On | When a film or episode starts, saves the best TSDb match beside it, even when it has subtitles already. It follows the library's subtitle download settings. The player waits up to 4 seconds for it, so a subtitle found is in its list straight away; one found later is listed from the next play. |
 | Sync subtitles with other subtitle tracks | Off | Each TSDb download also gets a copy named SYNCED - TSDb, lined up against the first 50 lines of a text subtitle inside the video. |
 | Sync subtitles with audio (uses CPU/GPU) | Off | The same copy, lined up against the speech in four two-minute stretches of the video's audio. This is used when the video has no text subtitle to line up against, or it does not match. |
 | Subtitles per language | 500 | The most results to offer for each language, from 100 to 2000. Past 100, each further 100 is one more request. |
