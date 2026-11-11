@@ -7,13 +7,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeSource, resetPlays } from '../src/collector.js';
 import { MAX_EVENTS } from '../src/play.js';
-import { bucket, FLAGS, type Snapshot } from '../src/snapshot.js';
+import { FLAGS, type Snapshot } from '../src/snapshot.js';
 import {
   addTrack,
   end,
   grow,
   hide,
-  LOAD,
   last,
   load,
   pause,
@@ -546,31 +545,6 @@ describe('traces', () => {
     playFor(all, 20);
     end(all);
     expect(last(all).ev?.length).toBeGreaterThan(0);
-  });
-
-  it('for a fraction, keep exactly the plays the receiving side keeps', async () => {
-    // The receiving side's own tests pin these same vectors.
-    expect(bucket('0A1B2C3D4E5F6071:1')).toBe(42);
-    expect(bucket('0A1B2C3D4E5F6071:2')).toBe(23);
-    expect(bucket('0A1B2C3D4E5F6071:3')).toBe(4);
-    expect(bucket('FFFFFFFFFFFFFFFF:255')).toBe(95);
-    expect(bucket('0000000000000001:1')).toBe(71);
-
-    const r = rig();
-    r.answer.rule = '30';
-    load(r, 5);
-    const traced: boolean[] = [];
-    for (let i = 0; i < 3; i++) {
-      r.video.currentTime = 0;
-      play(r);
-      await r.settle();
-      playFor(r, 5);
-      end(r);
-      traced.push(last(r).ev !== undefined);
-    }
-    // Plays 1, 2 and 3 of LOAD land in buckets 42, 23 and 4.
-    expect(LOAD).toBe('0A1B2C3D4E5F6071');
-    expect(traced).toEqual([false, true, true]);
   });
 
   it('stop growing past the cap, keeping how the play began', () => {

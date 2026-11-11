@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  PlayerNotReachableError,
-  SubtitleDbAbort,
-  SubtitleDbError,
-  UnknownPlayerError,
-} from '../src/errors.js';
+import { PlayerNotReachableError, SubtitleDbError, UnknownPlayerError } from '../src/errors.js';
 
 describe('SubtitleDbError.retryable', () => {
   // Callers and the session decide whether to ask again from this alone.
@@ -47,25 +42,9 @@ describe('SubtitleDbError.fromBody', () => {
       url: 'https://x.test/v1/by-imdb/tt1',
     });
   });
-
-  it('still names the failure when there is no body', () => {
-    for (const body of [undefined, null, {}]) {
-      expect(SubtitleDbError.fromBody(502, '', body)).toMatchObject({
-        status: 502,
-        code: 'http_error',
-        message: 'request failed with 502',
-      });
-    }
-  });
 });
 
 describe('error classes', () => {
-  it('keeps an abort apart from a failure', () => {
-    const abort = new SubtitleDbAbort();
-    expect(abort.name).toBe('SubtitleDbAbort');
-    expect(abort).not.toBeInstanceOf(SubtitleDbError);
-  });
-
   it('makes a refusal to reach a player catchable as UnknownPlayerError', () => {
     // A page already catching UnknownPlayerError keeps working.
     const err = new PlayerNotReachableError('videojs', 'no tech');

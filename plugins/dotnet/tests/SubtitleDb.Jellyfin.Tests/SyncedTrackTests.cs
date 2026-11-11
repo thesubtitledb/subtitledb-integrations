@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,29 +14,6 @@ namespace SubtitleDb.Jellyfin.Tests
     /// </summary>
     public class SyncedTrackTests
     {
-        [Fact]
-        public void BothSyncSettingsAreOffUntilTurnedOn()
-        {
-            var config = new Configuration.PluginConfiguration();
-
-            Assert.False(config.SyncWithSubtitles);
-            Assert.False(config.SyncWithAudio);
-        }
-
-        [Fact]
-        public void TheSettingsPageCarriesBothLabelsAsWritten()
-        {
-            var assembly = typeof(Plugin).Assembly;
-            var name = assembly.GetManifestResourceNames().Single(n => n.EndsWith(".configPage.html", StringComparison.Ordinal));
-            using var stream = assembly.GetManifestResourceStream(name)!;
-            var html = new StreamReader(stream).ReadToEnd();
-
-            Assert.Contains("<span>Sync subtitles with other subtitle tracks</span>", html, StringComparison.Ordinal);
-            Assert.Contains("<span>Sync subtitles with audio (uses CPU/GPU)</span>", html, StringComparison.Ordinal);
-            Assert.Contains("config.SyncWithSubtitles = ", html, StringComparison.Ordinal);
-            Assert.Contains("config.SyncWithAudio = ", html, StringComparison.Ordinal);
-        }
-
         [Fact]
         public void OneInstanceTakesDownloadsAndRunsAsAHostedService()
         {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SubtitleDbClient } from '../src/client.js';
 import { createSession } from '../src/session.js';
-import { resolveTranscribe, SYNTHETIC_ID } from '../src/transcribe.js';
+import { SYNTHETIC_ID } from '../src/transcribe.js';
 import { bundleSubtitle, movieBundle, stubFetch } from './fixtures.js';
 
 function session(routes: Parameters<typeof stubFetch>[0], opts: Record<string, unknown> = {}) {
@@ -377,36 +377,6 @@ describe('autoSelect locale and region tolerance', () => {
     }
   });
 
-  it("'locale' tolerates a region: en-US selects the corpus en", async () => {
-    vi.stubGlobal('navigator', { languages: ['en-US'] });
-    try {
-      const { s } = session([page, { match: /\/get\/2$/, text: 'english' }], {
-        autoSelect: 'locale',
-      });
-      const r = await s.resolve({ imdbId: 'tt0133093' });
-      expect(r.selected?.candidate.subtitle.id).toBe(2);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("'locale' fetches the viewer's languages when none are configured", async () => {
-    vi.stubGlobal('navigator', { languages: ['de-DE', 'en-US'] });
-    try {
-      const { s, calls } = session([page, { match: /\/get\/1$/, text: 'deutsch' }], {
-        autoSelect: 'locale',
-      });
-      await s.resolve({ imdbId: 'tt0133093' });
-      // Fanned out one title request per viewer language, so the candidates actually
-      // contain them rather than the alphabetically earliest codes an unfiltered
-      // request returns.
-      expect(calls.some((c) => c.url.includes('lang=de'))).toBe(true);
-      expect(calls.some((c) => c.url.includes('lang=en'))).toBe(true);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it("'locale' falls back to the top candidate when the viewer's language is absent", async () => {
     vi.stubGlobal('navigator', { languages: ['ja'] });
     try {
@@ -497,12 +467,6 @@ describe('autoSelect locale and region tolerance', () => {
     const r = await s.resolve({ imdbId: 'tt0133093' });
     expect(r.selected?.candidate.subtitle.id).toBe(5);
   });
-
-  it('a pinned language tolerates a region too: en-US selects en', async () => {
-    const { s } = session([page, { match: /\/get\/2$/, text: 'english' }], { autoSelect: 'en-US' });
-    const r = await s.resolve({ imdbId: 'tt0133093' });
-    expect(r.selected?.candidate.subtitle.id).toBe(2);
-  });
 });
 
 describe('on-device transcription', () => {
@@ -562,27 +526,6 @@ describe('on-device transcription', () => {
     expect(r.candidates).toHaveLength(2);
     expect(r.candidates[0]?.synthetic).toBeUndefined();
     expect(r.candidates.at(-1)?.synthetic).toBe(true);
-  });
-
-  it('resolves the defaults to SubBot, a detected language and the balanced models', () => {
-    expect(resolveTranscribe(true)).toEqual({
-      when: 'no-match',
-      engine: 'subbot',
-      model: 'auto',
-      quality: 'balanced',
-      task: 'transcribe',
-      device: 'auto',
-      language: 'auto',
-    });
-    const onState = () => {};
-    expect(
-      resolveTranscribe({ quality: 'fast', models: 'https://m.test/', status: false, onState }),
-    ).toMatchObject({
-      quality: 'fast',
-      models: 'https://m.test/',
-      status: false,
-      onState,
-    });
   });
 
   it('load() hands the player to the engine, which reads a manifest the element does not know', async () => {

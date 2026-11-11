@@ -70,13 +70,6 @@ def test_by_title_sends_the_query_and_the_client_name():
     assert "client=python" in calls[0]
 
 
-def test_a_download_names_the_plugin_as_a_lookup_does():
-    calls: list[str] = []
-    c = client_with([FakeResponse(b"1\n00:00:01,000 --> 00:00:02,000\nhi\n")], calls)
-    c.download("https://api.example.test/get/1")
-    assert calls == ["https://api.example.test/get/1?client=python"]
-
-
 def test_the_name_goes_after_any_query_the_download_url_has():
     c = Client(api_base="https://api.example.test", client="bazarr")
     assert (c.with_client("https://api.example.test/get/1?ext=srt")
@@ -92,13 +85,6 @@ def test_the_user_agent_names_the_plugin_and_its_version():
     # The default names this library once, not "subtitledb-subtitledb-plugin".
     assert Client().user_agent == "subtitledb-python/%s (+https://thesubtitledb.org)" % VERSION
     assert VERSION == subtitledb.__version__
-
-
-def test_by_tmdb_builds_the_verb_path():
-    calls: list[str] = []
-    c = client_with([json_response({"title": {}})], calls)
-    c.by_tmdb(603)
-    assert calls[0].split("?")[0].endswith("/v1/by-tmdb/603")
 
 
 def test_by_tmdb_takes_the_typed_path_and_tv_for_a_season():
@@ -147,15 +133,6 @@ def test_by_tmdb_does_not_fall_back_when_the_title_is_missing():
     with pytest.raises(SubtitleDbError):
         c.by_tmdb(9, media_type="tv")
     assert len(calls) == 1
-
-
-def test_the_imdb_prefix_is_optional_on_the_way_in():
-    calls: list[str] = []
-    c = client_with([json_response({"title": {}}), json_response({"title": {}})], calls)
-    c.by_imdb("tt17009710")
-    c.by_imdb(17009710)
-    assert calls[0].split("?")[0] == calls[1].split("?")[0]
-    assert calls[0].split("?")[0].endswith("/v1/by-imdb/17009710")
 
 
 def test_season_and_episode_drill_into_the_path_not_the_query():

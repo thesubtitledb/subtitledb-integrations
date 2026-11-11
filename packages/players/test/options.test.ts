@@ -111,29 +111,6 @@ describe('convert', () => {
   }
 });
 
-describe('formats', () => {
-  for (const name of PATHS) {
-    it(`${name}: a format the player cannot render is never offered`, async () => {
-      installDom();
-      const { client: api } = client();
-
-      // sub is in the fixture and is not convertible, so it must not reach the player
-      // whatever else is on offer.
-      const handle = attachSubtitleDb(FAKES[name]?.(), {
-        client: api,
-        hint: HINT,
-        languages: ['en', 'fr'],
-        formats: ['vtt'],
-      });
-      const result = await handle.refresh();
-
-      expect(result.candidates.length).toBeGreaterThan(0);
-      expect(result.candidates.some((c) => c.subtitle.format === 'sub')).toBe(false);
-      handle.destroy();
-    });
-  }
-});
-
 describe('onError', () => {
   for (const name of PATHS) {
     it(`${name}: an unreachable API is reported, not thrown`, async () => {

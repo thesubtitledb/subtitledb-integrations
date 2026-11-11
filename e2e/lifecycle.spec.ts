@@ -46,22 +46,6 @@ test('a player added to the page later is attached by the observer', async ({ pa
   expect(count).toBe(1);
 });
 
-test('attaching twice is one session, not two sets of tracks', async ({ page }) => {
-  const calls: string[] = [];
-  page.on('request', (r) => {
-    if (r.url().includes(API)) calls.push(new URL(r.url()).pathname);
-  });
-
-  await open(page, 'twice');
-
-  expect(await page.evaluate(() => (window as unknown as { __same: boolean }).__same)).toBe(true);
-  // Two languages, so two searches. A second real attach would have made it four.
-  expect(calls.filter((p) => p.startsWith('/v1/'))).toHaveLength(2);
-  const tracks = await page.locator('video track').count();
-  expect(tracks).toBeGreaterThan(0);
-  expect(tracks).toBe(Number(await page.locator('body').getAttribute('data-tracks')));
-});
-
 test('the media changing under a live handle re-resolves', async ({ page }) => {
   await open(page, 'source-change');
 

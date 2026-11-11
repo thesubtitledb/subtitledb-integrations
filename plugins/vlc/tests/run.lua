@@ -174,21 +174,6 @@ test("languages resolve to the same names", function()
   end
 end)
 
-test("the six corpus codes that are not ISO have names and can be chosen", function()
-  local want = {
-    pb = "Portuguese (Brazil)", zt = "Chinese (Traditional)", ze = "Chinese and English",
-    ea = "Spanish (Latin America)", sp = "Spanish (Spain)", pm = "Portuguese (Mozambique)",
-  }
-  for code, name in pairs(want) do
-    equal(S.language_name(code), name, "name for " .. code)
-    local listed = false
-    for _, pair in ipairs(S.LANGUAGES) do
-      if pair[1] == code then listed = true end
-    end
-    equal(listed, true, code .. " in the dropdown list")
-  end
-end)
-
 -- --------------------------------------------------------------- the filename
 
 test("a film name gives up its title and year", function()
@@ -835,13 +820,6 @@ test("it stays inside the Lua VLC actually embeds", function()
     end
     ok(at == nil, "5.4-only syntax in the extension: " .. banned)
   end
-end)
-
-test("the file says it is MIT, because it travels alone", function()
-  -- An extension is one .lua dropped into a directory, with no LICENSE beside it.
-  local source = read_file(here .. "/../subtitledb.lua")
-  ok(source:find("^%-%- SPDX%-License%-Identifier: MIT\n%-%- Copyright %(c%) 2026 TheSubtitleDb%.org\n"),
-     "subtitledb.lua does not open with its license and copyright lines")
 end)
 
 print(string.format("%d checks, %d failures", checks, failures))

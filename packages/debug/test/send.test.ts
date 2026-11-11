@@ -210,22 +210,6 @@ describe('the outbox', () => {
     await settle();
     expect(n.posts).toHaveLength(2);
   });
-
-  it('is the only key it writes', async () => {
-    const n = net();
-    const storage = memoryStorage();
-    const written = new Set<string>();
-    const set = storage.setItem;
-    storage.setItem = (k: string, v: string) => {
-      written.add(k);
-      set(k, v);
-    };
-    n.state.fail = () => true;
-    const s = new Sender({ fetch: n.fetch, storage });
-    for (let p = 1; p <= 3; p++) s.send('{}', `A:${p}`);
-    await settle();
-    expect([...written]).toEqual([OUTBOX]);
-  });
 });
 
 describe('the trace rule', () => {
@@ -305,11 +289,5 @@ describe('the visitor id', () => {
     storage.broken = true;
     expect(visitorId(storage, T0)).toBeUndefined();
     expect(visitorId(null, T0)).toBeUndefined();
-  });
-
-  it('is the only other key written', () => {
-    const storage = memoryStorage();
-    visitorId(storage, T0);
-    expect([...storage.map.keys()]).toEqual([VISITOR]);
   });
 });

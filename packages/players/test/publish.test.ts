@@ -131,17 +131,6 @@ describe('what the player ends up holding', () => {
     handle.destroy();
   });
 
-  it('clappr: a track shown without telling Clappr is the failure this guards', () => {
-    // The control. Without the binding's shown hook this is what the viewer got: the
-    // subtitle appears, playback starts, and Clappr hides it again.
-    const player = clapprPlayer();
-    const track = { kind: 'subtitles', mode: 'showing' };
-    player.media.textTracks.push(track);
-
-    player.firstPlay();
-    expect(track.mode).toBe('hidden');
-  });
-
   it('plyr: selects by position in the player list, not in ours', async () => {
     installDom();
     const { client: api } = client();

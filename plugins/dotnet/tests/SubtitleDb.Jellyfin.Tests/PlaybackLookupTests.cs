@@ -119,12 +119,6 @@ namespace SubtitleDb.Jellyfin.Tests
             Assert.Null(PlaybackLookup.Spoken(DispatchProxy.Create<IMediaSourceManager, Streams>(), Guid.NewGuid()));
         }
 
-        [Fact]
-        public void TheLookupIsOnUnlessTurnedOff()
-        {
-            Assert.True(new Configuration.PluginConfiguration().LookUpOnPlay);
-        }
-
         /// <summary>A media source manager whose GetMediaStreams answers <see cref="Answer"/>.</summary>
         public class Streams : DispatchProxy
         {

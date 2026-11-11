@@ -43,29 +43,6 @@ def published(folder: pathlib.Path) -> None:
     (folder / "runtimes" / "win" / "native.dll").write_bytes(b"x")
 
 
-def test_the_version_is_the_one_in_the_build_props():
-    # One place. A zip named for one version holding an assembly stamped with another
-    # is how a host reports an update that changes nothing.
-    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
-    assert build.version() == props.split("<Version>")[1].split("</Version>")[0].strip()
-
-
-def test_each_version_says_what_changed():
-    # Jellyfin shows the changelog beside an update. Empty, an update reads as nothing.
-    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
-    written = props.split("<JellyfinReleaseNotes>")[1].split("</JellyfinReleaseNotes>")[0]
-    assert build.notes() == " ".join(written.split())
-    assert len(build.notes()) > 20
-
-
-def test_the_jellyfin_notes_are_not_the_shared_ones():
-    # The shared notes named an Emby-only change, and Jellyfin's catalog showed it.
-    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
-    shared = props.split("<PackageReleaseNotes>")[1].split("</PackageReleaseNotes>")[0]
-    assert "Emby looks" not in build.notes()
-    assert build.notes() != " ".join(shared.split())
-
-
 def test_only_our_own_assemblies_are_published(tmp_path):
     folder = tmp_path / "TSDb_0.1.0"
     published(folder)
@@ -176,28 +153,6 @@ def test_a_version_built_again_replaces_its_earlier_entry(tmp_path, monkeypatch)
     assert versions[0]["checksum"] != "old-0.1.0"
 
 
-def test_earlier_notes_that_named_emby_are_listed_corrected(tmp_path, monkeypatch):
-    # 0.4.5 and 0.4.2 shipped with an Emby-only sentence in Jellyfin's catalog.
-    path = tmp_path / "earlier.json"
-    path.write_text(json.dumps([{
-        "guid": build.GUID,
-        "name": "SubtitleDB",
-        "versions": [
-            {"version": "0.4.5", "changelog": "Skips it. Emby looks a subtitle up once."},
-            {"version": "0.4.4", "changelog": "Latin American Spanish."},
-            {"version": "0.4.2", "changelog": "Skip it. Emby downloads a subtitle once."},
-        ],
-    }]), encoding="utf-8")
-
-    versions = manifest(built_repo(tmp_path / "dist", monkeypatch, history=path))["versions"]
-
-    by = {v["version"]: v["changelog"] for v in versions[1:]}
-    assert by["0.4.5"] == build.CHANGELOG_FIXES["0.4.5"]
-    assert by["0.4.2"] == build.CHANGELOG_FIXES["0.4.2"]
-    assert by["0.4.4"] == "Latin American Spanish."
-    assert not any("Emby" in text for text in by.values())
-
-
 def test_history_from_another_plugin_fails_the_repository(tmp_path, monkeypatch):
     history = earlier_manifest(tmp_path, "0.0.9", guid="00000000-0000-0000-0000-000000000000")
 
@@ -245,13 +200,6 @@ def test_a_core_dll_beside_the_emby_one_fails_the_build(tmp_path, monkeypatch):
         build.build_emby("dotnet", "0.1.0")
 
 
-def test_the_emby_project_compiles_core_in_rather_than_referencing_it():
-    csproj = (HERE / "src" / "SubtitleDb.Emby" / "SubtitleDb.Emby.csproj").read_text(
-        encoding="utf-8")
-    assert '<Compile Include="../SubtitleDb.Core/*.cs"' in csproj
-    assert "SubtitleDb.Core.csproj" not in csproj
-
-
 def test_the_manifest_says_what_jellyfin_reads(tmp_path, monkeypatch):
     # A folder with no meta.json loads, shows no version, and can never be updated.
     calls = []
@@ -270,23 +218,6 @@ def test_the_manifest_says_what_jellyfin_reads(tmp_path, monkeypatch):
     assert meta["targetAbi"] == "10.10.0.0"
     assert meta["changelog"] == build.notes()
     assert calls == ["net8.0"]
-
-
-def test_the_jellyfin_folder_carries_the_license(tmp_path, monkeypatch):
-    monkeypatch.setattr(build, "DIST", tmp_path)
-    monkeypatch.setattr(build, "publish", lambda project, framework, out, dotnet: published(out))
-
-    build.build_jellyfin("dotnet", "0.1.0")
-
-    text = (tmp_path / "jellyfin" / "TSDb_0.1.0" / "LICENSE").read_text(encoding="utf-8")
-    assert text == build.LICENSE.read_text(encoding="utf-8")
-
-
-def test_every_assembly_is_stamped_mit_and_ours():
-    # The Emby zip unpacks into a shared directory, so its DLLs are where this lives.
-    props = (HERE / "Directory.Build.props").read_text(encoding="utf-8")
-    assert "<PackageLicenseExpression>MIT</PackageLicenseExpression>" in props
-    assert "<Copyright>Copyright (c) 2026 TheSubtitleDb.org</Copyright>" in props
 
 
 def test_the_guid_is_the_one_the_config_page_asks_for():

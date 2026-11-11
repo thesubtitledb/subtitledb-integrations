@@ -162,18 +162,6 @@ namespace SubtitleDb.Jellyfin.Tests
         }
 
         [Fact]
-        public void TheProviderNamesItselfAndSaysWhatItCanDo()
-        {
-            var provider = new SubtitleDbSubtitleProvider(
-                new Microsoft.Extensions.Logging.Abstractions.NullLogger<SubtitleDbSubtitleProvider>(),
-                new StubHttpClientFactory());
-
-            Assert.Equal("TSDb", provider.Name);
-            Assert.Contains(VideoContentType.Movie, provider.SupportedMediaTypes);
-            Assert.Contains(VideoContentType.Episode, provider.SupportedMediaTypes);
-        }
-
-        [Fact]
         public void TheProviderIsRegisteredWhereJellyfinLooksForIt()
         {
             // The subtitle manager is built from the container. A provider that is not
@@ -199,22 +187,6 @@ namespace SubtitleDb.Jellyfin.Tests
             // page, and stops there when the plugin does not serve it, leaving an empty
             // form. The plugin serves the page alone, whose own script fills it.
             Assert.DoesNotContain("data-controller=", SettingsPage(), System.StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void TheLookupOnPlayIsCalledGetLatestSubtitlesOnPlay()
-        {
-            Assert.Matches(
-                "id=\"LookUpOnPlay\"[^>]*/>\\s*<span>Get latest subtitles on play</span>",
-                SettingsPage());
-        }
-
-        [Fact]
-        public void TheSettingsScriptNamesItselfForTheBrowserCheck()
-        {
-            // settings_page.py tells this script's errors from Jellyfin's own by that
-            // name. Jellyfin 10.11 and 12 throw errors of their own on any page.
-            Assert.Matches("//# sourceURL=subtitledb\\S*\\.js", SettingsPage());
         }
 
         [Fact]

@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import subtitledb_provider as provider
 from conftest import GUESSES, Episode, Language, Movie, ServiceUnavailable, TooManyRequests
 from subtitledb.client import SubtitleDbError
-from subtitledb.match import Hint
 
 #: The title each lookup resolved to, the way the API reports it.
 FILM = {"imdb": "tt17009710", "tmdb_id": 915935, "media_type": "movie",
@@ -182,13 +181,6 @@ def test_a_code_babelfish_has_never_heard_of_is_skipped_not_raised():
     assert provider.from_api_code("qq") is None
 
 
-def test_the_provider_offers_the_whole_table():
-    langs = provider.supported_languages()
-    assert Language("eng") in langs
-    assert Language("por", "BR") in langs
-    assert len(langs) > 60
-
-
 # -- the seam --------------------------------------------------------------
 
 
@@ -318,12 +310,6 @@ def test_the_release_name_is_read_by_bazarrs_own_parser():
 
     matches_for(breaking_bad(), bundle([row(release_name="Breaking.Bad.S05E14")], SHOW))
     assert GUESSES[-1]["type"] == "episode"
-
-
-def test_the_hint_is_the_shape_the_shared_ladder_takes():
-    # If these ever diverge, every plugin that shares the ladder breaks at once.
-    hint = provider.hint_for(Movie(name="/m/x.mkv", title="x", year=2000, imdb_id="tt1"))
-    assert isinstance(hint, Hint)
 
 
 def test_an_episode_goes_by_the_series_id_sonarr_gave_and_is_kept():

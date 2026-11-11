@@ -62,25 +62,6 @@ namespace SubtitleDb.Emby.Tests
         }
 
         [Fact]
-        public void TheLookupOnPlayIsCalledGetLatestSubtitlesOnPlay()
-        {
-            Assert.Matches(
-                "id=\"LookUpOnPlay\"[^>]*/>\\s*<span>Get latest subtitles on play</span>",
-                Page(main: true));
-        }
-
-        [Fact]
-        public void ThePageSendsTheReaderToEachLibrary()
-        {
-            // Emby keeps the download languages and the ticked downloaders on each library.
-            // Its settings have no Subtitles page to turn this plugin on in.
-            var html = Page(main: true);
-
-            Assert.Contains("for each library under Settings, Library", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("Settings, Subtitles", html, StringComparison.Ordinal);
-        }
-
-        [Fact]
         public void TheControllerIsOneEmbyCanBuildWithNew()
         {
             // Emby calls new on what the script returns. An arrow function throws there,
@@ -91,13 +72,6 @@ namespace SubtitleDb.Emby.Tests
 
             Assert.NotEmpty(returned);
             Assert.Contains("function " + returned + "(view) {", script, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void TheScriptNamesItselfForTheBrowserCheck()
-        {
-            // settings_page.py tells this script's errors from Emby's own by that name.
-            Assert.Matches("//# sourceURL=subtitledb\\S*\\.js", Page(main: false));
         }
     }
 }

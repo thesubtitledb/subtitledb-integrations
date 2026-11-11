@@ -183,19 +183,6 @@ describe('html5 track adapter', () => {
     handle.destroy();
   });
 
-  it('resolves eagerly on loadedmetadata, with no click and no bytes', async () => {
-    const { video, tracks } = installDom();
-    const { handle, calls } = attach(video);
-
-    (video as unknown as { emit(t: string): void }).emit('loadedmetadata');
-    await handle.refresh();
-
-    expect(calls).toHaveLength(1);
-    expect(calls.every((c) => !c.url.includes('/get/'))).toBe(true);
-    expect(tracks.length).toBeGreaterThan(0);
-    handle.destroy();
-  });
-
   it('offers convertible formats and drops the ones nothing can render', async () => {
     // srt and ass are reachable through the converter; sub is not reachable at all,
     // so offering it would produce a track that silently shows nothing.

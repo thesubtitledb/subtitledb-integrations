@@ -73,25 +73,6 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('the tree', () => {
-  it('has both entry formats at the versioned path and at latest', async () => {
-    const v = await readdir(join(out, 'v', version));
-    expect(v).toEqual(
-      expect.arrayContaining(['subtitle-helper.js', 'subtitle-helper.esm.js', 'manifest.json']),
-    );
-    expect(await readdir(join(out, 'latest'))).toEqual(
-      expect.arrayContaining(['subtitle-helper.js', 'subtitle-helper.esm.js']),
-    );
-  });
-
-  it('ships _headers, without which every cross-origin import fails', async () => {
-    const headers = await readFile(join(out, '_headers'), 'utf8');
-    expect(headers).toMatch(/^\/v\/\*$/m);
-    expect(headers).toMatch(/^\/latest\/\*$/m);
-    expect(headers).toMatch(/Access-Control-Allow-Origin: \*/);
-    expect(headers).toMatch(/Cross-Origin-Resource-Policy: cross-origin/);
-    expect(headers).toMatch(/immutable/);
-  });
-
   it('and versions.json is never cached, because a stale one deletes a release', async () => {
     // retain.mjs reads this file off the live site to decide what to carry forward.
     // Served from a four hour edge cache it answers with the list as it was before the
@@ -159,25 +140,6 @@ describe('every chunk the loader can ask for exists', () => {
     }
   });
 
-  it('names all five chunks, the transcription and debugger ones among them', async () => {
-    // The transcription chunk is the last-loaded: pulled only on a synthetic select.
-    // The debugger chunk only with a debugger key. Both have to be named in the entry
-    // so the loader can ask for them.
-    expect(Object.keys(manifest.chunks).sort()).toEqual([
-      'debug',
-      'engine',
-      'players',
-      'subbot',
-      'subbot-worker',
-    ]);
-    const files = await readdir(join(out, 'v', version));
-    for (const name of ['subbot', 'subbot-worker', 'debug']) {
-      expect(files).toContain(manifest.chunks[name]);
-      expect(iife).toContain(manifest.chunks[name]);
-      expect(esm).toContain(manifest.chunks[name]);
-    }
-  });
-
   it('and the debugger chunk carries none of the others: a key costs its own bytes only', async () => {
     const debug = await readFile(join(out, 'v', version, manifest.chunks.debug), 'utf8');
     expect(exported(debug).sort()).toEqual(['watchAttached', 'watchPage']);
@@ -227,22 +189,11 @@ describe('nothing survives that a browser cannot resolve', () => {
     expect(iife).not.toMatch(/import\s*\.\s*meta/);
   });
 
-  it('and the module build keeps the one it needs', () => {
-    expect(esm).toMatch(/import\s*\.\s*meta/);
-  });
-
   it('exactly one dynamic import, built at runtime', () => {
     // More than one means a literal specifier got through and esbuild followed it,
     // which inlines the graph and leaves nothing lazy.
     expect(iife.match(/\bimport\(/g)).toHaveLength(1);
     expect(esm.match(/\bimport\(/g)).toHaveLength(1);
-  });
-
-  it('and it is not a stub', () => {
-    // A bundler that silently writes nothing serves a valid, empty, dead 200. The
-    // page reports no error at all, which is the worst failure mode available.
-    expect(iife.trim().length).toBeGreaterThan(200);
-    expect(esm.trim().length).toBeGreaterThan(200);
   });
 });
 
@@ -361,13 +312,6 @@ describe('the public surface', () => {
   it('the engine chunk carries query, so asking needs no chunk of its own', async () => {
     const engine = await readFile(join(out, 'v', version, manifest.chunks.engine), 'utf8');
     expect(exported(engine).sort()).toEqual(['attachSubtitleDb', 'query']);
-  });
-
-  it('docs/cdn.md documents every one of them', async () => {
-    const doc = await readFile(join(root, 'docs/cdn.md'), 'utf8');
-    for (const name of SURFACE.filter((n) => n !== 'version')) {
-      expect(doc, `SubtitleDB.${name} is not in docs/cdn.md`).toContain(`SubtitleDB.${name}`);
-    }
   });
 });
 

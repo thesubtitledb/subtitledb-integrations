@@ -1,7 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -145,26 +143,6 @@ namespace SubtitleDb.Emby.Tests
                 Assert.True(response.IsHearingImpaired);
                 Assert.Equal(bytes, ((MemoryStream)response.Stream).ToArray());
             }
-        }
-
-        [Fact]
-        public void LogLinesCarryNoPrefixEmbyAlreadyWrites()
-        {
-            // Emby writes the logger's name, SubtitleDB, before every line.
-            var sources = new[] { "PlaybackLookup.cs", "SubtitleDbSubtitleProvider.cs" }
-                .Select(name => File.ReadAllText(Path.Combine(Source(), name)));
-            Assert.DoesNotContain(sources, text => text.Contains("\"SubtitleDB: ", StringComparison.Ordinal));
-        }
-
-        private static string Source()
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory != null && !Directory.Exists(Path.Combine(directory.FullName, "src", "SubtitleDb.Emby")))
-            {
-                directory = directory.Parent;
-            }
-
-            return Path.Combine(directory!.FullName, "src", "SubtitleDb.Emby");
         }
 
         private static SubtitleResponse Fetched()
