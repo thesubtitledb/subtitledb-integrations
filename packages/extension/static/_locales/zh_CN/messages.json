@@ -1,0 +1,6 @@
+{
+  "appName": { "message": "TheSubtitleDB：为任何视频提供字幕" },
+  "appDescription": {
+    "message": "在你观看的任何视频上显示 TheSubtitleDB 字幕；没有字幕时，在你的设备上生成 AI 字幕。"
+  }
+}

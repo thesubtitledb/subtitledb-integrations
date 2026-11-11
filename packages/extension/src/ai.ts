@@ -71,7 +71,7 @@ function create(): AiApi {
       stop();
       const video = globalThis.__tsdb?.element(req.vid);
       if (!video) {
-        set({ phase: 'error', message: 'That video is gone. Open this again.' });
+        set({ phase: 'error', message: 'ai.err.gone' });
         return status;
       }
       const why = unreadable(video);
@@ -116,7 +116,7 @@ function create(): AiApi {
         .then((got) => {
           if (mine !== run) return;
           if (!got) {
-            if (status.phase !== 'error') live({ phase: 'error', message: 'SubBot stopped.' });
+            if (status.phase !== 'error') live({ phase: 'error', message: 'ai.err.stopped' });
             return;
           }
           if (got.identified) {
@@ -161,22 +161,22 @@ function explain(err: unknown): string {
   const code = (err as { code?: string } | null)?.code;
   switch (code) {
     case 'no_source':
-      return 'This video has no source SubBot can read.';
+      return 'ai.err.noSource';
     case 'audio_unreadable':
-      return 'The video server would not let SubBot read the audio.';
+      return 'ai.err.audio';
     case 'unsupported_container':
     case 'unsupported_codec':
-      return 'SubBot cannot decode this video format yet.';
+      return 'ai.err.format';
     case 'no_audio_track':
-      return 'This video has no sound to transcribe.';
+      return 'ai.err.noAudio';
     case 'no_webcodecs':
-      return 'This browser cannot decode audio for SubBot. Update it and try again.';
+      return 'ai.err.webcodecs';
     case 'model_download':
-      return 'The speech model did not download. Check the connection and try again.';
+      return 'ai.err.model';
     case 'aborted':
-      return 'Stopped.';
+      return 'ai.err.aborted';
     default:
-      return err instanceof Error && err.message ? err.message : 'SubBot stopped.';
+      return err instanceof Error && err.message ? err.message : 'ai.err.stopped';
   }
 }
 

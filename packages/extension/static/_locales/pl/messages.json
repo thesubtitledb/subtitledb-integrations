@@ -1,0 +1,6 @@
+{
+  "appName": { "message": "TheSubtitleDB: napisy do każdego wideo" },
+  "appDescription": {
+    "message": "Napisy z TheSubtitleDB do każdego oglądanego wideo, a gdy ich brak, napisy AI tworzone na urządzeniu."
+  }
+}
