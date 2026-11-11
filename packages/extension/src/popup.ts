@@ -675,24 +675,34 @@ function renderTitle(): void {
     return;
   }
   titleMode(true);
-  const h = result?.hint ?? {};
-  const ep =
-    h.season !== undefined && h.episode !== undefined
-      ? `${t('hero.episode', h.season, h.episode)} · `
-      : '';
-  const langs = Object.keys(ti.subtitle_languages ?? {}).length;
-  const total = Object.values(ti.subtitle_languages ?? {}).reduce((a, b) => a + b, 0);
   const b = $('match').querySelector('b') as HTMLElement;
   b.dir = 'auto';
-  const small = $('match').querySelector('small') as HTMLElement;
   b.textContent = `${ti.name}${ti.year ? ` (${ti.year})` : ''}`;
-  small.textContent = `${ep}${tn('hero.files', total, num(total), num(langs))}`;
+  heroLine(result?.hint ?? {});
   ($('site') as HTMLAnchorElement).href =
     `${SITE}/${ti.media_type === 'tv' ? 'tv' : 'movie'}/${ti.imdb}`;
   void paintPoster(ti);
   fillLanguages(ti.subtitle_languages ?? null);
   if (isShow(ti)) void renderEps(ti.imdb);
   else $('eps').hidden = true;
+}
+
+/** The line under the title: the episode when one is picked, and what the title has. */
+function heroLine(h: MediaHint): void {
+  const ti = result?.title;
+  if (!ti) return;
+  const ep =
+    h.season !== undefined && h.episode !== undefined
+      ? `${t('hero.episode', h.season, h.episode)} · `
+      : '';
+  const langs = Object.keys(ti.subtitle_languages ?? {}).length;
+  const total = Object.values(ti.subtitle_languages ?? {}).reduce((a, b) => a + b, 0);
+  // One language needs no naming: the language menu beside the list says which.
+  const files =
+    langs > 1
+      ? tn('hero.files', total, num(total), num(langs))
+      : tn('sugg.files', total, num(total));
+  ($('match').querySelector('small') as HTMLElement).textContent = `${ep}${files}`;
 }
 
 /** The poster: from the lookup when it has one, else from the suggestions for its name. */
@@ -743,6 +753,7 @@ async function renderEps(seriesImdb: string): Promise<void> {
         input('season').value = String(s.season);
         input('episode').value = '';
         void renderEps(seriesImdb);
+        heroLine({});
         askEpisode();
       };
       return b;

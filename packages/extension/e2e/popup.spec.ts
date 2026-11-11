@@ -228,6 +228,11 @@ test('suggestions lead to a show, its seasons and an episode', async ({ open }) 
   // No video length on this page: the score comes from nothing, so none is drawn.
   await expect(popup.locator('#list .ring')).toHaveCount(0);
 
+  // Another season drops the episode from the header and asks again.
+  await popup.locator('#seasonChips button', { hasText: /^S2$/ }).click();
+  await expect(popup.locator('#match small')).not.toContainText('S1 E1');
+  await expect(popup.locator('#rstate')).toHaveText('Pick an episode.');
+
   await popup.locator('#heroBack').click();
   await expect(popup.locator('#search')).toBeVisible();
 });
