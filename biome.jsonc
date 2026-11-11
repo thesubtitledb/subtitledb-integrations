@@ -15,8 +15,8 @@
       // Built by packages/loader/build.mjs: minified bundles with hashed names, which
       // biome will happily report three hundred findings against.
       "!cdn",
-      "!test-results",
-      "!playwright-report",
+      "!**/test-results",
+      "!**/playwright-report",
       // NuGet and MSBuild drop machine-specific JSON here (project.assets.json and
       // friends). CI lints before it ever builds the dotnet plugins, so this only
       // shows up locally: 27 findings in files git already ignores.

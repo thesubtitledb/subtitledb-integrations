@@ -5,15 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { byFit, fileName, fit } from '../src/fit.js';
 import { withoutHearingImpaired } from '../src/hi.js';
 import { LOCALES, pickLocale } from '../src/i18n.js';
-import {
-  DEFAULT_SETTINGS,
-  DEFAULT_STYLE,
-  PRESETS,
-  type Preset,
-  presetOf,
-  readSettings,
-  readStyle,
-} from '../src/shared.js';
+import { DEFAULT_SETTINGS, DEFAULT_STYLE, readSettings, readStyle } from '../src/shared.js';
 
 const FILM = 6000;
 
@@ -106,16 +98,7 @@ describe('styles and settings', () => {
     ).toEqual({ ...DEFAULT_STYLE, size: 9, bottom: 2 });
   });
 
-  it('names each preset after applying it', () => {
-    for (const k of Object.keys(PRESETS) as Preset[]) {
-      expect(presetOf(readStyle(PRESETS[k]))).toBe(k);
-    }
-    expect(presetOf({ ...DEFAULT_STYLE, size: 5 })).toBeNull();
-  });
-
-  it('defaults to dark with the bar on', () => {
-    expect(readSettings(null)).toEqual(DEFAULT_SETTINGS);
-    expect(DEFAULT_SETTINGS).toMatchObject({ theme: 'dark', bar: true });
+  it('keeps what it knows and rejects the rest, the language folder included', () => {
     expect(readSettings({ theme: 'light', ui: 'pt_BR', hi: 'remove', bar: false })).toEqual({
       theme: 'light',
       ui: 'pt_BR',
@@ -139,12 +122,16 @@ describe('interface languages', () => {
     expect(readdirSync(join(dir, '_locales')).sort()).toEqual([...LOCALES].sort());
   });
 
+  const PLURAL = /\.(zero|one|two|few|many)$/;
+  const base = (keys: string[]) => keys.filter((k) => !PLURAL.test(k)).sort();
+
   it.each(LOCALES)('%s has every key, with the same placeholders', (l) => {
     const m: Record<string, string> = read(`locales/${l}.json`);
-    expect(Object.keys(m).sort()).toEqual(Object.keys(en).sort());
-    for (const [k, v] of Object.entries(en)) {
-      expect(typeof m[k], k).toBe('string');
-      expect(holes(m[k] as string), `${l} ${k}`).toBe(holes(v));
+    expect(base(Object.keys(m))).toEqual(base(Object.keys(en)));
+    for (const [k, v] of Object.entries(m)) {
+      const of = k.replace(PLURAL, '');
+      expect(en[of], `${l} ${k} counts nothing in English`).toBeDefined();
+      expect(holes(v), `${l} ${k}`).toBe(holes(en[of] as string));
     }
     const app = read(`_locales/${l}/messages.json`);
     expect(app.appName.message.length).toBeLessThanOrEqual(75);

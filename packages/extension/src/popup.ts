@@ -33,6 +33,7 @@ import {
   num,
   pickLocale,
   t,
+  tn,
 } from './i18n.js';
 import { edgeShadow, FAMILY } from './overlay.js';
 import {
@@ -489,7 +490,7 @@ function renderSuggest(): void {
           el(
             'small',
             {},
-            [s.year, kind, t('sugg.files', num(s.files))].filter(Boolean).join(' · '),
+            [s.year, kind, tn('sugg.files', s.files, num(s.files))].filter(Boolean).join(' · '),
           ),
         ),
       );
@@ -609,9 +610,9 @@ async function search(): Promise<void> {
     result = got;
     shown = PAGE;
     renderTitle();
-    if (pickFirst) {
-      $('list').replaceChildren();
-      setState(t('eps.pick'));
+    // A show found by its name alone has its episodes to pick from, not show-level files.
+    if (pickFirst || (got.title?.media_type === 'tv' && got.hint.episode === undefined)) {
+      askEpisode();
     } else renderResults();
   } catch (err) {
     if (mine !== searchRun) return;
@@ -640,6 +641,14 @@ async function firstFound(tries: (() => Promise<QueryResult>)[], notFound: unkno
     }
   }
   throw notFound;
+}
+
+/** A show with no episode picked: no list, no count, AI subtitles back in their place. */
+function askEpisode(): void {
+  $('list').replaceChildren();
+  $('rcount').textContent = '';
+  setState(t('eps.pick'));
+  aiLead(false);
 }
 
 function setState(text: string | null, bad = false): void {
@@ -674,9 +683,10 @@ function renderTitle(): void {
   const langs = Object.keys(ti.subtitle_languages ?? {}).length;
   const total = Object.values(ti.subtitle_languages ?? {}).reduce((a, b) => a + b, 0);
   const b = $('match').querySelector('b') as HTMLElement;
+  b.dir = 'auto';
   const small = $('match').querySelector('small') as HTMLElement;
   b.textContent = `${ti.name}${ti.year ? ` (${ti.year})` : ''}`;
-  small.textContent = `${ep}${t('hero.files', num(total), num(langs))}`;
+  small.textContent = `${ep}${tn('hero.files', total, num(total), num(langs))}`;
   ($('site') as HTMLAnchorElement).href =
     `${SITE}/${ti.media_type === 'tv' ? 'tv' : 'movie'}/${ti.imdb}`;
   void paintPoster(ti);
@@ -733,8 +743,7 @@ async function renderEps(seriesImdb: string): Promise<void> {
         input('season').value = String(s.season);
         input('episode').value = '';
         void renderEps(seriesImdb);
-        $('list').replaceChildren();
-        setState(t('eps.pick'));
+        askEpisode();
       };
       return b;
     }),
@@ -781,7 +790,7 @@ function renderResults(): void {
   const rows = byFit(result.results, fitOf);
   // When no file comes close (a trailer, a different cut), a row of zeros says nothing.
   const scored = rows.some((r) => (fitOf(r)?.score ?? 0) >= 20);
-  $('rcount').textContent = t('sugg.files', num(rows.length));
+  $('rcount').textContent = tn('sugg.files', rows.length, num(rows.length));
   $('list').replaceChildren(...rows.slice(0, shown).map((r) => el('li', {}, resultRow(r, scored))));
   if (rows.length > shown) {
     const more = el('button', {
@@ -824,7 +833,7 @@ function resultRow(r: QuerySubtitle, scored: boolean): HTMLButtonElement {
   const f = scored ? fitOf(r) : null;
   const meta: (Node | string)[] = [el('span', { cls: 'chip' }, s.format.toUpperCase())];
   if (r.hearingImpaired) meta.push(el('span', { cls: 'chip' }, t('res.hi')));
-  const bits = [t('res.lines', num(s.cues))];
+  const bits = [tn('res.lines', s.cues, num(s.cues))];
   if (s.duration_s) bits.push(clock(s.duration_s));
   meta.push(bits.join(' · '));
   const kids: Node[] = [];
@@ -844,7 +853,7 @@ function resultRow(r: QuerySubtitle, scored: boolean): HTMLButtonElement {
     el(
       'span',
       { cls: 'res-t' },
-      el('span', { cls: 'rn' }, r.release || r.label),
+      el('span', { cls: 'rn', dir: 'auto' }, r.release || r.label),
       el('span', { cls: 'rm' }, ...meta),
     ),
     el('span', { cls: 'ra' }, loaded?.id === r.id ? t('res.on') : t('res.show')),
@@ -910,7 +919,7 @@ function renderNow(): void {
   if (!loaded) return;
   $('nowLabel').textContent = loaded.label;
   $('nowMeta').textContent = [
-    t('now.meta', languageLabel(loaded.language), num(loaded.count)),
+    tn('now.meta', loaded.count, languageLabel(loaded.language), num(loaded.count)),
     ...(loaded.id ? [] : [t('now.fromFile')]),
   ].join(' · ');
   $('nowOffset').textContent = formatOffset(loaded.offsetMs);
@@ -989,7 +998,7 @@ function renderAi(s: AiStatus): void {
       break;
     case 'complete':
       pct = 1;
-      text = t('ai.done', num(s.lines));
+      text = tn('ai.done', s.lines, num(s.lines));
       break;
     case 'identified':
       pct = 1;
@@ -1184,7 +1193,12 @@ async function loadFile(f: File): Promise<void> {
         : ['srt', 'vtt', 'ass', 'ssa'].includes(ext)
           ? ext
           : 'srt';
-    const cues: Cue[] = parseVtt(toVtt(text, format));
+    let cues: Cue[];
+    try {
+      cues = parseVtt(toVtt(text, format));
+    } catch {
+      throw new Error(t('file.notSub'));
+    }
     if (!cues.length) throw new Error(t('file.noLines'));
     await show({ cues, label: f.name, language: corpusLanguage(lang), id: 0 });
   } catch (err) {

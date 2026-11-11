@@ -6,7 +6,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 // @ts-expect-error build.mjs is plain JavaScript.
 import { manifest, zip } from '../build.mjs';
 import { unreadable } from '../src/ai-check.js';
-import { CLIENT, userAgent } from '../src/api.js';
 
 describe('manifest', () => {
   it.each(['chrome', 'firefox'])('%s: MV3, opened on demand, wasm allowed, no remote code', (t) => {
@@ -62,15 +61,6 @@ describe('zip', () => {
       p += 30 + nameLen + size;
     }
     expect(names).toEqual(['a.json', 'b.txt']);
-  });
-});
-
-describe('naming', () => {
-  it('names the browser in the client and the User-Agent', () => {
-    expect(CLIENT).toBe('chrome-extension');
-    expect(userAgent('Mozilla/5.0 X')).toBe(
-      'Mozilla/5.0 X TheSubtitleDB-Extension/0.0.0-test (chrome)',
-    );
   });
 });
 

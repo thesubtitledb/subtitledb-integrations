@@ -82,6 +82,16 @@ export function t(key: string, ...subs: (string | number)[]): string {
   return m.replace(/\$(\d)/g, (_, n: string) => String(subs[Number(n) - 1] ?? ''));
 }
 
+/**
+ * A message that counts something: `key.one`, `key.few` and so on by the language's
+ * plural rules for `n`, else `key`. Never another language's plural form.
+ */
+export function tn(key: string, n: number, ...subs: (string | number)[]): string {
+  const form = new Intl.PluralRules(bcp47(current)).select(n);
+  const k = `${key}.${form}`;
+  return form !== 'other' && mine[k] !== undefined ? t(k, ...subs) : t(key, ...subs);
+}
+
 /** A number in the interface language. */
 export function num(n: number): string {
   return n.toLocaleString(bcp47(current));

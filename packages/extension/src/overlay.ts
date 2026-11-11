@@ -13,7 +13,7 @@
  * or take them off without opening the popup.
  */
 import type { Cue } from '@subtitledb/core';
-import { cueLines, cuesAt } from './cues.js';
+import { cueLines, cuesAt, formatOffset } from './cues.js';
 import { withoutHearingImpaired } from './hi.js';
 import type { BarText, Edge, Font, Style } from './shared.js';
 
@@ -37,7 +37,7 @@ const CSS = `
 .bar button:hover{background:rgba(255,255,255,.14)}
 .bar button:active{background:rgba(255,255,255,.24)}
 .bar button:focus-visible{outline:2px solid #0a84ff;outline-offset:1px}
-.bar output{min-width:52px;text-align:center;color:rgba(235,235,245,.6)}
+.bar output{min-width:52px;padding:0 6px;text-align:center;color:rgba(235,235,245,.6)}
 .bar i{width:1px;height:16px;background:rgba(255,255,255,.18);margin:0 3px}
 .bar svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 @media (prefers-reduced-motion:reduce){.bar{transition:none}}
@@ -299,8 +299,7 @@ export class Overlay {
 
   private syncBar(): void {
     if (!this.readout || !this.hideBtn || !this.o.bar) return;
-    const s = this.offsetMs / 1000;
-    this.readout.textContent = `${s > 0 ? '+' : s < 0 ? '−' : ''}${Math.abs(s).toFixed(1)} s`;
+    this.readout.textContent = formatOffset(this.offsetMs);
     const label = this.hidden ? this.o.bar.show : this.o.bar.hide;
     this.hideBtn.title = label;
     this.hideBtn.setAttribute('aria-label', label);

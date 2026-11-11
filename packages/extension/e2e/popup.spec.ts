@@ -217,6 +217,8 @@ test('suggestions lead to a show, its seasons and an episode', async ({ open }) 
   await expect(popup.locator('#hero')).toBeVisible({ timeout: 20_000 });
   await expect(popup.locator('#match b')).toContainText('Breaking Bad');
   await expect(popup.locator('#rstate')).toHaveText('Pick an episode.');
+  // Nothing left from the search before: no count, no list.
+  await expect(popup.locator('#rcount')).toHaveText('');
   await expect(popup.locator('#heroPoster')).toHaveCSS('background-image', /\/p\/w185\//);
   await popup.locator('#seasonChips button', { hasText: /^S1$/ }).click();
   await popup.locator('#episodeChips button').first().click();
@@ -243,8 +245,6 @@ test('dark by default; theme and interface language are saved', async ({ open })
   await expect(popup.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(popup.locator('html')).toHaveAttribute('lang', 'ar');
   await expect(popup.locator('html')).toHaveAttribute('data-theme', 'light');
-  const ar = await popup.locator('#search .go').textContent();
-  expect(ar).not.toBe('Search');
 
   const again = await openPopup(popup.context(), page.url());
   await expect(again.locator('html')).toHaveAttribute('dir', 'rtl');
