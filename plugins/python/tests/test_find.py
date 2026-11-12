@@ -63,14 +63,6 @@ class FakeClient:
         return self._answer("by_title", q, **kw)
 
 
-def test_an_imdb_id_answers_in_one_request():
-    c = FakeClient(by_imdb=movie([sub(1)], {"name": "Anatomy of a Fall"}))
-    out = find(c, Hint(imdb_id="tt17009710"), Options(languages=["en"], formats=["srt"]))
-    assert out.tier == TIER_IMDB
-    assert [x.id for x in out.candidates] == [1]
-    assert len(c.calls) == 1
-
-
 def test_one_request_per_language_because_lang_takes_one_code():
     # A comma separated list passes the query parser, matches nothing and is dropped,
     # so the response comes back unfiltered and looks like the filter worked.

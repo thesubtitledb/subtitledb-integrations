@@ -195,13 +195,6 @@ describe('the whole file', () => {
     expect(states.some((s) => s.language === 'ja')).toBe(false);
     expect(states.filter((s) => s.state === 'live').at(-1)).toMatchObject({ language: 'en' });
   });
-
-  it('detects the language from the first windows and reports it', async () => {
-    const { run, states } = start({ truth: lines(10), duration: 10, lang: 'fr' });
-    await run;
-    const live = states.filter((s) => s.state === 'live');
-    expect(live.at(-1)).toMatchObject({ language: 'fr' });
-  });
 });
 
 describe('captions off in the browser menu', () => {

@@ -1,0 +1,6 @@
+{
+  "appName": { "message": "TheSubtitleDB: 모든 비디오에 자막을" },
+  "appDescription": {
+    "message": "시청하는 모든 비디오에 TheSubtitleDB 자막을 표시하고, 자막이 없으면 기기에서 AI 자막을 만듭니다."
+  }
+}

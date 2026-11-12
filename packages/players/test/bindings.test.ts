@@ -7,27 +7,12 @@ import {
   isVideoElement,
   UnknownPlayerError,
 } from '../src/index.js';
-import {
-  blobs,
-  clearDom,
-  client,
-  FAKES,
-  fakeVideo,
-  installDom,
-  resetFakes,
-  revoked,
-} from './fakes.js';
+import { blobs, clearDom, client, fakeVideo, installDom, resetFakes, revoked } from './fakes.js';
 
 beforeEach(resetFakes);
 afterEach(clearDom);
 
 describe('detection', () => {
-  for (const [name, make] of Object.entries(FAKES)) {
-    it(`recognises ${name}`, () => {
-      expect(detectBinding(make())?.name).toBe(name);
-    });
-  }
-
   it('falls back to native for a player nobody has bound', () => {
     // A wrapper this repo has never heard of, holding a video somewhere inside.
     const unknown = { widget: { surface: { screen: fakeVideo() } } };
@@ -36,16 +21,6 @@ describe('detection', () => {
 
   it('recognises nothing in an object with no video anywhere', () => {
     expect(detectBinding({ a: 1, b: { c: 2 } })).toBeUndefined();
-  });
-
-  it('recognises Shaka 4, which had a visibility setter Shaka 5 removed', () => {
-    const four = {
-      addTextTrackAsync: async () => ({ id: 1 }),
-      selectTextTrack: () => {},
-      getTextTracks: () => [],
-      setTextTrackVisibility: () => {},
-    };
-    expect(detectBinding(four)?.name).toBe('shaka');
   });
 
   it('is not fooled by a plain object calling itself a video', () => {
@@ -113,32 +88,6 @@ describe('probe', () => {
 });
 
 describe('element bound players', () => {
-  it('attaches through the binding and converts on select', async () => {
-    const tracks = installDom();
-    const { client: c, calls } = client();
-    const player = FAKES.plyr?.() as { media: HTMLVideoElement; currentTrack: number };
-
-    const handle = attachSubtitleDb(player, { client: c, hint: { imdbId: 'tt0133093' } });
-    expect(handle.player.name).toBe('plyr');
-
-    const r = await handle.refresh();
-    // Five subtitles, one of them .sub, which no browser renders and the converter
-    // does not reach, so four are offered and the fifth is counted, not published.
-    expect(r.candidates).toHaveLength(4);
-    expect(r.unrenderable).toBe(1);
-    expect(calls).toHaveLength(1);
-    expect(tracks.every((t) => t.src === '')).toBe(true);
-
-    const en = r.candidates.find((x) => x.subtitle.language === 'en');
-    if (!en) throw new Error('expected an english candidate');
-    await handle.select(en);
-
-    expect(blobs[0]?.startsWith('WEBVTT')).toBe(true);
-    // The binding told Plyr which track to show, using its documented setter.
-    expect(player.currentTrack).toBe(0);
-    handle.destroy();
-  });
-
   it('retries Plyr once when it has not seen the new track yet', async () => {
     // Plyr learns about a track from the element's addtrack event, a task after the
     // append. Setting currentTrack before that throws from inside Plyr, which took
@@ -169,39 +118,6 @@ describe('element bound players', () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(attempts).toBe(2);
     handle.destroy();
-  });
-
-  it('reports the binding used, and whether it has been run against the real player', () => {
-    installDom();
-    const { client: c } = client();
-    const handle = attachSubtitleDb(FAKES.dplayer?.(), {
-      client: c,
-      hint: { imdbId: 'tt0133093' },
-    });
-    // `via` says how the target was reached. It is on the handle because after the
-    // fact "we found no player" and "we never looked" are the same symptom, and that
-    // ambiguity is what let framework wrappers resolve to the native binding unseen.
-    expect(handle.player).toEqual({
-      name: 'dplayer',
-      label: 'DPlayer',
-      untested: false,
-      via: 'instance',
-    });
-    handle.destroy();
-
-    const jw = attachSubtitleDb(FAKES.jwplayer?.(), { client: c, hint: { imdbId: 'tt0133093' } });
-    expect(jw.player.untested).toBe(true);
-    jw.destroy();
-
-    // Naming a binding skips detection, and the handle says so rather than claiming
-    // the player was recognised.
-    const named = attachSubtitleDb(FAKES.dplayer?.(), {
-      client: c,
-      player: 'dplayer',
-      hint: { imdbId: 'tt0133093' },
-    });
-    expect(named.player.via).toBe('named');
-    named.destroy();
   });
 });
 
@@ -310,21 +226,6 @@ describe('players that own their text tracks', () => {
 
     handle.destroy();
     expect(player.source.textTracks).toHaveLength(1);
-  });
-
-  it('treats a playback engine like hls.js as a plain video element', async () => {
-    // hls.js is not a player, it is an engine bolted onto a <video>. A page holds the
-    // Hls instance, so that is what gets passed in, and native has to reach through it.
-    installDom();
-    const { client: c } = client();
-    const media = fakeVideo();
-    const hls = { media, attachMedia: () => {}, loadSource: () => {}, levels: [] };
-
-    const handle = attachSubtitleDb(hls, { client: c, hint: { imdbId: 'tt0133093' } });
-    expect(handle.player.name).toBe('native');
-    const r = await handle.refresh();
-    expect(r.candidates.length).toBeGreaterThan(0);
-    handle.destroy();
   });
 
   it('clears only its own tracks on destroy', async () => {

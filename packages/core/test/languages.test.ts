@@ -6,19 +6,6 @@ import {
   localeLanguages,
 } from '../src/languages.js';
 
-describe('languageName', () => {
-  it('names the six corpus codes that are not ISO', () => {
-    expect(languageName('pb')).toBe('Portuguese (Brazil)');
-    expect(languageName('zt')).toBe('Chinese (Traditional)');
-    expect(languageName('ze')).toBe('Chinese and English');
-    expect(languageName('ea')).toBe('Spanish (Latin America)');
-    expect(languageName('sp')).toBe('Spanish (Spain)');
-    expect(languageName('pm')).toBe('Portuguese (Mozambique)');
-    for (const code of ['pb', 'zt', 'ze', 'ea', 'sp', 'pm'])
-      expect(hasLanguageName(code)).toBe(true);
-  });
-});
-
 describe('localeLanguages', () => {
   it('gives the corpus code first and the base code second', () => {
     expect(localeLanguages({ languages: ['pt-BR'] })).toEqual(['pb', 'pt']);

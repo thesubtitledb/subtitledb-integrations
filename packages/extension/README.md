@@ -5,10 +5,23 @@ subtitles made on the device by SubBot when there are none.
 
 Open it on a page with a video. It finds the video, including one in an iframe or a
 shadow root, guesses what is playing from the site's player, the page's metadata or the
-tab title, and searches the API. Pick a file and it is drawn over the video, in
-fullscreen too. Sync moves every line earlier or later; the appearance settings (size,
-height, background, colour) apply on every site. A file from the computer works the same
-way.
+tab title, and searches the API. Typing a title suggests films and shows with their
+posters; a show then offers its seasons and episodes. Each file gets a match score from
+0 to 100: its length against the video's, and its release name against the video's file
+name or the site's release tag. Pick a file and it is drawn over the video, in
+fullscreen too. A file from the computer works the same way.
+
+A bar at the top of the video, shown while the mouse moves over it, syncs the lines in
+half-second steps, resizes them, and hides or removes them without opening the popup. It
+fades 2.5 s after the mouse stops and 0.6 s after it leaves the video. The style page has
+presets, font, weight, size, text and background colour, text edge, background opacity
+and height; they apply on every site. Settings has the theme (dark by default, light, or
+following the system), the interface language, hearing-impaired text (shown or removed)
+and the bar.
+
+The interface is in 23 languages: en ar de es fr he hi id it ja ko nl pl pt_BR pt_PT ro
+ru sr tr uk vi zh_CN zh_TW, Arabic and Hebrew right to left. It follows the browser's
+language unless Settings names one.
 
 AI subtitles run SubBot, the same code as the site and the CDN loader, inside the
 extension. They need a video served as a file over http(s): a stream a site plays
@@ -33,9 +46,13 @@ call it.
 
 | File | Does |
 |---|---|
-| `src/popup.ts` | the popup: video picker, search, results, sync, appearance, AI subtitles |
+| `src/popup.ts` | the popup: video picker, search and suggestions, seasons and episodes, results, sync, style, settings, AI subtitles |
+| `src/titles.ts` | suggestions (`/app/search/suggest`), a show's seasons (`/v1/by-imdb`), poster addresses |
+| `src/fit.ts` | the match score; pure |
+| `src/hi.ts` | hearing-impaired text out of a line; pure |
+| `src/i18n.ts` | `static/locales/<lang>.json`, read by the popup itself so Settings can switch language; `static/_locales` holds only the store name and description |
 | `src/content.ts` | per frame: lists the videos, guesses the title, draws the overlay |
-| `src/overlay.ts` | a closed shadow root over the video's rectangle; a text track when the video itself is fullscreen |
+| `src/overlay.ts` | a closed shadow root over the video's rectangle, with the bar; a text track when the video itself is fullscreen |
 | `src/sites.ts`, `src/hint.ts` | title, season and episode from each supported site, then page metadata, then the tab title |
 | `src/ai.ts` | SubBot through a core session, as the loader runs it |
 | `src/worker-host.ts` | `worker.html`, the hidden frame SubBot's workers run in, in the extension's origin |
@@ -53,6 +70,10 @@ in Chrome, which does not let a fetch set it.
 
 Every download asks for `remove_watermark=true`, so the site and credit lines some
 files carry at either end are not drawn over the video.
+
+A new interface string goes in `static/locales/en.json` and every other locale file in
+the same change; `test/features.test.ts` fails when a locale is missing a key or a
+`$1` placeholder.
 
 ## Build and test
 

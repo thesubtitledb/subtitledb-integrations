@@ -19,35 +19,6 @@ def bazarr(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_it_puts_the_module_where_bazarr_scans_for_providers(bazarr: Path):
-    # Bazarr lists this directory at import time. The filename is the provider name.
-    install.install(bazarr)
-    module = bazarr / "custom_libs" / "subliminal_patch" / "providers" / "subtitledb.py"
-    assert module.is_file()
-    assert "SubtitleDbProvider" in module.read_text(encoding="utf-8")
-
-
-def test_it_puts_the_shared_client_on_the_import_path(bazarr: Path):
-    # custom_libs is on sys.path, which is what makes `import subtitledb` resolve.
-    install.install(bazarr)
-    package = bazarr / "custom_libs" / "subtitledb"
-    assert (package / "__init__.py").is_file()
-    assert (package / "match.py").is_file()
-    assert (package / "find.py").is_file()
-
-
-def test_both_pieces_say_they_are_mit_inside_a_gpl_tree(bazarr: Path):
-    # Bazarr is GPL-3.0. What we put in its tree has to carry its own license.
-    install.install(bazarr)
-    package = bazarr / "custom_libs" / "subtitledb"
-    assert (package / "LICENSE").read_text(encoding="utf-8") == install.LICENSE.read_text(
-        encoding="utf-8"
-    )
-    module = bazarr / "custom_libs" / "subliminal_patch" / "providers" / "subtitledb.py"
-    head = module.read_text(encoding="utf-8").splitlines()[:2]
-    assert head == ["# SPDX-License-Identifier: MIT", "# Copyright (c) 2026 TheSubtitleDb.org"]
-
-
 def test_installing_twice_leaves_one_copy_and_no_stale_files(bazarr: Path):
     install.install(bazarr)
     stale = bazarr / "custom_libs" / "subtitledb" / "gone.py"

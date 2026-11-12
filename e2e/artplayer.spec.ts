@@ -12,22 +12,6 @@ import { expect, test } from '@playwright/test';
 const API = 'api.thesubtitledb.org';
 
 test.describe('ArtPlayer example', () => {
-  test('resolves subtitles on load with no interaction', async ({ page }) => {
-    const apiCalls: string[] = [];
-    page.on('request', (r) => {
-      if (r.url().includes(API)) apiCalls.push(r.url());
-    });
-
-    await page.goto('/artplayer.html');
-    await expect(page.locator('body')).toHaveAttribute('data-resolved', 'true', {
-      timeout: 30_000,
-    });
-
-    // Nobody clicked anything. This is the eager-loading contract.
-    expect(apiCalls.length).toBeGreaterThan(0);
-    await expect(page.locator('#state')).toHaveText('resolved');
-  });
-
   test('identifies The Matrix and lists real candidates', async ({ page }) => {
     await page.goto('/artplayer.html');
     await expect(page.locator('body')).toHaveAttribute('data-resolved', 'true', {

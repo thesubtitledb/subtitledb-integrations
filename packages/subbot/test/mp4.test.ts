@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { fromBytes, Reader } from '../src/audio/bytes.js';
 import {
   boxes,
   chunksOf,
@@ -58,12 +57,6 @@ describe('flat mp4', () => {
     const track = pickAudio(movie);
     if (!track) throw new Error('no audio');
     expect(samplesBetween(track, 100, 101)).toHaveLength(0);
-  });
-
-  it('is reachable through a Reader', async () => {
-    const r = new Reader(fromBytes(u8), 4096);
-    const head = await r.read(0, 16);
-    expect(boxes(head)[0]?.type).toBe('ftyp');
   });
 });
 

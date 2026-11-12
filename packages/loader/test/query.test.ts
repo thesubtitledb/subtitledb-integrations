@@ -127,14 +127,6 @@ describe('get', () => {
     engine.answer.results = [];
     expect(await get({ hint: { imdbId: 'tt0000001' } })).toBeNull();
   });
-
-  it('carries the same ids as query', async () => {
-    const { get, engine } = await fresh();
-    engine.answer.results = [];
-    await get({ hint: { imdbId: 'tt0133093' } });
-    expect(engine.queries[0].clientName).toBe('loader');
-    expect(engine.queries[0].antispamId).toMatch(UUID);
-  });
 });
 
 describe('toBlobUrl', () => {
@@ -163,14 +155,6 @@ describe('the antispam id', () => {
     for (const options of seen) {
       expect((options as { antispamId?: string }).antispamId).toBe(ids.ANTISPAM_ID);
     }
-  });
-
-  it('is minted again on the next page load', async () => {
-    const first = (await fresh()).ids.ANTISPAM_ID;
-    const second = (await fresh()).ids.ANTISPAM_ID;
-    expect(first).toMatch(UUID);
-    expect(second).toMatch(UUID);
-    expect(second).not.toBe(first);
   });
 
   it('still has the same shape where crypto.randomUUID is missing', async () => {

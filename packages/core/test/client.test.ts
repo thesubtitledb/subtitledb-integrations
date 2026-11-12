@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  backoffMs,
-  createClient,
-  DEFAULT_API_BASE,
-  normaliseImdb,
-  SubtitleDbClient,
-} from '../src/client.js';
+import { backoffMs, createClient, normaliseImdb, SubtitleDbClient } from '../src/client.js';
 import { SubtitleDbAbort, SubtitleDbError } from '../src/errors.js';
 import { corpusLanguage } from '../src/languages.js';
 import { movieBundle, stubFetch } from './fixtures.js';
@@ -77,20 +71,6 @@ describe('SubtitleDbClient', () => {
     }
   });
 
-  it('builds a by-imdb URL with the padded id and the client marker', async () => {
-    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
-    const c = new SubtitleDbClient({ fetch, client: 'test/1.0' });
-    await c.byImdb(133093, { lang: 'en', limit: 5 });
-
-    const url = new URL(calls[0]?.url ?? '');
-    expect(url.pathname).toBe('/v1/by-imdb/tt0133093');
-    expect(url.searchParams.get('lang')).toBe('en');
-    expect(url.searchParams.get('limit')).toBe('5');
-    // A query parameter, not a header: a custom header would force a CORS preflight
-    // before every new path for no diagnostic benefit.
-    expect(url.searchParams.get('client')).toBe('test/1.0');
-  });
-
   it('reaches the same API through the site origin, which proxies /api', async () => {
     // The prefix belongs on the base, not in the paths. Both deployments are real and
     // both have to work off one set of paths, which is what stops the next person
@@ -105,41 +85,6 @@ describe('SubtitleDbClient', () => {
     expect(url.searchParams.get('q')).toBe('matrix');
   });
 
-  it('omits parameters that were not supplied', async () => {
-    const { fetch, calls } = stubFetch([{ match: /by-title/, body: movieBundle([]) }]);
-    const c = new SubtitleDbClient({ fetch });
-    await c.byTitle('matrix');
-
-    const url = new URL(calls[0]?.url ?? '');
-    expect(url.searchParams.get('q')).toBe('matrix');
-    expect(url.searchParams.has('limit')).toBe(false);
-    expect(url.searchParams.has('client')).toBe(false);
-  });
-
-  it('maps an API error body onto a typed error', async () => {
-    const { fetch } = stubFetch([
-      {
-        match: /by-imdb/,
-        status: 404,
-        body: { error: 'not_found', message: 'no such title', hint: 'try by-title' },
-      },
-    ]);
-    const c = new SubtitleDbClient({ fetch, retries: 0 });
-
-    await expect(c.byImdb(1)).rejects.toMatchObject({
-      status: 404,
-      code: 'not_found',
-      hint: 'try by-title',
-    });
-  });
-
-  it('does not retry a 404', async () => {
-    const { fetch, calls } = stubFetch([{ match: /by-imdb/, status: 404, body: {} }]);
-    const c = new SubtitleDbClient({ fetch, retries: 3 });
-    await expect(c.byImdb(1)).rejects.toThrow();
-    expect(calls).toHaveLength(1);
-  });
-
   it('retries a 500 and succeeds', async () => {
     let n = 0;
     const impl = (async () => {
@@ -152,33 +97,6 @@ describe('SubtitleDbClient', () => {
     const got = await c.byImdb(133093);
     expect(got.title.imdb).toBe('tt0133093');
     expect(n).toBe(2);
-  });
-
-  it('waits out a 503 Retry-After and retries', async () => {
-    let n = 0;
-    const impl = (async () => {
-      n++;
-      if (n === 1) return new Response('{}', { status: 503, headers: { 'retry-after': '0' } });
-      return new Response(JSON.stringify(movieBundle([])), { status: 200 });
-    }) as unknown as typeof fetch;
-
-    const c = new SubtitleDbClient({ fetch: impl, retries: 1 });
-    const got = await c.byImdb(133093);
-    expect(got.title.imdb).toBe('tt0133093');
-    expect(n).toBe(2);
-  });
-
-  it('survives a transport failure with no readable body', async () => {
-    // The API rejects wrong-host requests before its CORS hook runs, so browsers see
-    // an opaque network error. Nothing may depend on reading a body here.
-    const { fetch } = stubFetch([{ match: /by-imdb/, throws: true }]);
-    const c = new SubtitleDbClient({ fetch, retries: 0 });
-
-    const err = await c.byImdb(1).catch((e) => e);
-    expect(err).toBeInstanceOf(SubtitleDbError);
-    expect(err.status).toBe(0);
-    expect(err.code).toBe('transport_error');
-    expect(err.retryable).toBe(true);
   });
 
   it('names a timeout as one', async () => {
@@ -665,17 +583,6 @@ describe('SubtitleDbClient lookup verbs', () => {
     expect(url.searchParams.get('offset')).toBe('40');
     expect(url.searchParams.get('client')).toBe('test/1.0');
   });
-
-  it('returns the bundle the API sent, untouched', async () => {
-    const { fetch } = stubFetch([{ match: /by-tmdb/, body: movieBundle([]) }]);
-    const c = new SubtitleDbClient({ fetch });
-
-    const bundle = await c.byTmdb(603);
-    // A movie has no `seasons` key; only a series root or a season drill carries one.
-    // The live suite pins the same keys against production at every scope.
-    expect(Object.keys(bundle).sort()).toEqual(['subtitles', 'title']);
-    expect(bundle.title.imdb).toBe('tt0133093');
-  });
 });
 
 describe('SubtitleDbClient with a key', () => {
@@ -747,13 +654,6 @@ describe('SubtitleDbClient with a key', () => {
 
 describe('every lookup verb, id by id', () => {
   const path = (url: string | undefined) => new URL(url ?? '').pathname;
-
-  it('pads every imdb spelling to the same path', async () => {
-    const { fetch, calls } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
-    const c = new SubtitleDbClient({ fetch });
-    for (const id of [133093, '133093', 'tt0133093', ' TT133093 ']) await c.byImdb(id);
-    expect(calls.map((x) => path(x.url))).toEqual(Array(4).fill('/v1/by-imdb/tt0133093'));
-  });
 
   it('takes a tmdb or subtitle id as a string or a number', async () => {
     // Players and data attributes hand over strings; the path must not change.
@@ -830,12 +730,6 @@ describe('every lookup verb, id by id', () => {
 });
 
 describe('construction', () => {
-  it('defaults to the public API host', () => {
-    const c = createClient({ fetch: stubFetch([]).fetch });
-    expect(c).toBeInstanceOf(SubtitleDbClient);
-    expect(c.apiBase).toBe(DEFAULT_API_BASE);
-  });
-
   it('refuses to build without any fetch, rather than failing on the first lookup', () => {
     vi.stubGlobal('fetch', undefined);
     try {

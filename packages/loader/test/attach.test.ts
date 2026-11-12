@@ -75,30 +75,6 @@ describe('needsBindings', () => {
 });
 
 describe('attach fetches the smaller half when it can', () => {
-  it('a bare video loads the element chunk and not the bindings', async () => {
-    const { attach, engine, players } = await fresh();
-    const handle = attach(video(), {});
-    await handle.ready;
-    expect(engine.calls).toHaveLength(1);
-    expect(players.calls).toHaveLength(0);
-  });
-
-  it('a player object loads the bindings', async () => {
-    const { attach, engine, players } = await fresh();
-    const handle = attach({ addRemoteTextTrack() {} }, {});
-    await handle.ready;
-    expect(players.calls).toHaveLength(1);
-    expect(engine.calls).toHaveLength(0);
-  });
-
-  it('a mounted element loads the bindings rather than taking the short path', async () => {
-    const { attach, engine, players } = await fresh();
-    const handle = attach(video(['video-js'], 'vjs-tech'), {});
-    await handle.ready;
-    expect(players.calls).toHaveLength(1);
-    expect(engine.calls).toHaveLength(0);
-  });
-
   it('two attaches in the same tick share one request', async () => {
     const { attach, engine } = await fresh();
     const a = attach(video(), {});

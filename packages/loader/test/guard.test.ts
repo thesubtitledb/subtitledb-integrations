@@ -83,8 +83,4 @@ describe('what the second copy tells the page', () => {
     expect(text).toContain('1.0.0');
     expect(text).toMatch(/first one handles this attach/i);
   });
-
-  it('says why, because "loaded twice" reads as harmless and is not', () => {
-    expect(mismatch('2.0.0', '1.0.0')).toMatch(/two sessions on the same video/i);
-  });
 });

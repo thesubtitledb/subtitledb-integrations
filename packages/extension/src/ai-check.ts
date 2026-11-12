@@ -3,13 +3,13 @@
  * carrying SubBot.
  */
 
-/** Why SubBot cannot read this video's audio, before anything is downloaded. */
+/** Why SubBot cannot read this video's audio, before anything is downloaded, as a message key. */
 export function unreadable(video: HTMLVideoElement): string | null {
   const src = video.currentSrc || video.src;
-  if (!src) return 'This video has not started loading yet. Press play, then try again.';
+  if (!src) return 'ai.why.notStarted';
   if (/^blob:|^mediasource:/i.test(src)) {
-    return 'This site streams video through its own player, so SubBot cannot read the audio. It works on videos that play from a file or a stream address.';
+    return 'ai.why.ownPlayer';
   }
-  if (!/^https?:/i.test(src)) return 'SubBot can only read videos served over http or https.';
+  if (!/^https?:/i.test(src)) return 'ai.why.http';
   return null;
 }

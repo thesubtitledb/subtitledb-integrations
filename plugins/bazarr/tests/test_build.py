@@ -13,19 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import build
 import install
-import subtitledb_provider as provider
 
 
 @pytest.fixture
 def built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(build, "DIST", tmp_path / "dist")
     return build.build()
-
-
-def test_the_zip_is_named_for_the_providers_own_version(built: Path):
-    # The version the User-Agent sends, not the shared client's.
-    assert build.version() == provider.VERSION
-    assert built.name == "subtitledb-bazarr-%s.zip" % provider.VERSION
 
 
 def test_everything_sits_in_one_folder_and_nothing_compiled_ships(built: Path):

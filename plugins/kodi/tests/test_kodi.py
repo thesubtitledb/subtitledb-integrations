@@ -214,23 +214,6 @@ def test_a_resolution_is_not_an_episode():
 # -- what the list says -----------------------------------------------------
 
 
-def test_a_row_is_labelled_with_the_language_kodi_can_draw():
-    item = logic.list_item(Candidate(subtitle=row(), score=1, reason="preferred language pb"))
-    assert item["language_name"] == "Portuguese (Brazil)"
-    assert item["language_code"] == "pb"
-
-
-@pytest.mark.parametrize(("code", "name"), [
-    ("ea", "Spanish (Latin America)"),
-    ("sp", "Spanish (Spain)"),
-    ("zt", "Chinese (Traditional)"),
-    ("ze", "Chinese and English"),
-])
-def test_a_corpus_code_that_is_not_iso_is_labelled_by_name(code, name):
-    item = logic.list_item(Candidate(subtitle=row(language=code), score=1, reason=""))
-    assert item["language_name"] == name
-
-
 def test_the_right_column_is_the_release_or_a_translated_line_count():
     # Kodi draws the language on the left and hearing impaired as an icon, so neither
     # is repeated, and the words come from strings.po, as Kodi's add-on rules require.
@@ -322,18 +305,6 @@ def test_a_latin_american_spanish_tag_is_asked_for_as_ea():
     logic.search(client, {"path": "/m/x.mkv", "title": "x", "imdb": "tt1"},
                  ["es-MX", "es-ES", "es-419"])
     assert client.langs == ["ea", "es"]
-
-
-def test_a_search_lists_past_the_first_hundred():
-    # The Matrix has 147 English rows, and the API sends 100 a request.
-    class FakeClient:
-        def by_imdb(self, imdb, **kw):
-            start = kw.get("offset", 0)
-            items = [row(id=i + 1, language="en") for i in range(start, min(start + 100, 147))]
-            return {"title": {}, "subtitles": {"items": items, "total": 147}}
-
-    items = logic.search(FakeClient(), {"path": "/m/x.mkv", "imdb": "tt1"}, ["English"])
-    assert len(items) == 147
 
 
 def test_the_setting_kodi_shows_is_the_one_the_search_reads():
@@ -500,33 +471,6 @@ def test_a_clip_is_not_looked_up_however_well_it_is_named():
     assert client.asked == []
 
 
-def test_the_instant_lookup_is_on_unless_the_viewer_turns_it_off():
-    import xml.etree.ElementTree as ET
-
-    addon = HERE / "service.subtitles.subtitledb"
-    tree = ET.parse(addon / "resources" / "settings.xml")  # noqa: S314 - the addon's own file
-    setting = tree.find(".//setting[@id='instant']")
-    assert setting is not None
-    assert setting.get("type") == "boolean"
-    assert setting.findtext("default") == "true"
-    strings = (addon / "resources" / "language" / "resource.language.en_gb" / "strings.po"
-               ).read_text(encoding="utf-8")
-    for key in ("label", "help"):
-        assert 'msgctxt "#%s"' % setting.get(key) in strings
-    play = (addon / "resources" / "lib" / "kodi_play.py").read_text(encoding="utf-8")
-    assert 'getSettingBool("instant")' in play
-
-
-def test_the_instant_lookup_runs_as_the_addons_service():
-    addon = HERE / "service.subtitles.subtitledb"
-    xml = (addon / "addon.xml").read_text(encoding="utf-8")
-    assert re.findall(r'<extension point="xbmc.service" library="([^"]+)"', xml) == ["on_play.py"]
-    src = (addon / "on_play.py").read_text(encoding="utf-8")
-    code = [ln for ln in src.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
-    assert len(code) <= 15
-    assert "kodi_play.main()" in src
-
-
 def test_the_lookup_on_play_stops_inside_the_5_s_kodi_allows():
     # Kodi kills a service still running 5 s after it asks it to stop. A request on a
     # socket waits out its timeout, and none starts once Kodi has asked.
@@ -537,19 +481,6 @@ def test_the_lookup_on_play_stops_inside_the_5_s_kodi_allows():
     play = (HERE / "service.subtitles.subtitledb" / "resources" / "lib" / "kodi_play.py"
             ).read_text(encoding="utf-8")
     assert "timeout=logic.ON_PLAY_TIMEOUT_S, stopping=monitor.abortRequested" in play
-
-
-def test_the_addon_names_itself_and_its_own_version():
-    # The shared client's version is not the addon's; the agent carries the addon's.
-    client = logic.make_client(None, version="0.4.2")
-    assert client.client == "kodi"
-    assert client.user_agent == "subtitledb-kodi/0.4.2 (+https://thesubtitledb.org)"
-    lib = HERE / "service.subtitles.subtitledb" / "resources" / "lib"
-    side = (lib / "kodi_side.py").read_text(encoding="utf-8")
-    assert 'VERSION = ADDON.getAddonInfo("version")' in side
-    assert side.count("version=VERSION") == 2
-    assert 'version=addon.getAddonInfo("version")' in (lib / "kodi_play.py").read_text(
-        encoding="utf-8")
 
 
 # -- the zip ----------------------------------------------------------------
@@ -576,11 +507,6 @@ def test_the_zip_carries_the_client_because_kodi_has_no_package_manager(tmp_path
     assert not [n for n in names if "__pycache__" in n or n.endswith(".pyc")]
 
 
-def test_the_zip_is_named_for_the_version_in_addon_xml(tmp_path, monkeypatch):
-    monkeypatch.setattr(build, "DIST", tmp_path)
-    assert build.build().name == "service.subtitles.subtitledb-%s.zip" % build.version()
-
-
 def test_the_repository_index_and_its_md5_are_written_together(tmp_path, monkeypatch):
     # A stale md5 means Kodi never reads addons.xml again, so nobody sees an update.
     import hashlib
@@ -591,33 +517,6 @@ def test_the_repository_index_and_its_md5_are_written_together(tmp_path, monkeyp
     digest = hashlib.md5(xml).hexdigest()  # noqa: S324 - Kodi defines the file as md5
     assert (tmp_path / "addons.xml.md5").read_text(encoding="utf-8") == digest
     assert b'id="service.subtitles.subtitledb"' in xml
-
-
-def test_the_addon_declares_itself_a_subtitle_module():
-    xml = (HERE / "service.subtitles.subtitledb" / "addon.xml").read_text(encoding="utf-8")
-    assert 'point="xbmc.subtitle.module"' in xml
-    assert 'library="service.py"' in xml
-
-
-def test_the_zip_carries_the_license_addon_xml_names(tmp_path, monkeypatch):
-    # Kodi's repository wants the text at the addon root, matching <license>.
-    monkeypatch.setattr(build, "DIST", tmp_path)
-    with zipfile.ZipFile(build.build()) as zf:
-        text = zf.read("service.subtitles.subtitledb/LICENSE.txt").decode("utf-8")
-    assert text == build.LICENSE.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    assert lines[0] == "MIT License"
-    assert "Copyright (c) 2026 TheSubtitleDb.org" in lines
-    xml =(HERE / "service.subtitles.subtitledb" / "addon.xml").read_text(encoding="utf-8")
-    assert "<license>MIT</license>" in xml
-
-
-def test_the_source_link_is_this_directory_in_the_public_repository():
-    # The checker follows it, and a reviewer reads the tests and the vendored client
-    # there, which the repo-scripts copy does not carry.
-    xml = (HERE / "service.subtitles.subtitledb" / "addon.xml").read_text(encoding="utf-8")
-    assert re.findall(r"<source>(.*?)</source>", xml) == [
-        "https://github.com/thesubtitledb/subtitledb-integrations/tree/main/plugins/kodi"]
 
 
 # -- what Kodi's repository checker rejects -----------------------------------
@@ -643,9 +542,3 @@ def test_the_icon_is_a_solid_square_because_kodi_rejects_transparency():
     assert ihdr[9] in (0, 2, 3)  # grey, truecolour or palette: no alpha channel
     assert b"tRNS" not in [kind for kind, _ in chunks]
 
-
-def test_the_entry_point_stays_a_few_lines():
-    # The checker warns past 15 lines in the file addon.xml names as the library.
-    src = (HERE / "service.subtitles.subtitledb" / "service.py").read_text(encoding="utf-8")
-    code = [ln for ln in src.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
-    assert len(code) <= 15

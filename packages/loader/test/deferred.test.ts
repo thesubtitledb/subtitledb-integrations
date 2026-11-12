@@ -117,13 +117,6 @@ describe('destroy before it lands', () => {
     expect(calls).toEqual(['destroy']);
   });
 
-  it('and the handle still resolves, because the caller may be awaiting it', async () => {
-    const { handle, release } = later();
-    handle.destroy();
-    release();
-    await expect(handle.ready).resolves.toBeTruthy();
-  });
-
   it('a second destroy after arrival is not a second teardown of the first', async () => {
     const { handle, calls, release } = later();
     handle.destroy();

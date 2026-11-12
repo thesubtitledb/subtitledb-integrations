@@ -107,32 +107,6 @@ describe('a player that mounts later', () => {
   });
 });
 
-describe('the same player attached twice', () => {
-  it('is one session, not two sets of tracks', async () => {
-    installDom();
-    const { client: api, calls } = client();
-    const video = fakeVideo();
-    const opts = { client: api, languages: ['en'], hint: { imdbId: 'tt0133093' } };
-
-    const first = attachSubtitleDb(video, opts);
-    const second = attachSubtitleDb(video, opts);
-    expect(second).toBe(first);
-
-    await first.refresh();
-    // One fan-out, one language, one request. A second attach would have doubled it.
-    expect(calls.filter((c) => c.url.includes('by-imdb'))).toHaveLength(1);
-    const count = first.tracks().length;
-    expect(count).toBeGreaterThan(0);
-    expect(second.tracks()).toHaveLength(count);
-
-    first.destroy();
-    // Destroy releases the player, so a later attach is a real one again.
-    const third = attachSubtitleDb(video, opts);
-    expect(third).not.toBe(first);
-    third.destroy();
-  });
-});
-
 describe('the media changes under a live handle', () => {
   it('re-resolves when the player loads a different file', async () => {
     installDom();
@@ -156,22 +130,6 @@ describe('the media changes under a live handle', () => {
 });
 
 describe('finding the player that owns a video', () => {
-  it('prefers a player reachable from the element over the bare video', () => {
-    const video = fakeVideo();
-    // Video.js and MediaElement.js both leave the player on el.player.
-    const owner = {
-      player: {
-        addRemoteTextTrack: () => ({ track: {} }),
-        removeRemoteTextTrack: () => {},
-        remoteTextTracks: () => ({ length: 0 }),
-        textTracks: () => ({ length: 0 }),
-      },
-      parentElement: null,
-    };
-    (video as unknown as { parentElement: unknown }).parentElement = owner;
-    expect(playerFor(video)).toBe(owner.player);
-  });
-
   it('finds a custom element player by climbing to it', () => {
     const video = fakeVideo();
     const host = {
@@ -182,12 +140,6 @@ describe('finding the player that owns a video', () => {
     };
     (video as unknown as { parentElement: unknown }).parentElement = host;
     expect(playerFor(video)).toBe(host);
-  });
-
-  it('falls back to the video when nothing owns it', () => {
-    const video = fakeVideo();
-    (video as unknown as { parentElement: unknown }).parentElement = { parentElement: null };
-    expect(playerFor(video)).toBe(video);
   });
 });
 

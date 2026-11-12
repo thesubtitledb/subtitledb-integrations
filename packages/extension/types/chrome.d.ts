@@ -14,6 +14,9 @@ declare namespace chrome {
       ): void;
     };
   }
+  namespace i18n {
+    function getUILanguage(): string;
+  }
   namespace tabs {
     interface Tab {
       id?: number;

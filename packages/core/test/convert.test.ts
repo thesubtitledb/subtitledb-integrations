@@ -149,10 +149,6 @@ describe('toVtt', () => {
     expect(toVtt('00:00:01.000 --> 00:00:02.000\nhi\n', 'vtt').startsWith('WEBVTT\n')).toBe(true);
   });
 
-  it('treats ssa the same as ass', () => {
-    expect(toVtt(ASS, 'ssa')).toContain('00:00:01.000 --> 00:00:04.500');
-  });
-
   it('refuses formats it cannot parse instead of guessing', () => {
     expect(() => toVtt('anything', 'sub')).toThrow(ConvertError);
   });

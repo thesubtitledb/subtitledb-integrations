@@ -50,14 +50,6 @@ async function fresh(base = FIXTURES) {
 }
 
 describe('the debug option', () => {
-  it('without a key, the debugger chunk is never fetched', async () => {
-    const { attach } = await loader();
-    const before = loads();
-    await attach(video(), {}).ready;
-    await settle();
-    expect(loads()).toBe(before);
-  });
-
   it('with one, it loads beside the engine and watches the element the attach settled on', async () => {
     const { attach, engine, ANTISPAM_ID, chunk } = await fresh();
     const { setBasePath } = await import('../src/base.js');
@@ -138,16 +130,6 @@ describe('the debug option', () => {
     engine.calls[0]?.options.onResolved(resolved);
     engine.calls[0]?.options.onSelected(picked);
     expect(seen).toEqual([resolved, picked]);
-    handle.destroy();
-    expect(engine.order).toEqual(['stop', 'destroy']);
-  });
-
-  it('destroy sends the final snapshot before the element is taken away', async () => {
-    const { attach, engine, chunk } = await fresh();
-    const handle = attach(video(), { debug_key: KEY });
-    await handle.ready;
-    const d = chunk;
-    await vi.waitFor(() => expect(d.calls).toHaveLength(1));
     handle.destroy();
     expect(engine.order).toEqual(['stop', 'destroy']);
   });

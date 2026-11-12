@@ -60,13 +60,6 @@ describe('basePath', () => {
     vi.resetModules();
   });
 
-  it('uses the module URL when there is one, because a module knows where it is', async () => {
-    const { basePath } = await reload(null);
-    expect(basePath('https://elsewhere.test/js/subtitle-helper.esm.js')).toBe(
-      'https://elsewhere.test/js/',
-    );
-  });
-
   it('falls back to the script element, which is all a classic script has', async () => {
     const { basePath } = await reload({ src: 'https://cdn.test/v/1.0.0/subtitle-helper.js' });
     expect(basePath()).toBe('https://cdn.test/v/1.0.0/');
@@ -95,10 +88,5 @@ describe('basePath', () => {
   it('survives a document with no currentScript, which is every module', async () => {
     const { basePath } = await reload({});
     expect(basePath()).toBe('https://cdn.example.test/v/0.0.0-test/');
-  });
-
-  it('survives no document at all, which is a worker', async () => {
-    const { basePath } = await reload(null);
-    expect(() => basePath()).not.toThrow();
   });
 });

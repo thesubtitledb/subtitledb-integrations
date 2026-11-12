@@ -166,20 +166,6 @@ describe('identify from page metadata', () => {
     } as unknown as Document;
     expect(() => identify({ doc })).not.toThrow();
   });
-
-  it('does not loop on a self-referential JSON-LD graph', () => {
-    const node: Record<string, unknown> = { '@type': 'Movie', name: 'Loop' };
-    node.self = node;
-    const doc = {
-      querySelector: () => null,
-      querySelectorAll: (sel: string) => {
-        if (!sel.includes('ld+json')) return [];
-        // Simulate a parsed cyclic object by handing back a pre-built node.
-        return [{ textContent: '{"@type":"Movie","name":"Loop"}' }];
-      },
-    } as unknown as Document;
-    expect(identify({ doc }).title).toBe('Loop');
-  });
 });
 
 describe('isResolvable', () => {

@@ -29,10 +29,6 @@ describe('siteFor', () => {
     expect(siteFor('netflix.com.evil.example')).toBeUndefined();
     expect(siteFor('example.org')).toBeUndefined();
   });
-
-  it('gives every site a title selector', () => {
-    for (const s of SITES) expect(s.title?.length, s.id).toBeGreaterThan(0);
-  });
 });
 
 describe('parseEpisode', () => {

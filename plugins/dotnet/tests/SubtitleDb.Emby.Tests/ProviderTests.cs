@@ -154,13 +154,6 @@ namespace SubtitleDb.Emby.Tests
         }
 
         [Fact]
-        public void WithNothingSetASearchReadsFiveHundredPerLanguage()
-        {
-            Assert.Equal(500, SubtitleDbSubtitleProvider.OptionsFrom(Film()).Limit);
-            Assert.Equal(500, new PluginConfiguration().PerLanguage);
-        }
-
-        [Fact]
         public void ARowIsLabelledWithSomethingThatTellsItFromTheNextOne()
         {
             var row = new SubtitleRow

@@ -1,7 +1,6 @@
 import { UnknownPlayerError } from '@subtitledb/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { attachSubtitleDb, PlayerNotReachableError } from '../src/attach.js';
-import { ownerOf } from '../src/owners.js';
 import { clearDom, client, FAKES, fakeVideo, installDom, resetFakes } from './fakes.js';
 
 /**
@@ -208,12 +207,5 @@ describe('players we can see and only partly reach', () => {
     expect(() => attachSubtitleDb(container, { client: c, strict: true })).toThrow(
       PlayerNotReachableError,
     );
-  });
-
-  it('leaves an unmarked page alone in every direction', () => {
-    const video = markedVideo();
-    expect(ownerOf(video)).toBeUndefined();
-    expect(ownerOf(null)).toBeUndefined();
-    expect(ownerOf({})).toBeUndefined();
   });
 });

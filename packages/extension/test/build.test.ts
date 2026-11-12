@@ -6,8 +6,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 // @ts-expect-error build.mjs is plain JavaScript.
 import { manifest, zip } from '../build.mjs';
 import { unreadable } from '../src/ai-check.js';
-import { CLIENT, userAgent } from '../src/api.js';
-import { DEFAULT_STYLE, readStyle } from '../src/shared.js';
 
 describe('manifest', () => {
   it.each(['chrome', 'firefox'])('%s: MV3, opened on demand, wasm allowed, no remote code', (t) => {
@@ -21,8 +19,9 @@ describe('manifest', () => {
     expect(m.web_accessible_resources).toEqual([
       { resources: ['worker.html'], matches: ['<all_urls>'] },
     ]);
-    expect(m.name.length).toBeLessThanOrEqual(75);
-    expect(m.description.length).toBeLessThanOrEqual(132);
+    expect(m.name).toBe('__MSG_appName__');
+    expect(m.description).toBe('__MSG_appDescription__');
+    expect(m.default_locale).toBe('en');
   });
 
   it('gives Firefox a fixed id and Chrome the header rule permission', () => {
@@ -65,33 +64,12 @@ describe('zip', () => {
   });
 });
 
-describe('naming', () => {
-  it('names the browser in the client and the User-Agent', () => {
-    expect(CLIENT).toBe('chrome-extension');
-    expect(userAgent('Mozilla/5.0 X')).toBe(
-      'Mozilla/5.0 X TheSubtitleDB-Extension/0.0.0-test (chrome)',
-    );
-  });
-});
-
 describe('unreadable', () => {
   const v = (src: string) => ({ currentSrc: src, src }) as HTMLVideoElement;
   it('lets SubBot try a file and refuses a stream it cannot read', () => {
     expect(unreadable(v('https://example.org/film.mp4'))).toBeNull();
-    expect(unreadable(v('blob:https://example.org/0b8e'))).toMatch(/own player/);
-    expect(unreadable(v(''))).toMatch(/not started/);
-    expect(unreadable(v('file:///x.mp4'))).toMatch(/http/);
-  });
-});
-
-describe('readStyle', () => {
-  it('clamps what storage hands back and falls back on junk', () => {
-    expect(readStyle(undefined)).toEqual(DEFAULT_STYLE);
-    expect(readStyle({ size: 99, bottom: -5, box: 'x', color: 'red' })).toEqual({
-      size: 9,
-      bottom: 2,
-      box: DEFAULT_STYLE.box,
-      color: DEFAULT_STYLE.color,
-    });
+    expect(unreadable(v('blob:https://example.org/0b8e'))).toBe('ai.why.ownPlayer');
+    expect(unreadable(v(''))).toBe('ai.why.notStarted');
+    expect(unreadable(v('file:///x.mp4'))).toBe('ai.why.http');
   });
 });

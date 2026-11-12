@@ -31,17 +31,15 @@ const ALIAS = {
   '@subtitledb/subbot': pkg('subbot/src/index.ts'),
 };
 
-const NAME = 'TheSubtitleDB: subtitles for any video';
-const DESCRIPTION =
-  'Subtitles from TheSubtitleDB on any video you watch, and AI subtitles made on your device when there are none.';
-
 export function manifest(target) {
   const m = {
     manifest_version: 3,
-    name: NAME,
+    // From static/_locales, in the browser's language.
+    name: '__MSG_appName__',
     short_name: 'TSDB',
     version,
-    description: DESCRIPTION,
+    description: '__MSG_appDescription__',
+    default_locale: 'en',
     homepage_url: 'https://thesubtitledb.org/developer/integrations',
     icons: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
     action: {

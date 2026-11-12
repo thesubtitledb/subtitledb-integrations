@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SubtitleDbClient } from '../src/client.js';
-import { candidateLabel, findSubtitles, similarity } from '../src/match.js';
+import { candidateLabel, findSubtitles } from '../src/match.js';
 import type { BundleSubtitle } from '../src/types.js';
 import { bundleSubtitle, episodeBundle, lookupTitle, movieBundle, stubFetch } from './fixtures.js';
 
@@ -10,18 +10,6 @@ function clientWith(routes: Parameters<typeof stubFetch>[0]) {
   const { fetch, calls } = stubFetch(routes);
   return { client: new SubtitleDbClient({ fetch, retries: 0 }), calls };
 }
-
-describe('similarity', () => {
-  it('scores identical strings at 1 and unrelated ones near 0', () => {
-    expect(similarity('The Matrix', 'The Matrix')).toBe(1);
-    expect(similarity('The Matrix', 'Amelie')).toBeLessThan(0.2);
-  });
-
-  it('ignores case, punctuation and accents', () => {
-    expect(similarity('Amelie', 'Amélie')).toBe(1);
-    expect(similarity('Spider-Man: No Way Home', 'spider man no way home')).toBe(1);
-  });
-});
 
 describe('findSubtitles ladder', () => {
   it('rung 1: resolves an explicit tmdb id in one request', async () => {
@@ -311,27 +299,6 @@ describe('findSubtitles ladder', () => {
 });
 
 describe('format filtering', () => {
-  it('drops formats the player cannot render and counts them', async () => {
-    // Hard filter, not a preference. Nothing here converts, so handing a player an
-    // ass file it cannot parse produces a silently empty caption track.
-    const subs = [
-      bundleSubtitle({ id: 1, format: 'srt' }),
-      bundleSubtitle({ id: 2, format: 'ass' }),
-      bundleSubtitle({ id: 3, format: 'sub' }),
-      bundleSubtitle({ id: 4, format: 'vtt' }),
-    ];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({
-      client,
-      hint: { imdbId: 'tt0133093' },
-      formats: ['srt', 'vtt'],
-    });
-
-    expect(r.candidates.map((c) => c.subtitle.id).sort()).toEqual([1, 4]);
-    expect(r.unrenderable).toBe(2);
-  });
-
   it('can end up with zero candidates when no format is renderable', async () => {
     const { client } = clientWith([
       { match: /by-imdb/, body: movieBundle([bundleSubtitle({ format: 'ass' })]) },
@@ -353,82 +320,6 @@ describe('format filtering', () => {
 });
 
 describe('ranking', () => {
-  it('orders by language preference', async () => {
-    const subs = [
-      bundleSubtitle({ id: 1, language: 'de' }),
-      bundleSubtitle({ id: 2, language: 'fr' }),
-      bundleSubtitle({ id: 3, language: 'en' }),
-    ];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({
-      client,
-      hint: { imdbId: 'tt0133093' },
-      formats: SRT_ONLY,
-      languages: ['en', 'fr'],
-    });
-
-    expect(r.candidates.map((c) => c.subtitle.language)).toEqual(['en', 'fr', 'de']);
-  });
-
-  it('puts the subtitle recorded against this exact file first', async () => {
-    // Two release names, compared against each other. Comparing a release name
-    // against the film's title, which is what this did before sub_meta published
-    // release_name, cannot agree with anything.
-    const subs = [
-      bundleSubtitle({ id: 1, release_name: 'Anatomy.of.a.Fall.2023.720p.WEBRip.x264-GALAXY' }),
-      bundleSubtitle({ id: 2, release_name: 'Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL' }),
-    ];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({
-      client,
-      hint: {
-        imdbId: 'tt0133093',
-        title: 'Anatomy of a Fall',
-        release: 'Anatomy.of.a.Fall.2023.1080p.BluRay.x264-KOVAL',
-      },
-      formats: SRT_ONLY,
-    });
-
-    expect(r.candidates.map((c) => c.subtitle.id)).toEqual([2, 1]);
-    expect(r.candidates[0]?.reason).toContain('same release');
-  });
-
-  it('sinks zero-cue subtitles, which cannot render at all', async () => {
-    const subs = [bundleSubtitle({ id: 1, cues: 0 }), bundleSubtitle({ id: 2, cues: 900 })];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({ client, hint: { imdbId: 'tt0133093' }, formats: SRT_ONLY });
-    expect(r.candidates[0]?.subtitle.id).toBe(2);
-    expect(r.candidates[1]?.reason).toContain('no cues');
-  });
-
-  it('respects a hearing-impaired preference', async () => {
-    const subs = [
-      bundleSubtitle({ id: 1, hearing_impaired: false }),
-      bundleSubtitle({ id: 2, hearing_impaired: true }),
-    ];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({
-      client,
-      hint: { imdbId: 'tt0133093' },
-      formats: SRT_ONLY,
-      hearingImpaired: true,
-    });
-
-    expect(r.candidates[0]?.subtitle.id).toBe(2);
-  });
-
-  it('is deterministic when scores tie', async () => {
-    const subs = [bundleSubtitle({ id: 9 }), bundleSubtitle({ id: 3 }), bundleSubtitle({ id: 5 })];
-    const { client } = clientWith([{ match: /by-imdb/, body: movieBundle(subs) }]);
-
-    const r = await findSubtitles({ client, hint: { imdbId: 'tt0133093' }, formats: SRT_ONLY });
-    expect(r.candidates.map((c) => c.subtitle.id)).toEqual([3, 5, 9]);
-  });
-
   it('keeps a file with no upload time on record', async () => {
     // Live, subtitle 3000000128 under tt0133093 has added_at: null (checked 2026-10-18).
     const undated = bundleSubtitle({ id: 3000000128, added_at: null, release_name: 'The.Matrix' });

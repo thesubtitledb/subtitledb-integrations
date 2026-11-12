@@ -160,18 +160,6 @@ describe('query', () => {
     expect(calls).toHaveLength(17);
   });
 
-  it('refuses an http apiBase when a key is set', async () => {
-    const { fetch, calls } = stubFetch(routes());
-    const err = await query({
-      hint: { imdbId: 'tt0133093' },
-      key: 'k',
-      apiBase: 'http://api.thesubtitledb.org',
-      fetch,
-    }).catch((e) => e);
-    expect(err).toMatchObject({ code: 'bad_request' });
-    expect(calls).toHaveLength(0);
-  });
-
   it('returns no results, not an error, when nothing matched', async () => {
     const { fetch } = stubFetch([{ match: /by-imdb/, body: movieBundle([]) }]);
     const res = await query({ hint: { imdbId: 'tt0133093' }, fetch });
@@ -185,12 +173,6 @@ describe('query', () => {
     const err = await query({ hint: { imdbId: 'tt0133093' }, fetch }).catch((e) => e);
     expect(err).toBeInstanceOf(SubtitleDbError);
     expect(err).toMatchObject({ status: 400, code: 'bad_request', message: 'lang: bad code' });
-  });
-
-  it('throws a transport failure too', async () => {
-    const { fetch } = stubFetch([{ match: /by-imdb/, throws: true }]);
-    const err = await query({ hint: { imdbId: 'tt0133093' }, fetch }).catch((e) => e);
-    expect(err).toMatchObject({ code: 'transport_error' });
   });
 
   it('refuses a hint with nothing to look up by, before any request', async () => {

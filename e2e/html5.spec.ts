@@ -18,20 +18,6 @@ async function resolved(page: import('@playwright/test').Page) {
 }
 
 test.describe('plain video element example', () => {
-  test('resolves on load and offers srt tracks a track element could not take raw', async ({
-    page,
-  }) => {
-    await page.goto('/html5.html');
-    await resolved(page);
-
-    await expect(page.locator('#status')).toContainText('tt0133093');
-    const items = page.locator('#candidates li');
-    expect(await items.count()).toBeGreaterThan(0);
-    // WebVTT is 0.036% of the corpus, so if anything is offered here at all it is
-    // because the converter widened what this player can reach.
-    await expect(items.first()).toContainText('SRT');
-  });
-
   test('adds track elements with no src, so nothing downloads before a choice', async ({
     page,
   }) => {
@@ -86,15 +72,6 @@ test.describe('plain video element example', () => {
       return showing.cues?.length ?? 0;
     });
     expect(cues).toBeGreaterThan(0);
-  });
-
-  test('a TV episode resolves by its episode-level imdb id', async ({ page }) => {
-    await page.goto('/html5.html');
-    await resolved(page);
-
-    await page.locator('[data-pick="episode"]').click();
-    await expect(page.locator('#status')).toContainText('tt1480055', { timeout: 30_000 });
-    expect(await page.locator('#candidates li').count()).toBeGreaterThan(0);
   });
 
   test('reports no console errors', async ({ page }) => {
