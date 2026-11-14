@@ -268,14 +268,15 @@ test('identify: the first lines find a corpus file, which replaces the transcrip
   try {
     await page.evaluate(() => (window as unknown as Page).__subbot.setNotice(true));
     await page.evaluate(async () => (window as unknown as Page).__subbot.mount('native'));
-    await page.evaluate(async () => (window as unknown as Page).__subbot.select(17));
+    // From 0 s. A match is only shown once the words heard 30 s past the lookup's first
+    // line agree with the file. From 17 s, a lookup the model reaches late (30 words
+    // only by 49 s) leaves nothing after it in the minute to check, and no swap comes.
+    await page.evaluate(async () => (window as unknown as Page).__subbot.select(0));
     await expect
-      .poll(async () => (await report()).identified, {
-        timeout: 180_000,
-        message: `no swap; ${asked.length} lookup(s)`,
-      })
+      .poll(async () => (await report()).identified, { timeout: 180_000, message: 'no swap' })
       .not.toBeNull()
       .catch(async (e) => {
+        console.log(`lookups: ${JSON.stringify(asked)}`);
         console.log(`report: ${JSON.stringify({ ...(await report()), vtt: null })}`);
         throw e;
       });
@@ -295,7 +296,7 @@ test('identify: the first lines find a corpus file, which replaces the transcrip
       `identify: asked ${asked.length} time(s); first with ${words.split(/\s+/).length} words`,
     );
     expect(words.split(/\s+/).length).toBeGreaterThanOrEqual(25);
-    expect(words.toLowerCase()).toMatch(/dragon|gatekeeper|searching|someone|alone/);
+    expect(words.toLowerCase()).toMatch(/blade|blood|alone|gatekeeper|searching|someone/);
     // The track shows the corpus line, not the model's.
     const onTrack = await page.evaluate(() => {
       const v = document.getElementById('player') as HTMLVideoElement;
