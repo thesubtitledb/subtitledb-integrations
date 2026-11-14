@@ -30,6 +30,8 @@ PORT = 8099
 FAKE = "http://127.0.0.1:%d" % PORT
 FILM = "films/The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv"
 OTHER = "films2/Amelie.2001.1080p.BluRay.x264-GROUP.mkv"
+#: The year the fake answers for a title, so a film looked up by name passes the year check.
+YEARS = {"Amelie": 2001}
 SRT = ("1\n00:00:01,000 --> 00:00:30,000\nSubtitleDB test %d\n\n"
        "2\n00:01:00,000 --> 00:02:00,000\nSecond cue\n")
 #: Kodi waits this long for a script to stop before it kills it.
@@ -169,7 +171,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             rid = int(url.path.rsplit("/", 1)[1])
             name = S.names.get(rid // 10, "The Matrix")
             return self.send(200, json.dumps({
-                "title": {"name": name, "year": 1999, "kind": "movie"},
+                "title": {"name": name, "year": YEARS.get(name, 1999), "kind": "movie"},
                 "subtitle": self.row(base, rid // 10, rid % 10, "en")}))
         name = q.get("q") or "The Matrix"
         sid = sid_for(name)
@@ -179,7 +181,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if lang in S.langs:
             rows = [self.row(base, sid, i, lang) for i in range(3)]
         return self.send(200, json.dumps({
-            "title": {"name": name, "year": 1999, "imdb": "tt%07d" % sid, "kind": "movie"},
+            "title": {"name": name, "year": YEARS.get(name, 1999), "imdb": "tt%07d" % sid,
+                      "kind": "movie"},
             "subtitles": {"items": rows, "total": len(rows)}}))
 
     @staticmethod
@@ -421,10 +424,11 @@ def run(url, root: pathlib.Path, log: pathlib.Path) -> int:
         moving = still_playing(url, player)
         return moving, "| playback %s" % ("moving" if moving else "STUCK")
 
-    print("\n== the API answers")
-    case("ok: a film loads English", film, loaded, check=shows("eng"))
-
     print("\n== the setting")
+    # Kodi started with no value for it: a fresh install asks the API nothing on play.
+    case("off out of the box: nothing asked, nothing logged", film, silent, wait=10)
+    set_addon(url, log, "instant", "true")
+    case("on: a film loads English", film, loaded, check=shows("eng"))
     set_addon(url, log, "instant", "false")
     case("off: nothing asked, nothing logged", film, silent, wait=10)
     set_addon(url, log, "instant", "true")
