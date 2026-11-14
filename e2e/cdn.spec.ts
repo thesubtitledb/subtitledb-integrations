@@ -208,22 +208,20 @@ test('the headers a third-party page depends on are actually served', async ({ r
 });
 
 const API = 'https://api.thesubtitledb.org/';
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-/** The antispam ids on every search and download the page sent the API. */
-function antispamIds(requests: string[]): (string | null)[] {
-  const calls = requests.filter((u) => u.startsWith(`${API}v1/`) || u.startsWith(`${API}get/`));
-  return [...new Set(calls.map((u) => new URL(u).searchParams.get('antispam_id')))];
+/** Every search and download the page sent the API. */
+function apiCalls(requests: string[]): string[] {
+  return requests.filter((u) => u.startsWith(`${API}v1/`) || u.startsWith(`${API}get/`));
 }
 
 /**
  * query and get, from the same script tag, against the live API.
  *
  * The unit tests pin the names; this pins that they answer. It also reads what a page
- * cannot see from inside: every search and download from one page load, the page's
- * own attach included, carried the same antispam id, and a reload carries another.
+ * cannot see from inside: no search or download, the page's own attach included,
+ * carries a page-load id.
  */
-test('query and get hand back subtitles as data, under one id per page load', async ({ page }) => {
+test('query and get hand back subtitles as data, with no page-load id', async ({ page }) => {
   const requests = recordRequests(page);
   await page.goto(`/cdn.html?cdn=${encodeURIComponent(CDN)}`);
   await expect
@@ -278,18 +276,9 @@ test('query and get hand back subtitles as data, under one id per page load', as
   expect(got.one?.blob, 'the blob URL does not hold the loaded text').toBe(true);
   expect(got.one?.track).toEqual({ tag: 'TRACK', kind: 'subtitles', srclang: 'en' });
 
-  const ids = antispamIds(requests);
-  expect(ids, 'the page load sent more than one id, or none').toHaveLength(1);
-  const id = ids[0] ?? '';
-  expect(id).toMatch(UUID);
-  // A download made from the URL itself ties to the search as well as one made by get.
-  expect(new URL(got.one?.url ?? API).searchParams.get('antispam_id')).toBe(id);
-
-  requests.length = 0;
-  await page.reload();
-  await expect.poll(() => antispamIds(requests).length, { timeout: 30_000 }).toBe(1);
-  expect(antispamIds(requests)[0]).toMatch(UUID);
-  expect(antispamIds(requests)[0], 'a reload kept the same id').not.toBe(id);
+  const calls = [...apiCalls(requests), got.one?.url ?? API];
+  expect(calls.length).toBeGreaterThan(1);
+  for (const u of calls) expect(new URL(u).searchParams.has('antispam_id'), u).toBe(false);
 });
 
 /**

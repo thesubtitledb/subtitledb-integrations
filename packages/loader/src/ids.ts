@@ -1,8 +1,6 @@
 /**
- * The two identifiers every call from this loader carries.
- *
- * Both are query parameters rather than headers, so no request pays for a CORS
- * preflight, and both name the loader or the page load, never the visitor.
+ * The loader's client name, sent on every call, and the page-load id the playback
+ * debugger files its reports under.
  */
 
 /**
@@ -13,13 +11,12 @@
 export const CLIENT = 'loader';
 
 /**
- * One id per page load, minted when this module is first imported. It rides every API
- * request and the subtitle download as `antispam_id`, so a page-load's searches and
- * downloads can be correlated server-side: many downloads under an id with no matching
- * searches reads as a scraper. Regenerated on every load, never persisted, so it is a
- * page-load id and not a visitor id.
+ * One id per page load, minted when this module is first imported. Only the playback
+ * debugger uses it, and only when a debug key is set; no lookup or download carries it.
+ * Regenerated on every load, never persisted, so it is a page-load id and not a
+ * visitor id.
  */
-export const ANTISPAM_ID = randomId();
+export const LOAD_ID = randomId();
 
 function randomId(): string {
   const c = (globalThis as { crypto?: Crypto }).crypto;

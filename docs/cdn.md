@@ -185,10 +185,8 @@ It returns the top result already loaded, or `null` when nothing matched.
 `SubtitleDB.toBlobUrl(loaded)` and `SubtitleDB.toTrack(loaded)` turn a `load()` result
 into a blob URL or a `<track>` directly, for when you kept the loaded bytes yourself.
 
-Every query and download carries `client=loader` and a per-page-load `antispam_id`, so
-the loader's traffic can be told apart and abusive traffic told from ordinary use. A
-page's own `clientName` replaces the name on queries, never on downloads. The id is
-regenerated on each page load and identifies the page, not the visitor.
+Every query and download carries `client=loader`, so the loader's traffic can be told
+apart. A page's own `clientName` replaces the name on queries, never on downloads.
 
 ## Playback debugger
 

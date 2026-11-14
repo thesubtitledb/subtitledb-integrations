@@ -1,5 +1,5 @@
 /**
- * SubtitleDB.query, get, toBlobUrl and toTrack, and the antispam id every call carries.
+ * SubtitleDB.query, get, toBlobUrl and toTrack, and the page-load id no call carries.
  *
  * These were written, documented on the site, and then left on a branch that never
  * merged, so the CDN shipped three releases without them. What is pinned here is the
@@ -67,12 +67,11 @@ describe('query', () => {
     expect(typeof res.results[0]?.track).toBe('function');
   });
 
-  it('names the loader and the page load on the way in', async () => {
+  it('names the loader on the way in', async () => {
     const { query, engine } = await fresh();
     await query({ hint: { imdbId: 'tt0133093' } });
     expect(engine.queries[0].clientName).toBe('loader');
     expect(engine.queries[0].downloadClient).toBe('loader');
-    expect(engine.queries[0].antispamId).toMatch(UUID);
   });
 
   it('lets the page name itself on lookups, but not on downloads', async () => {
@@ -81,11 +80,9 @@ describe('query', () => {
       hint: { imdbId: 'tt0133093' },
       clientName: 'mine/1',
       downloadClient: 'mine/1',
-      antispamId: 'page-1',
     });
     expect(engine.queries[0].clientName).toBe('mine/1');
     expect(engine.queries[0].downloadClient).toBe('loader');
-    expect(engine.queries[0].antispamId).toBe('page-1');
   });
 
   it('gives each result a blob URL and a track on demand', async () => {
@@ -140,8 +137,8 @@ describe('toBlobUrl', () => {
   });
 });
 
-describe('the antispam id', () => {
-  it('is one id for the whole page load: every query, every get, every attach', async () => {
+describe('the page-load id', () => {
+  it('rides no query, get or attach: only the debugger uses it', async () => {
     const { query, get, attach, ids, engine } = await fresh();
     await query({ hint: { imdbId: 'tt0133093' } });
     await query({ hint: { tmdbId: 603 } });
@@ -149,12 +146,10 @@ describe('the antispam id', () => {
     await get({ hint: { imdbId: 'tt0133093' } });
     await attach(video(), {}).ready;
 
-    expect(ids.ANTISPAM_ID).toMatch(UUID);
+    expect(ids.LOAD_ID).toMatch(UUID);
     const seen = [...engine.queries, ...engine.calls.map((c: { options: unknown }) => c.options)];
     expect(seen).toHaveLength(4);
-    for (const options of seen) {
-      expect((options as { antispamId?: string }).antispamId).toBe(ids.ANTISPAM_ID);
-    }
+    for (const options of seen) expect(options).not.toHaveProperty('antispamId');
   });
 
   it('still has the same shape where crypto.randomUUID is missing', async () => {
@@ -162,7 +157,7 @@ describe('the antispam id', () => {
     // within one page load, so the fallback is allowed to be non-cryptographic.
     vi.stubGlobal('crypto', {});
     const { ids } = await fresh();
-    expect(ids.ANTISPAM_ID).toMatch(UUID);
+    expect(ids.LOAD_ID).toMatch(UUID);
   });
 
   it('is never stored, so it cannot outlive the page and follow a visitor', async () => {
