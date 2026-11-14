@@ -10,8 +10,8 @@ media folders and read the NFO files beside the videos, which is how it knows th
 ids: the route a user who keeps a library takes. The order matters, since a file
 Kodi has in its library is played with the library's details even by path.
 
-As each video starts, the addon looks a subtitle up by itself. Nothing here turns
-that on, so it runs only because it is on out of the box. For a title the index
+As each video starts, the addon looks a subtitle up by itself. It is off out of the
+box, and set_count turns it on. For a title the index
 holds it must load one in English, the language Kodi asks for until told otherwise,
 for the sample's own title by the route expected, and Kodi must be showing it. For
 the title the index has nothing for it must load nothing and say so.
@@ -223,7 +223,7 @@ def check_video(url, item, video, sample, log, tiers, subs):
             "title", "year", "showtitle", "season", "episode", "imdbnumber", "uniqueid",
             "tvshowid"]})["item"]
         print("  Kodi knows %s" % {k: v for k, v in known.items() if v not in ("", 0, -1, None)})
-        # Before the searches below, which log the same lines and empty the same folder.
+        # Before the searches below, which log the same lines.
         if subs:
             check_instant(url, player, video, sample, log, tiers, seen, subs)
         for code in sample.languages:

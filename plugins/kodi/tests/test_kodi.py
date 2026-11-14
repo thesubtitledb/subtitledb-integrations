@@ -456,24 +456,30 @@ def test_nothing_is_asked_when_there_is_nothing_to_load(languages, streams, info
 
 
 class ByTitle:
-    """A client that answers by-title with one title and its rows."""
+    """A client that knows no id and answers by-title with one title and its rows."""
 
     def __init__(self, title, rows):
         self.title, self.rows = title, rows
+
+    def by_imdb(self, imdb, **kw):
+        raise SubtitleDbError("no title", 404)
 
     def by_title(self, q, **kw):
         return {"title": self.title, "subtitles": {"items": self.rows, "total": len(self.rows)}}
 
 
 SOLARIS_1972 = {"path": "/films/Solaris.1972.mkv"}
+# With an id the index does not have, the lookup falls back to the title.
+SOLARIS_1972_ID = {**SOLARIS_1972, "imdb": "tt0069293", "title": "Solaris", "year": "1972"}
 
 
+@pytest.mark.parametrize("info", [SOLARIS_1972, SOLARIS_1972_ID])
 @pytest.mark.parametrize(("year", "loaded"),
                          [(1972, True), (1973, True), (2002, False), (None, False)])
-def test_a_film_known_by_title_and_year_loads_only_when_the_match_has_that_year(year, loaded):
+def test_a_film_found_by_its_title_loads_only_when_the_match_has_its_year(info, year, loaded):
     # The title lookup takes no year: "Solaris" can answer with the 2002 remake.
     client = ByTitle({"name": "Solaris", "year": year}, [row(id=7, language="en")])
-    item, said = logic.instant(client, SOLARIS_1972, ["English"], [])
+    item, said = logic.instant(client, info, ["English"], [])
     assert (item is not None) is loaded
     if not loaded:
         assert said.startswith("another film of that name: Solaris")
