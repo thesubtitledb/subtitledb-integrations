@@ -47,14 +47,15 @@ def notify(message):
     )
 
 
-def temp_dir():
+def temp_dir(name="subs"):
     """A directory of our own under the addon profile, emptied on each download.
 
     Kodi keeps playing whatever it was handed, so clearing this at download time
     rather than at exit leaves nothing behind between films and never pulls a file
-    out from under the player.
+    out from under the player. The lookup on play has its own, so a download from the
+    dialog cannot empty it before Kodi is handed the file.
     """
-    path = xbmcvfs.translatePath(os.path.join(PROFILE, "subs"))
+    path = xbmcvfs.translatePath(os.path.join(PROFILE, name))
     if xbmcvfs.exists(path):
         _dirs, files = xbmcvfs.listdir(path)
         for name in files:
@@ -176,9 +177,9 @@ def do_download(params):
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=path, listitem=entry, isFolder=False)
 
 
-def save(item, content):
+def save(item, content, folder="subs"):
     """Write a downloaded subtitle where Kodi can open it, and say where."""
-    path = os.path.join(temp_dir(), logic.filename_for(item))
+    path = os.path.join(temp_dir(folder), logic.filename_for(item))
     handle = xbmcvfs.File(path, "wb")
     try:
         handle.write(bytearray(content))
