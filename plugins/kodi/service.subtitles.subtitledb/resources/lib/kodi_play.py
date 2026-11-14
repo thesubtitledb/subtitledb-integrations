@@ -76,7 +76,7 @@ def look_up(player, monitor):
     if kodi_side.playing_file() != path:
         kodi_side.log("on play: the video changed before subtitle %d was loaded" % item["id"])
         return
-    saved = kodi_side.save(item, content)
+    saved = kodi_side.save(item, content, "on_play")
     player.setSubtitles(saved)
     kodi_side.log("on play: loaded %s, %s, for %s" % (
         os.path.basename(saved), item["language_name"], said))

@@ -32,7 +32,7 @@ msgid "Load subtitles when a video starts"
 msgstr ""
 
 msgctxt "#32006"
-msgid "Loads the best match in your first subtitle language that has one, unless the video already has subtitles."
+msgid "Loads the best match in your first subtitle language that has one, unless the video already has subtitles. Sends the video's IMDb id, or its title, to SubtitleDB."
 msgstr ""
 
 msgctxt "#32011"

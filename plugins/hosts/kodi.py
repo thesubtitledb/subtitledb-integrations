@@ -322,14 +322,14 @@ def scan_library(url, userdata, root, samples, seconds=300):
 
 def set_count(userdata: pathlib.Path):
     """The addon's settings file, the way Kodi writes one, holding the count per
-    language every host is set to. Kodi reads it the first time the addon asks for a
-    setting, which is after enable_addon, so writing it first is in time. Every other
-    setting keeps its default, so the lookup on play runs because it is on out of the
-    box."""
+    language every host is set to, and the lookup on play turned on, which is off out
+    of the box. Kodi reads it the first time the addon asks for a setting, which is
+    after enable_addon, so writing it first is in time."""
     folder = userdata / "addon_data" / ADDON
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "settings.xml").write_text(
-        '<settings version="2">\n    <setting id="per_language">%d</setting>\n</settings>\n'
+        '<settings version="2">\n    <setting id="per_language">%d</setting>\n'
+        '    <setting id="instant">true</setting>\n</settings>\n'
         % media.PER_LANGUAGE, encoding="utf-8")
 
 
@@ -366,7 +366,7 @@ def main(argv=None) -> int:
     print("addon %s enabled" % enable_addon(args.url))
 
     failures = []
-    subs = userdata / "addon_data" / ADDON / "subs"
+    subs = userdata / "addon_data" / ADDON / "on_play"
     try:
         wait_started(args.log)
         print("the lookup on play is running")
