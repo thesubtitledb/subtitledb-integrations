@@ -9,7 +9,7 @@
  */
 import type { LoadedQuery, QueryOptions, QueryResult, QuerySubtitle } from '@subtitledb/core';
 import { chunk } from './chunks.js';
-import { ANTISPAM_ID, CLIENT } from './ids.js';
+import { CLIENT } from './ids.js';
 
 /** A query result at this layer: what core returns, plus lazy DOM handles. */
 export interface WiredSubtitle extends QuerySubtitle {
@@ -60,11 +60,11 @@ function wire(r: QuerySubtitle): WiredSubtitle {
 }
 
 /**
- * Stamp in the loader's client name and per-page-load antispam id, unless the caller set
- * them. A download is named for the loader whatever the caller set.
+ * Stamp in the loader's client name, unless the caller set one. A download is named
+ * for the loader whatever the caller set.
  */
 function withIds(opts: QueryOptions): QueryOptions {
-  return { clientName: CLIENT, antispamId: ANTISPAM_ID, ...opts, downloadClient: CLIENT };
+  return { clientName: CLIENT, ...opts, downloadClient: CLIENT };
 }
 
 /**

@@ -28,12 +28,12 @@ async function loader(base = FIXTURES) {
   b.setBasePath(base);
   const attach = await import('../src/attach.js');
   const debug = await import('../src/debug.js');
-  const { ANTISPAM_ID } = await import('../src/ids.js');
+  const { LOAD_ID } = await import('../src/ids.js');
   const engine = await import('./fixtures/engine.mjs');
   engine.calls.length = 0;
   engine.order.length = 0;
   engine.hooks.attached = null;
-  return { ...attach, ...debug, ANTISPAM_ID, engine };
+  return { ...attach, ...debug, LOAD_ID, engine };
 }
 
 /**
@@ -51,7 +51,7 @@ async function fresh(base = FIXTURES) {
 
 describe('the debug option', () => {
   it('with one, it loads beside the engine and watches the element the attach settled on', async () => {
-    const { attach, engine, ANTISPAM_ID, chunk } = await fresh();
+    const { attach, engine, LOAD_ID, chunk } = await fresh();
     const { setBasePath } = await import('../src/base.js');
     const el = video();
     const handle = attach(el, { debug_key: KEY });
@@ -64,7 +64,7 @@ describe('the debug option', () => {
     expect(d.calls[0]).toMatchObject({
       media: el,
       key: KEY,
-      loadId: ANTISPAM_ID,
+      loadId: LOAD_ID,
       player: 'native',
     });
     // The key is the loader's; the integration never sees it.
@@ -180,20 +180,20 @@ describe('SubtitleDB.debug', () => {
   });
 
   it('watches the page once its code is in, under the page-load id', async () => {
-    const { debug, ANTISPAM_ID, chunk } = await fresh();
+    const { debug, LOAD_ID, chunk } = await fresh();
     const h = debug(KEY);
     await h.ready;
     const d = chunk;
-    expect(d.pages).toEqual([{ key: KEY, loadId: ANTISPAM_ID, stopped: 0 }]);
+    expect(d.pages).toEqual([{ key: KEY, loadId: LOAD_ID, stopped: 0 }]);
     h.stop();
     expect(d.pages[0]?.stopped).toBe(1);
   });
 
   it('passes the page its hint, so every video is filed under what is playing', async () => {
-    const { debug, ANTISPAM_ID, chunk } = await fresh();
+    const { debug, LOAD_ID, chunk } = await fresh();
     const hint = { imdbId: 'tt0133093' };
     await debug(KEY, { hint }).ready;
-    expect(chunk.pages).toEqual([{ key: KEY, loadId: ANTISPAM_ID, hint, stopped: 0 }]);
+    expect(chunk.pages).toEqual([{ key: KEY, loadId: LOAD_ID, hint, stopped: 0 }]);
   });
 
   it('stopped before its code arrives, it never starts', async () => {

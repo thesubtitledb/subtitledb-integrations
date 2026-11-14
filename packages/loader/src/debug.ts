@@ -13,7 +13,7 @@ import type { AttachHandle, AttachOptions } from '@subtitledb/players';
 import type { Attached } from './chunks/debug.js';
 import { chunk } from './chunks.js';
 import type { DeferredHandle } from './deferred.js';
-import { ANTISPAM_ID } from './ids.js';
+import { LOAD_ID } from './ids.js';
 
 const KEY = /^sdbg_[0-9A-Za-z]{24}$/;
 const BAD_KEY =
@@ -40,7 +40,7 @@ export function debug(key: string, options?: DebugOptions, moduleUrl?: string): 
   let stop: (() => void) | undefined;
   let stopped = false;
   const ready = chunk('debug', moduleUrl).then((m) => {
-    if (!stopped) stop = m.watchPage({ key, loadId: ANTISPAM_ID, hint }).stop;
+    if (!stopped) stop = m.watchPage({ key, loadId: LOAD_ID, hint }).stop;
   });
   // The failure is the caller's through `ready`; unread, it is not the page's problem.
   ready.catch(() => {});
@@ -105,7 +105,7 @@ export function debugAttach(
       loading.then((m) => {
         const media = h.media();
         if (stopped || !media) return;
-        watch = m.watchAttached(media, String(key), ANTISPAM_ID, h.player?.name);
+        watch = m.watchAttached(media, String(key), LOAD_ID, h.player?.name);
         if (resolved) watch.resolved(resolved);
         if (selected) watch.selected(selected);
       });

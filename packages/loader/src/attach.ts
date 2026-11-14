@@ -24,7 +24,7 @@ import { chunk } from './chunks.js';
 import { debugAttach } from './debug.js';
 import { type DeferredHandle, deferHandle } from './deferred.js';
 import { claim, type Incumbent, mismatch } from './guard.js';
-import { ANTISPAM_ID, CLIENT } from './ids.js';
+import { CLIENT } from './ids.js';
 
 /** Filled in by build.mjs. Read here for the worker chunk, which is spawned, not imported. */
 declare const __SDB_CHUNKS__: Record<string, string>;
@@ -92,7 +92,6 @@ export function attach(
   // A page may name itself on lookups. A download through the loader is the loader's.
   const opts: AttachOptions = {
     clientName: CLIENT,
-    antispamId: ANTISPAM_ID,
     ...rest,
     downloadClient: CLIENT,
   };
