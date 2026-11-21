@@ -5,7 +5,7 @@
       <group id="1">
         <setting id="instant" type="boolean" label="32005" help="32006">
           <level>0</level>
-          <default>true</default>
+          <default>false</default>
           <control type="toggle"/>
         </setting>
         <setting id="per_language" type="integer" label="32003" help="32004">

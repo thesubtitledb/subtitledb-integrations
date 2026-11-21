@@ -455,6 +455,45 @@ def test_nothing_is_asked_when_there_is_nothing_to_load(languages, streams, info
     assert logic.instant(Refuses(), info, languages, streams) == (None, why)
 
 
+class ByTitle:
+    """A client that knows no id and answers by-title with one title and its rows."""
+
+    def __init__(self, title, rows):
+        self.title, self.rows = title, rows
+
+    def by_imdb(self, imdb, **kw):
+        raise SubtitleDbError("no title", 404)
+
+    def by_title(self, q, **kw):
+        return {"title": self.title, "subtitles": {"items": self.rows, "total": len(self.rows)}}
+
+
+SOLARIS_1972 = {"path": "/films/Solaris.1972.mkv"}
+# With an id the index does not have, the lookup falls back to the title.
+SOLARIS_1972_ID = {**SOLARIS_1972, "imdb": "tt0069293", "title": "Solaris", "year": "1972"}
+
+
+@pytest.mark.parametrize("info", [SOLARIS_1972, SOLARIS_1972_ID])
+@pytest.mark.parametrize(("year", "loaded"),
+                         [(1972, True), (1973, True), (2002, False), (None, False)])
+def test_a_film_found_by_its_title_loads_only_when_the_match_has_its_year(info, year, loaded):
+    # The title lookup takes no year: "Solaris" can answer with the 2002 remake.
+    client = ByTitle({"name": "Solaris", "year": year}, [row(id=7, language="en")])
+    item, said = logic.instant(client, info, ["English"], [])
+    assert (item is not None) is loaded
+    if not loaded:
+        assert said.startswith("another film of that name: Solaris")
+
+
+def test_a_subtitle_with_no_lines_is_never_loaded_on_play():
+    exact = "The.Matrix.1999.1080p.BluRay.x264"
+    empty = [row(id=1, language="en", cues=0, release_name=exact)]
+    assert logic.instant(Lookups({"en": empty}), FILM, ["English"], [])[0] is None
+    client = Lookups({"en": [*empty, row(id=2, language="en")]})
+    item, _ = logic.instant(client, FILM, ["English"], [])
+    assert item["id"] == 2
+
+
 def test_a_language_with_no_code_is_skipped_rather_than_asked_unfiltered():
     # An empty language list asks for every language, and the viewer would get one
     # they cannot read.

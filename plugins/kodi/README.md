@@ -29,15 +29,18 @@ is none.
 
 ## When a video starts
 
-The add-on also runs as a service. When a video starts, it loads the best match in the
-first of your "Languages to download subtitles for" that has one, without opening the
-dialog, and a notification names the language. It leaves alone:
+Off until "Load subtitles when a video starts" is turned on in the settings. Then, when
+a video starts, the add-on loads the best match in the first of your "Languages to
+download subtitles for" that has one, without opening the dialog, and a notification
+names the language. Nothing is sent to SubtitleDB while it is off. It leaves alone:
 
 - a video with subtitles in one of those languages, or with a subtitle stream that has
   no language (usually a file beside the video)
 - anything Kodi knows is under five minutes, such as a trailer
 - live TV, and a stream with no id
 - a file whose name gives neither a year nor a season and episode
+- a film known only by its title and year when the match is from another year
+- a subtitle with no lines
 
 If the API is down or answers with something wrong, nothing is loaded, the video plays
 on, and Kodi's log says why.
@@ -48,7 +51,7 @@ Settings > Add-ons > My add-ons > Subtitles > SubtitleDB > Configure.
 
 | Setting | Default |
 |---|---|
-| Load subtitles when a video starts | on |
+| Load subtitles when a video starts | off |
 | Subtitles per language, 100 to 2000 | 500 |
 | API address | `https://api.thesubtitledb.org` |
 

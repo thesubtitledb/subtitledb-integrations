@@ -10,8 +10,8 @@ media folders and read the NFO files beside the videos, which is how it knows th
 ids: the route a user who keeps a library takes. The order matters, since a file
 Kodi has in its library is played with the library's details even by path.
 
-As each video starts, the addon looks a subtitle up by itself. Nothing here turns
-that on, so it runs only because it is on out of the box. For a title the index
+As each video starts, the addon looks a subtitle up by itself. It is off out of the
+box, and set_count turns it on. For a title the index
 holds it must load one in English, the language Kodi asks for until told otherwise,
 for the sample's own title by the route expected, and Kodi must be showing it. For
 the title the index has nothing for it must load nothing and say so.
@@ -223,7 +223,7 @@ def check_video(url, item, video, sample, log, tiers, subs):
             "title", "year", "showtitle", "season", "episode", "imdbnumber", "uniqueid",
             "tvshowid"]})["item"]
         print("  Kodi knows %s" % {k: v for k, v in known.items() if v not in ("", 0, -1, None)})
-        # Before the searches below, which log the same lines and empty the same folder.
+        # Before the searches below, which log the same lines.
         if subs:
             check_instant(url, player, video, sample, log, tiers, seen, subs)
         for code in sample.languages:
@@ -322,14 +322,14 @@ def scan_library(url, userdata, root, samples, seconds=300):
 
 def set_count(userdata: pathlib.Path):
     """The addon's settings file, the way Kodi writes one, holding the count per
-    language every host is set to. Kodi reads it the first time the addon asks for a
-    setting, which is after enable_addon, so writing it first is in time. Every other
-    setting keeps its default, so the lookup on play runs because it is on out of the
-    box."""
+    language every host is set to, and the lookup on play turned on, which is off out
+    of the box. Kodi reads it the first time the addon asks for a setting, which is
+    after enable_addon, so writing it first is in time."""
     folder = userdata / "addon_data" / ADDON
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "settings.xml").write_text(
-        '<settings version="2">\n    <setting id="per_language">%d</setting>\n</settings>\n'
+        '<settings version="2">\n    <setting id="per_language">%d</setting>\n'
+        '    <setting id="instant">true</setting>\n</settings>\n'
         % media.PER_LANGUAGE, encoding="utf-8")
 
 
@@ -366,7 +366,7 @@ def main(argv=None) -> int:
     print("addon %s enabled" % enable_addon(args.url))
 
     failures = []
-    subs = userdata / "addon_data" / ADDON / "subs"
+    subs = userdata / "addon_data" / ADDON / "on_play"
     try:
         wait_started(args.log)
         print("the lookup on play is running")

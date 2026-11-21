@@ -11,6 +11,7 @@ import re
 
 from subtitledb import (
     PER_LANGUAGE,
+    TIER_TITLE,
     Client,
     Hint,
     Options,
@@ -204,6 +205,21 @@ def worth_looking_up(hint, path="", seconds=0):
     return bool(hint.year or (hint.season and hint.episode))
 
 
+def year_fits(hint, result):
+    """False when a film found by its title resolved to one from another year.
+
+    The title lookup takes no year, so a remake or another film of that name can come
+    back, also when the film's ids were tried first and the index has neither. One
+    year either way allows for a festival year or a release across the new year.
+    """
+    if result.tier != TIER_TITLE or hint.season or hint.episode or not hint.year:
+        return True
+    try:
+        return abs(int((result.title or {}).get("year")) - hint.year) <= 1
+    except (TypeError, ValueError):
+        return False
+
+
 def covered(streams, languages):
     """True when the video already carries a subtitle the viewer may want.
 
@@ -241,8 +257,12 @@ def instant(client, info, languages, streams, limit=PER_LANGUAGE, seconds=0, log
         result = find(client, hint, Options(languages=codes, formats=FORMATS, limit=limit))
         if log:
             log(resolved(result))
-        if result.candidates:
-            return list_item(result.candidates[0], result.tier), answered(result)
+        if result.candidates and not year_fits(hint, result):
+            return None, "another film of that name: %s" % answered(result)
+        # A file with no lines would load as an empty track.
+        usable = [c for c in result.candidates if int(c.subtitle.get("cues") or 0) > 0]
+        if usable:
+            return list_item(usable[0], result.tier), answered(result)
         if not result.title:
             # No title, so no other language will find one either.
             return None, "no title for it: %s" % answered(result)
